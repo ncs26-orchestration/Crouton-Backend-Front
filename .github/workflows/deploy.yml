@@ -65,27 +65,18 @@ jobs:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.DEPLOY_SA }}
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
-      - name: Upload compose file to VM
+      - name: Upload compose file and deploy script to VM
         run: |
-          gcloud compute scp deploy/docker-compose.yml \
-            "${{ vars.VM_NAME }}:/tmp/docker-compose.yml" \
+          gcloud compute scp deploy/docker-compose.yml deploy/remote-deploy.sh \
+            "${{ vars.VM_NAME }}:/tmp/" \
             --zone="${{ vars.VM_ZONE }}" --tunnel-through-iap
       - name: Pull images, migrate, restart
         env:
           SHA: ${{ github.sha }}
         run: |
           gcloud compute ssh "${{ vars.VM_NAME }}" \
-            --zone="${{ vars.VM_ZONE }}" --tunnel-through-iap --command="bash -s" <<EOF
-          set -euo pipefail
-          sudo mkdir -p /opt/app
-          sudo mv /tmp/docker-compose.yml /opt/app/docker-compose.yml
-          cd /opt/app
-          sudo sed -i "s/^TAG=.*/TAG=${SHA}/" .env
-          sudo docker compose pull
-          sudo docker compose run --rm migrate
-          sudo docker compose up -d
-          sudo docker image prune -f
-          EOF
+            --zone="${{ vars.VM_ZONE }}" --tunnel-through-iap \
+            --command="sudo mkdir -p /opt/app && sudo mv /tmp/docker-compose.yml /opt/app/docker-compose.yml && sudo bash /tmp/remote-deploy.sh ${SHA}"
       - name: Smoke test
         run: |
           for i in $(seq 1 24); do
