@@ -1,0 +1,77 @@
+# Production stack, runs on the GCE VM. All app images come from Artifact
+# Registry (REGISTRY + TAG), so the VM only needs this file and a .env.
+#
+# Required env (see .env.example): REGISTRY, TAG, POSTGRES_USER,
+# POSTGRES_PASSWORD, POSTGRES_DB.
+
+name: ncs26
+
+x-db-url: &db_url
+  DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  migrate:
+    image: ${REGISTRY}/migrate:${TAG}
+    environment:
+      <<: *db_url
+      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_NO_DUMP_SCHEMA: "true"
+    command: ["up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [internal]
+
+  api:
+    image: ${REGISTRY}/api:${TAG}
+    restart: unless-stopped
+    environment:
+      <<: *db_url
+      APP_ENV: production
+      PORT: "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+
+  web:
+    image: ${REGISTRY}/web:${TAG}
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+    networks: [internal]
+
+  nginx:
+    image: ${REGISTRY}/nginx:${TAG}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+      - web
+    networks: [internal]
+
+volumes:
+  pgdata:
+
+networks:
+  internal:
