@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aup.dev/schemas/workflow-ir/0.1",
+  "title": "AUP Workflow IR",
+  "description": "Canonical, engine-agnostic representation of a business workflow. Every reference (assignee_user_id, candidate_group_id, system_ref, capability, form_ref) must resolve against a provided IS Registry.",
+  "type": "object",
+  "required": ["version", "metadata", "actors", "tasks", "events", "flows"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "source_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+          "name": { "type": "string" },
+          "kind": { "enum": ["role", "person", "group"] },
+          "is_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "user_id":  { "type": "string" },
+              "group_id": { "type": "string" }
+            }
+          },
+          "confidence": { "$ref": "#/$defs/confidence" },
+          "evidence":   { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "id":         { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+          "name":       { "type": "string" },
+          "type":       { "enum": ["user", "service", "script"] },
+          "actor_ref":  { "type": "string" },
+          "form_ref":   { "type": "string" },
+          "binding":    { "$ref": "#/$defs/binding" },
+          "confidence": { "$ref": "#/$defs/confidence" },
+          "evidence":   { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "gateways": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "id":         { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+          "type":       { "enum": ["exclusive", "parallel"] },
+          "confidence": { "$ref": "#/$defs/confidence" },
+          "evidence":   { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "id":         { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+          "type":       { "enum": ["start", "end"] },
+          "confidence": { "$ref": "#/$defs/confidence" },
+          "evidence":   { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "from", "to"],
+        "additionalProperties": false,
+        "properties": {
+          "id":         { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+          "from":       { "type": "string" },
+          "to":         { "type": "string" },
+          "confidence": { "$ref": "#/$defs/confidence" },
+          "evidence":   { "$ref": "#/$defs/evidence" },
+          "condition": {
+            "type": "object",
+            "description": "Opaque expression string in a target-specific language (JUEL for Camunda 7, FEEL for Camunda 8/DMN). The 'language' hint lets the compiler pick the right tag.",
+            "required": ["expression"],
+            "additionalProperties": false,
+            "properties": {
+              "expression": { "type": "string" },
+              "language":   { "enum": ["juel", "feel"], "default": "juel" },
+              "confidence": { "$ref": "#/$defs/confidence" },
+              "evidence":   { "$ref": "#/$defs/evidence" }
+            }
+          }
+        }
+      }
+    },
+    "forms": {
+      "type": "array",
+      "description": "Form schemas inlined with the workflow. A task's form_ref points at one of these ids. Forms can also be deployed to the engine separately; in that case a task references the deployed form's key via binding.form_key.",
+      "items": {
+        "type": "object",
+        "required": ["id", "fields"],
+        "additionalProperties": false,
+        "properties": {
+          "id":     { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$" },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "label", "type"],
+              "additionalProperties": false,
+              "properties": {
+                "id":       { "type": "string" },
+                "label":    { "type": "string" },
+                "type":     { "enum": ["string", "long", "boolean", "date", "enum"] },
+                "required": { "type": "boolean", "default": false },
+                "options":  { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "description": "Resolves a task to concrete entities in the client's IS. User-task bindings carry assignee/group/form refs; service-task bindings carry system/capability/params.",
+      "additionalProperties": false,
+      "properties": {
+        "assignee_user_id":    { "type": "string" },
+        "candidate_group_id":  { "type": "string" },
+        "form_key":            { "type": "string" },
+        "system_ref":          { "type": "string" },
+        "capability":          { "type": "string" },
+        "params":              { "type": "object" },
+        "confidence":          { "$ref": "#/$defs/confidence" },
+        "evidence":            { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Extractor's subjective certainty for this element (0..1). High (>=0.8) = directly named; medium (0.6..0.8) = strongly implied; low (<0.6) = inferred. Drives UI color coding and the Copilot's Clarify queue."
+    },
+    "evidence": {
+      "type": "string",
+      "description": "A short quoted span from the source input justifying the extraction. Enables click-to-source traceability in the UI."
+    }
+  }
+}

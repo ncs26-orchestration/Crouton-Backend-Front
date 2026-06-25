@@ -1,0 +1,12 @@
+{
+  "name": "agent",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "build": "uv sync --frozen",
+    "lint": "uv run ruff check .",
+    "test": "uv run pytest",
+    "clean": "rm -rf .venv __pycache__ .pytest_cache .ruff_cache"
+  }
+}
