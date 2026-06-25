@@ -53,3 +53,23 @@ test: ## Run tests across apps
 clean: ## Remove containers, volumes, images
 	docker compose down -v --remove-orphans
 	rm -rf node_modules .turbo apps/*/dist apps/*/build apps/api/bin apps/api/tmp apps/agent/.venv
+
+# ── Infrastructure ─────────────────────────────────────────────────────────
+
+tf-init: ## Init Terraform (run once)
+	cd infra/terraform && terraform init
+
+tf-plan: ## Preview infra changes (requires TF_VAR_project_id)
+	cd infra/terraform && terraform plan
+
+tf-apply: ## Provision VM on GCP (requires TF_VAR_project_id)
+	cd infra/terraform && terraform apply
+
+tf-destroy: ## Tear down GCP resources
+	cd infra/terraform && terraform destroy
+
+tf-ip: ## Print the VM external IP
+	@cd infra/terraform && terraform output -raw vm_ip
+
+ansible-deploy: ## Deploy the stack to the VM (fill inventory.ini first)
+	ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml

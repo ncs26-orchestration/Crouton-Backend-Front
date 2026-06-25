@@ -1,0 +1,18 @@
+# Production port overrides — used by Ansible alongside compose.yaml.
+# Run with: docker compose -f compose.yaml -f compose.prod.yaml up -d
+#
+# Does NOT include the dev-only services (elsa3, hot-reload volumes, etc.)
+# from compose.override.yaml.
+
+services:
+  web:
+    ports:
+      - "80:80"
+
+  api:
+    ports:
+      - "8080:8080"
+
+  agent:
+    ports:
+      - "8000:8000"

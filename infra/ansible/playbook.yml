@@ -1,0 +1,112 @@
+---
+- name: Deploy AUP stack to GCP VM
+  hosts: app
+  become: true
+
+  vars:
+    app_dir: /opt/aup
+    ssh_user: "{{ ansible_user }}"
+
+  tasks:
+
+    # ── Docker install ────────────────────────────────────────────────────────
+
+    - name: Install prerequisite packages
+      apt:
+        name: [ca-certificates, curl, gnupg, rsync]
+        update_cache: true
+        state: present
+
+    - name: Add Docker GPG key
+      shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+          | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Add Docker apt repository
+      shell: |
+        echo \
+          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+          https://download.docker.com/linux/ubuntu \
+          $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+          > /etc/apt/sources.list.d/docker.list
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Install Docker engine and Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        update_cache: true
+        state: present
+
+    - name: Ensure Docker is running and enabled
+      systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Add deploy user to docker group
+      user:
+        name: "{{ ssh_user }}"
+        groups: docker
+        append: true
+
+    # ── App files ─────────────────────────────────────────────────────────────
+
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0755"
+
+    - name: Sync repo to VM (excludes build artefacts)
+      synchronize:
+        src: "{{ playbook_dir }}/../../"
+        dest: "{{ app_dir }}/"
+        delete: true
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=node_modules"
+          - "--exclude=.turbo"
+          - "--exclude=apps/web/dist"
+          - "--exclude=apps/api/bin"
+          - "--exclude=apps/api/tmp"
+          - "--exclude=apps/agent/.venv"
+          - "--exclude=infra/terraform/.terraform"
+
+    - name: Copy .env file
+      copy:
+        src: "{{ playbook_dir }}/../../.env"
+        dest: "{{ app_dir }}/.env"
+        owner: "{{ ssh_user }}"
+        mode: "0600"
+
+    # ── Stack ─────────────────────────────────────────────────────────────────
+
+    - name: Build and start the stack
+      shell: >
+        docker compose
+        -f compose.yaml
+        -f compose.prod.yaml
+        up -d --build --remove-orphans
+      args:
+        chdir: "{{ app_dir }}"
+
+    - name: Run database migrations
+      shell: >
+        docker compose exec -T api
+        dbmate --migrations-dir /app/migrations up
+      args:
+        chdir: "{{ app_dir }}"
+      register: migrate_result
+      changed_when: "'Applying' in migrate_result.stdout"
