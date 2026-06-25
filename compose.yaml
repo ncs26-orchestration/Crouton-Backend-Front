@@ -1,0 +1,104 @@
+name: aup
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    volumes:
+      - pg_data:/var/lib/postgresql
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [aup]
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redis_data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [aup]
+
+  # Camunda 7 Run distribution — ships with the invoice demo data, so
+  # users (demo/john/mary/peter) and groups (sales/accounting/management
+  # /camunda-admin) exist the moment the container is healthy. AUP never
+  # writes identities into Camunda; it only reads them read-only via
+  # /engine-rest and references those ids in compiled BPMN.
+  camunda7:
+    image: camunda/camunda-bpm-platform:run-latest
+    restart: unless-stopped
+    ports:
+      - "8180:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/engine-rest/engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [aup]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      AGENT_URL: ${AGENT_URL}
+      APP_ENV: ${APP_ENV:-production}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [aup]
+
+  agent:
+    build:
+      context: .
+      dockerfile: apps/agent/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      APP_ENV: ${APP_ENV:-production}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [aup]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      - api
+      - agent
+    networks: [aup]
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  aup:
+    driver: bridge
