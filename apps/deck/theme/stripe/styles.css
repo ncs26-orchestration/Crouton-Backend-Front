@@ -1,0 +1,187 @@
+/*
+ * AUP — Stripe-inspired Slidev theme
+ * Derived from DESIGN.md. Drop this file into your slidev project:
+ *   apps/deck/style.css  (Slidev auto-loads it)
+ * or import explicitly at the top of slides.md:
+ *   ---
+ *   css: ./theme/stripe/styles.css
+ *   ---
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@500;700&display=swap");
+
+/* sohne-var is a licensed font. For the jury deck, ship the webfont under
+ * apps/deck/public/fonts/ and uncomment. Until then, Inter Tight is the closest
+ * free fallback that preserves the geometric feel and weight-300 rhythm. */
+/* @font-face {
+  font-family: "sohne-var";
+  src: url("/fonts/sohne-var.woff2") format("woff2-variations");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+} */
+@import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500&display=swap");
+
+:root {
+  --c-purple: #533afd;
+  --c-purple-hover: #4434d4;
+  --c-purple-light: #b9b9f9;
+  --c-navy: #061b31;
+  --c-slate: #64748d;
+  --c-label: #273951;
+  --c-brand-dark: #1c1e54;
+  --c-ruby: #ea2261;
+  --c-magenta: #f96bee;
+  --c-border: #e5edf5;
+  --c-success: #15be53;
+
+  --shadow-elevated:
+    rgba(50, 50, 93, 0.25) 0 30px 45px -30px,
+    rgba(0, 0, 0, 0.1) 0 18px 36px -18px;
+  --shadow-standard: rgba(23, 23, 23, 0.08) 0 15px 35px 0;
+}
+
+.slidev-layout {
+  font-family: "sohne-var", "Inter Tight", "SF Pro Display", system-ui, sans-serif;
+  font-feature-settings: "ss01";
+  font-weight: 300;
+  color: var(--c-navy);
+  background: #ffffff;
+  letter-spacing: normal;
+}
+
+.slidev-layout h1 {
+  font-weight: 300;
+  font-size: 3rem;
+  line-height: 1.15;
+  letter-spacing: -0.96px;
+  color: var(--c-navy);
+}
+
+.slidev-layout h2 {
+  font-weight: 300;
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.64px;
+  color: var(--c-navy);
+}
+
+.slidev-layout h3 {
+  font-weight: 300;
+  font-size: 1.375rem;
+  line-height: 1.1;
+  letter-spacing: -0.22px;
+  color: var(--c-navy);
+}
+
+.slidev-layout p,
+.slidev-layout li {
+  font-weight: 300;
+  font-size: 1.125rem;
+  line-height: 1.4;
+  color: var(--c-slate);
+}
+
+.slidev-layout strong {
+  font-weight: 400;
+  color: var(--c-navy);
+}
+
+.slidev-layout a {
+  color: var(--c-purple);
+  text-decoration: none;
+  border-bottom: 1px solid var(--c-purple-light);
+}
+
+/* Stripe button */
+.btn-primary {
+  display: inline-block;
+  background: var(--c-purple);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-weight: 400;
+  font-size: 1rem;
+}
+.btn-primary:hover { background: var(--c-purple-hover); }
+
+/* Card */
+.card {
+  background: #fff;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 16px 20px;
+  box-shadow: var(--shadow-elevated);
+}
+
+/* Dark section — use with layout: cover */
+.slidev-layout.cover,
+.slidev-layout.brand-dark {
+  background: var(--c-brand-dark);
+  color: #fff;
+}
+.slidev-layout.cover h1,
+.slidev-layout.cover h2,
+.slidev-layout.brand-dark h1,
+.slidev-layout.brand-dark h2 {
+  color: #fff;
+}
+.slidev-layout.cover p,
+.slidev-layout.brand-dark p {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Ruby → magenta gradient accent (hero decoration) */
+.gradient-accent {
+  background: linear-gradient(135deg, var(--c-ruby), var(--c-magenta));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Success pill */
+.pill-success {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(21, 190, 83, 0.2);
+  color: #108c3d;
+  border: 1px solid rgba(21, 190, 83, 0.4);
+  font-size: 0.625rem;
+  font-weight: 300;
+  letter-spacing: normal;
+}
+
+/* Code — SourceCodePro per DESIGN.md */
+.slidev-layout pre,
+.slidev-layout code {
+  font-family: "Source Code Pro", ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.75rem;
+  line-height: 2;
+}
+.slidev-layout pre {
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-standard);
+}
+
+/* Tabular numerals for numbers in charts/tables */
+.tnum {
+  font-feature-settings: "tnum";
+  letter-spacing: -0.36px;
+}
+
+/* Progressive type tracking at display sizes */
+.display-hero {
+  font-size: 3.5rem;
+  font-weight: 300;
+  letter-spacing: -1.4px;
+  line-height: 1.03;
+}
+
+/* Dashed drop-zone / placeholder per DESIGN.md §4 */
+.dashed {
+  border: 1px dashed #362baa;
+  border-radius: 6px;
+  padding: 12px;
+}

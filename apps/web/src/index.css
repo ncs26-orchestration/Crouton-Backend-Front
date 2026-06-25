@@ -1,0 +1,348 @@
+/* Fonts — must come first per CSS spec. Inter is the closest public
+ * stand-in for Stripe's sohne-var (both are geometric sans with a
+ * refined `ss01` stylistic set). JetBrains Mono replaces SourceCodePro.
+ */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+@import "tailwindcss";
+
+/*
+ * AUP — Stripe-inspired design tokens.
+ *
+ * Rules:
+ *   · Headings in deep navy (#061b31), not black.
+ *   · Brand purple (#533afd) is the only primary interactive color.
+ *   · Weight 300 on display + body; 400 on UI (buttons, labels, nav).
+ *   · `ss01` globally, `tnum` on numeric/financial readouts.
+ *   · Conservative radius (4 · 6 · 8).
+ *   · Blue-tinted multi-layer shadows for elevation.
+ *   · Semantic state colors (emerald/amber/rose) stay Tailwind defaults —
+ *     only the brand + neutrals switch to the Stripe palette.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", "SF Pro Display", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-display: "Inter", system-ui, sans-serif;
+
+  /* Brand — Stripe purple scale */
+  --color-brand: #533afd;
+  --color-brand-hover: #4434d4;
+  --color-brand-deep: #2e2b8c;
+  --color-brand-mid: #665efd;
+  --color-brand-light: #b9b9f9;
+  --color-brand-soft: #d6d9fc;
+  --color-brand-50: #eef2ff;
+  --color-brand-dark: #1c1e54;
+
+  /* Accents — for decoration only, never interactive */
+  --color-ruby: #ea2261;
+  --color-magenta: #f96bee;
+  --color-magenta-100: #ffd7ef;
+  --color-lemon: #9b6829;
+
+  /* Semantic surface/foreground (light) */
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #f6f9fc;
+  --color-surface-3: #edf2f7;
+  --color-border: #e5edf5;
+  --color-border-strong: #cfd7e3;
+  --color-border-purple: #b9b9f9;
+  --color-border-soft-purple: #d6d9fc;
+
+  --color-fg: #061b31;         /* heading solid — deep navy */
+  --color-fg-label: #273951;    /* labels, secondary headings */
+  --color-fg-muted: #64748d;    /* body, secondary text */
+  --color-fg-subtle: #94a3b8;
+  --color-fg-faint: #cbd5e1;
+
+  --color-accent: #533afd;
+  --color-accent-bg: rgba(83, 58, 253, 0.06);
+  --color-accent-border: #b9b9f9;
+
+  --color-canvas-dot: #e2e8f0;
+
+  /* Shadows — blue-tinted multi-layer. Usable as CSS vars:
+   *   box-shadow: var(--shadow-standard);
+   */
+  --shadow-ambient: rgba(23, 23, 23, 0.06) 0 3px 6px;
+  --shadow-standard: rgba(23, 23, 23, 0.08) 0 15px 35px 0;
+  --shadow-elevated: rgba(50, 50, 93, 0.25) 0 30px 45px -30px, rgba(0, 0, 0, 0.1) 0 18px 36px -18px;
+  --shadow-deep: rgba(3, 3, 39, 0.25) 0 14px 21px -14px, rgba(0, 0, 0, 0.1) 0 8px 17px -8px;
+  --shadow-sm: rgba(23, 23, 23, 0.05) 0 1px 2px;
+  --shadow-focus: 0 0 0 3px rgba(83, 58, 253, 0.2);
+}
+
+.dark {
+  /* Neutral near-black dark mode. Stripe's #1c1e54 indigo is reserved
+   * for hero/marketing sections in Stripe's own design — using it as
+   * a general surface color drenches the UI in brand purple and fights
+   * the accent. Dark UI here follows the Vercel/Linear lineage:
+   * almost-black with a subtle cool tint, solid (not translucent)
+   * borders, and the brand purple staying loud against it.
+   */
+  --color-bg: #0a0a0d;
+  --color-surface: #101013;
+  --color-surface-2: #17171c;
+  --color-surface-3: #1f1f25;
+  --color-border: #24242a;
+  --color-border-strong: #35353d;
+  --color-border-purple: rgba(120, 108, 255, 0.35);
+  --color-border-soft-purple: rgba(120, 108, 255, 0.2);
+  --color-fg: #f5f5f7;
+  --color-fg-label: #d4d4d8;
+  --color-fg-muted: #9b9ba4;
+  --color-fg-subtle: #6b6b75;
+  --color-fg-faint: #3f3f47;
+  --color-accent: #7c74ff;
+  --color-accent-bg: rgba(124, 116, 255, 0.12);
+  --color-accent-border: rgba(124, 116, 255, 0.35);
+  --color-canvas-dot: #232329;
+
+  /* Shadows in dark mode need pure-black layering — the blue-tinted
+   * Stripe shadow washes out against a dark background and makes
+   * panels look hazy. */
+  --shadow-ambient: rgba(0, 0, 0, 0.35) 0 1px 2px, rgba(0, 0, 0, 0.22) 0 4px 10px;
+  --shadow-standard: rgba(0, 0, 0, 0.45) 0 10px 24px -6px;
+  --shadow-elevated: rgba(0, 0, 0, 0.6) 0 24px 40px -18px, rgba(0, 0, 0, 0.3) 0 10px 20px -12px;
+  --shadow-deep: rgba(0, 0, 0, 0.7) 0 28px 48px -16px;
+  --shadow-sm: rgba(0, 0, 0, 0.35) 0 1px 2px;
+  --shadow-focus: 0 0 0 3px rgba(124, 116, 255, 0.28);
+
+  color-scheme: dark;
+}
+
+/* --- Base --- */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+* {
+  /* ss01 globally — the Stripe/sohne-var signature. Inter supports it. */
+  font-feature-settings: "ss01";
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-feature-settings: "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  letter-spacing: 0;
+}
+
+/* Tabular numerals helper for financial/id/byte readouts. */
+.tnum {
+  font-feature-settings: "ss01", "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+/* Typographic sizes mapped to tokens so we stay consistent.
+ * Tight tracking at display sizes is Stripe's signature. */
+.text-display {
+  font-weight: 300;
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.64px;
+}
+.text-heading {
+  font-weight: 300;
+  font-size: 1.375rem;
+  line-height: 1.12;
+  letter-spacing: -0.22px;
+}
+.text-subheading {
+  font-weight: 400;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+}
+
+/* --- Scrollbars --- */
+.nice-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.nice-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 3px;
+}
+.nice-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-subtle);
+}
+
+/* --- React Flow --- */
+.react-flow__node {
+  font-family: var(--font-sans);
+}
+.react-flow__edge-path {
+  stroke: var(--color-fg-subtle);
+  stroke-width: 1.25;
+}
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--color-brand);
+  stroke-width: 1.75;
+}
+.react-flow__controls {
+  box-shadow: var(--shadow-ambient) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: var(--color-surface) !important;
+}
+.react-flow__controls-button {
+  background: var(--color-surface) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  color: var(--color-fg-muted) !important;
+  fill: currentColor !important;
+}
+.react-flow__controls-button:hover {
+  background: var(--color-surface-2) !important;
+}
+.react-flow__attribution {
+  background: transparent !important;
+  color: var(--color-fg-subtle) !important;
+  font-size: 10px !important;
+}
+.react-flow__handle {
+  background: var(--color-fg-faint) !important;
+  border: 1px solid var(--color-border) !important;
+}
+.react-flow__background {
+  background: var(--color-bg);
+}
+
+/* --- Shadow utilities --- */
+.shadow-stripe {
+  box-shadow: var(--shadow-standard);
+}
+.shadow-stripe-elevated {
+  box-shadow: var(--shadow-elevated);
+}
+.shadow-stripe-deep {
+  box-shadow: var(--shadow-deep);
+}
+.shadow-stripe-ambient {
+  box-shadow: var(--shadow-ambient);
+}
+.shadow-focus-ring {
+  box-shadow: var(--shadow-focus);
+}
+
+/* --- Animations --- */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pulse-subtle {
+  0%, 100% {
+    box-shadow: var(--shadow-ambient);
+  }
+  50% {
+    box-shadow: var(--shadow-focus);
+  }
+}
+.anim-fade-in {
+  animation: fade-in 200ms ease-out;
+}
+.anim-slide-up {
+  animation: slide-up 240ms ease-out;
+}
+.anim-pulse-subtle {
+  animation: pulse-subtle 1.6s ease-in-out infinite;
+}
+
+/* node-pulse — transient ring around a canvas node when its data
+ * changed (patch applied, binding updated, freshly extracted). Runs
+ * once. React Flow wraps each custom node in a container div, so
+ * targeting the direct child lets us put the ring on the actual
+ * card shape without fighting React Flow's own layout wrapper. */
+@keyframes node-pulse-kf {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-accent-border);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(83, 58, 253, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(83, 58, 253, 0);
+  }
+}
+.node-pulse > * {
+  animation: node-pulse-kf 1.4s ease-out;
+  border-radius: 8px;
+}
+
+/* indeterminate progress — sweeps a highlighted segment across the
+ * bar. Used for the Extract button's progress line while Gemini is
+ * running (we don't stream tokens yet; this is the honest "in
+ * flight" signal). */
+@keyframes indeterminate-kf {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(150%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+.anim-indeterminate {
+  animation: indeterminate-kf 1.4s ease-in-out infinite;
+}
+
+/* --- Canvas dotted background (uses current token) --- */
+.canvas-dots {
+  background-image: radial-gradient(var(--color-canvas-dot) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* --- Focus ring ---
+ * Scoped to buttons and links. Form inputs (input/textarea/select)
+ * carry their own focus affordance via border-color or a local
+ * shadow-focus-ring utility, and get a subtle native-outline
+ * removal so there is no double-decoration.
+ */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="option"]:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: 4px;
+}
+
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none;
+}
