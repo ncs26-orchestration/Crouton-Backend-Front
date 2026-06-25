@@ -1,0 +1,22 @@
+{
+  "name": "aup",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Polyglot monorepo: React 19 web, Go (Echo) API, FastAPI + LangGraph agent",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.9.6",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  }
+}

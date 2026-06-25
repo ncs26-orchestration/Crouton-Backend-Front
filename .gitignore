@@ -1,0 +1,38 @@
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+build/
+*.tsbuildinfo
+.tsbuild/
+
+# Go
+apps/api/bin/
+apps/api/tmp/
+vendor/
+
+# Python / uv
+apps/agent/.venv/
+apps/agent/__pycache__/
+apps/agent/**/__pycache__/
+apps/agent/.pytest_cache/
+apps/agent/.ruff_cache/
+apps/agent/.mypy_cache/
+*.pyc
+
+# Env / local
+.env
+.env.local
+.env.*.local
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+*.pdf
+
+# Local agent / assistant state
+.claude/
