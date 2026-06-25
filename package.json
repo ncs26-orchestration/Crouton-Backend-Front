@@ -1,0 +1,10 @@
+{
+  "name": "ncs26-solution",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

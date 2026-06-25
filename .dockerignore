@@ -1,0 +1,11 @@
+.git
+node_modules
+**/node_modules
+apps/web/.output
+apps/web/.nitro
+apps/web/.tanstack
+apps/api/bin
+**/*.log
+.env
+.env.*
+!.env.example
