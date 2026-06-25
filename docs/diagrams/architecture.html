@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pablo · Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #ffffff;
+      --color-ink:     #061b31;
+      --color-muted:   #64748d;
+      --color-soft:    #94a3b8;
+      --color-accent:  #533afd;
+      --color-link:    #2874ad;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      color: var(--color-muted);
+      margin-bottom: 1.75rem;
+      max-width: 640px;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Pablo</p>
+    <h1>Services, stores, and target engines</h1>
+    <p class="subtitle">Three independent services. The agent extracts workflows from unstructured input. The API compiles and deploys. The engine runs.</p>
+
+    <svg viewBox="0 0 1000 540" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748d"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#533afd"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2874ad"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#ffffff"/>
+
+      <!-- ===== Arrows first (z-order) ===== -->
+
+      <!-- User → Web (HTTPS) -->
+      <line x1="160" y1="272" x2="200" y2="272" stroke="#2874ad" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <!-- Web → API (REST) -->
+      <line x1="340" y1="272" x2="380" y2="272" stroke="#2874ad" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <!-- API → Agent (EXTRACT) — PRIMARY / ACCENT -->
+      <line x1="520" y1="272" x2="580" y2="272" stroke="#533afd" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+      <!-- Agent → Ollama (LLM) -->
+      <line x1="676" y1="244" x2="808" y2="180" stroke="#2874ad" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <!-- API → Postgres (pgx) -->
+      <line x1="440" y1="304" x2="440" y2="400" stroke="#64748d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- API → Engines (HTTP deploy) -->
+      <line x1="500" y1="304" x2="636" y2="400" stroke="#2874ad" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+      <!-- ===== Arrow labels (with opaque mask) ===== -->
+
+      <rect x="156" y="252" width="48" height="12" rx="2" fill="#ffffff"/>
+      <text x="180" y="262" fill="#2874ad" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HTTPS</text>
+
+      <rect x="336" y="252" width="48" height="12" rx="2" fill="#ffffff"/>
+      <text x="360" y="262" fill="#2874ad" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">REST</text>
+
+      <rect x="516" y="252" width="56" height="12" rx="2" fill="#ffffff"/>
+      <text x="544" y="262" fill="#533afd" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXTRACT</text>
+
+      <rect x="708" y="204" width="72" height="12" rx="2" fill="#ffffff"/>
+      <text x="744" y="214" fill="#2874ad" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">OLLAMA API</text>
+
+      <rect x="416" y="340" width="48" height="12" rx="2" fill="#ffffff"/>
+      <text x="440" y="350" fill="#64748d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PGX</text>
+
+      <rect x="536" y="340" width="64" height="12" rx="2" fill="#ffffff"/>
+      <text x="568" y="350" fill="#2874ad" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DEPLOY</text>
+
+      <!-- ===== Nodes ===== -->
+
+      <!-- User (input) -->
+      <rect x="40" y="240" width="120" height="64" rx="6" fill="#ffffff"/>
+      <rect x="40" y="240" width="120" height="64" rx="6" fill="rgba(100,116,141,0.10)" stroke="#94a3b8" stroke-width="1"/>
+      <rect x="48" y="248" width="32" height="12" rx="2" fill="transparent" stroke="rgba(148,163,184,0.60)" stroke-width="0.8"/>
+      <text x="64" y="257" fill="#64748d" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">USER</text>
+      <text x="100" y="280" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Business user</text>
+      <text x="100" y="296" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">chat · PDF · text</text>
+
+      <!-- apps/web (backend) -->
+      <rect x="200" y="240" width="140" height="64" rx="6" fill="#ffffff"/>
+      <rect x="200" y="240" width="140" height="64" rx="6" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <rect x="208" y="248" width="24" height="12" rx="2" fill="transparent" stroke="rgba(6,27,49,0.40)" stroke-width="0.8"/>
+      <text x="220" y="257" fill="#061b31" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+      <text x="332" y="300" fill="rgba(6,27,49,0.06)" font-size="28" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">01</text>
+      <text x="270" y="280" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">apps/web</text>
+      <text x="270" y="296" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">React 19 · Vite</text>
+
+      <!-- apps/api (backend) -->
+      <rect x="380" y="240" width="140" height="64" rx="6" fill="#ffffff"/>
+      <rect x="380" y="240" width="140" height="64" rx="6" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <rect x="388" y="248" width="28" height="12" rx="2" fill="transparent" stroke="rgba(6,27,49,0.40)" stroke-width="0.8"/>
+      <text x="402" y="257" fill="#061b31" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+      <text x="512" y="300" fill="rgba(6,27,49,0.06)" font-size="28" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">02</text>
+      <text x="450" y="280" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">apps/api</text>
+      <text x="450" y="296" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Go · Echo</text>
+
+      <!-- apps/agent (FOCAL) -->
+      <rect x="580" y="240" width="160" height="64" rx="6" fill="#ffffff"/>
+      <rect x="580" y="240" width="160" height="64" rx="6" fill="rgba(83,58,253,0.08)" stroke="#533afd" stroke-width="1"/>
+      <rect x="588" y="248" width="28" height="12" rx="2" fill="transparent" stroke="rgba(83,58,253,0.50)" stroke-width="0.8"/>
+      <text x="602" y="257" fill="#533afd" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AI</text>
+      <text x="732" y="300" fill="rgba(83,58,253,0.14)" font-size="28" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">03</text>
+      <text x="660" y="280" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">apps/agent</text>
+      <text x="660" y="296" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">FastAPI · LangGraph</text>
+
+      <!-- Ollama (external) -->
+      <rect x="808" y="148" width="152" height="64" rx="6" fill="#ffffff"/>
+      <rect x="808" y="148" width="152" height="64" rx="6" fill="rgba(6,27,49,0.03)" stroke="rgba(6,27,49,0.30)" stroke-width="1"/>
+      <rect x="816" y="156" width="28" height="12" rx="2" fill="transparent" stroke="rgba(6,27,49,0.30)" stroke-width="0.8"/>
+      <text x="830" y="165" fill="#64748d" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">LLM</text>
+      <text x="884" y="188" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Ollama</text>
+      <text x="884" y="204" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">qwen3.5:9b · local</text>
+
+      <!-- Postgres (store) -->
+      <rect x="360" y="400" width="160" height="64" rx="6" fill="#ffffff"/>
+      <rect x="360" y="400" width="160" height="64" rx="6" fill="rgba(6,27,49,0.04)" stroke="#64748d" stroke-width="1"/>
+      <rect x="368" y="408" width="24" height="12" rx="2" fill="transparent" stroke="rgba(100,116,141,0.60)" stroke-width="0.8"/>
+      <text x="380" y="417" fill="#64748d" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+      <text x="440" y="440" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Postgres</text>
+      <text x="440" y="456" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">projects · chats · versions</text>
+
+      <!-- Target engines (external) -->
+      <rect x="560" y="400" width="200" height="64" rx="6" fill="#ffffff"/>
+      <rect x="560" y="400" width="200" height="64" rx="6" fill="rgba(6,27,49,0.03)" stroke="rgba(6,27,49,0.30)" stroke-width="1"/>
+      <rect x="568" y="408" width="28" height="12" rx="2" fill="transparent" stroke="rgba(6,27,49,0.30)" stroke-width="0.8"/>
+      <text x="582" y="417" fill="#64748d" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ENG</text>
+      <text x="660" y="440" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Target engines</text>
+      <text x="660" y="456" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Elsa 3 · Camunda 7</text>
+
+      <!-- ===== Legend ===== -->
+      <line x1="40" y1="492" x2="960" y2="492" stroke="rgba(6,27,49,0.10)" stroke-width="0.8"/>
+      <text x="40" y="508" fill="#64748d" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <rect x="40" y="524" width="14" height="10" rx="2" fill="rgba(83,58,253,0.08)" stroke="#533afd" stroke-width="1"/>
+      <text x="60" y="532" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Focal service</text>
+
+      <rect x="172" y="524" width="14" height="10" rx="2" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <text x="192" y="532" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Internal service</text>
+
+      <rect x="316" y="524" width="14" height="10" rx="2" fill="rgba(6,27,49,0.04)" stroke="#64748d" stroke-width="1"/>
+      <text x="336" y="532" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Store</text>
+
+      <rect x="400" y="524" width="14" height="10" rx="2" fill="rgba(6,27,49,0.03)" stroke="rgba(6,27,49,0.30)" stroke-width="1"/>
+      <text x="420" y="532" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">External system</text>
+
+      <rect x="540" y="524" width="14" height="10" rx="2" fill="rgba(100,116,141,0.10)" stroke="#94a3b8" stroke-width="1"/>
+      <text x="560" y="532" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">User</text>
+
+      <line x1="616" y1="530" x2="644" y2="530" stroke="#533afd" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+      <text x="652" y="532" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Primary flow</text>
+
+      <line x1="748" y1="530" x2="776" y2="530" stroke="#2874ad" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <text x="784" y="532" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">HTTP / external</text>
+    </svg>
+  </div>
+</body>
+</html>

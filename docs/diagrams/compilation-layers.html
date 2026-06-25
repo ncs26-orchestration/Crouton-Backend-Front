@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pablo · Compilation layers</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #ffffff;
+      --color-ink:     #061b31;
+      --color-muted:   #64748d;
+      --color-soft:    #94a3b8;
+      --color-accent:  #533afd;
+      --color-link:    #2874ad;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      color: var(--color-muted);
+      margin-bottom: 1.75rem;
+      max-width: 640px;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Layer stack · Pablo</p>
+    <h1>Compilation pipeline — spec to artifact</h1>
+    <p class="subtitle">The IR stays rich; lowering reshapes it per target; the adapter owns the divergence between engines. Portability lives on one row.</p>
+
+    <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748d"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#533afd"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#ffffff"/>
+
+      <!-- ===== Direction indicator (left margin, outside stack) ===== -->
+      <text x="60" y="84" fill="#64748d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">SPEC</text>
+      <line x1="60" y1="96" x2="60" y2="440" stroke="#64748d" stroke-width="1" marker-end="url(#arrow)"/>
+      <text x="60" y="456" fill="#64748d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">ARTIFACT</text>
+
+      <!-- ===== Outer stack silhouette ===== -->
+      <rect x="120" y="80" width="760" height="384" rx="6" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+
+      <!-- ===== L5 focal band (drawn before dividers so dividers sit on top cleanly) ===== -->
+      <rect x="120" y="336" width="760" height="64" fill="rgba(83,58,253,0.08)"/>
+      <line x1="120" y1="336" x2="880" y2="336" stroke="#533afd" stroke-width="1"/>
+      <line x1="120" y1="400" x2="880" y2="400" stroke="#533afd" stroke-width="1"/>
+
+      <!-- ===== L1 — Chat message ===== -->
+      <text x="160" y="116" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L1</text>
+      <text x="240" y="116" fill="#061b31" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Chat message</text>
+      <text x="860" y="116" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">body · attachments · text_content</text>
+      <line x1="120" y1="144" x2="880" y2="144" stroke="rgba(6,27,49,0.10)" stroke-width="0.8"/>
+
+      <!-- ===== L2 — ProcessIR ===== -->
+      <text x="160" y="180" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L2</text>
+      <text x="240" y="180" fill="#061b31" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Workflow IR · ProcessIR</text>
+      <text x="860" y="180" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">workflow_version · stage: drafting</text>
+      <line x1="120" y1="208" x2="880" y2="208" stroke="rgba(6,27,49,0.10)" stroke-width="0.8"/>
+
+      <!-- ===== L3 — Lowering pass ===== -->
+      <text x="160" y="244" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L3</text>
+      <text x="240" y="244" fill="#061b31" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Lowering pass</text>
+      <text x="860" y="244" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">default branches · normalize conditions</text>
+      <line x1="120" y1="272" x2="880" y2="272" stroke="rgba(6,27,49,0.10)" stroke-width="0.8"/>
+
+      <!-- ===== L4 — ExecutableIR ===== -->
+      <text x="160" y="308" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L4</text>
+      <text x="240" y="308" fill="#061b31" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Executable IR</text>
+      <text x="860" y="308" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">flat · engine-neutral · diagnostics</text>
+
+      <!-- ===== L5 — Engine adapter (FOCAL) ===== -->
+      <text x="160" y="372" fill="#533afd" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L5</text>
+      <text x="240" y="372" fill="#061b31" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Engine adapter</text>
+      <text x="860" y="372" fill="#533afd" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">Camunda 7 · Elsa 3</text>
+
+      <!-- ===== L6 — Deployed artifact ===== -->
+      <text x="160" y="436" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L6</text>
+      <text x="240" y="436" fill="#061b31" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Deployed workflow</text>
+      <text x="860" y="436" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">BPMN XML · Elsa JSON</text>
+
+      <!-- ===== Annotation (italic serif callout) ===== -->
+      <text x="500" y="504" fill="#061b31" font-size="13" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="middle">The adapter is the only row that knows which engine it is writing for.</text>
+
+      <!-- ===== Legend ===== -->
+      <line x1="40" y1="544" x2="960" y2="544" stroke="rgba(6,27,49,0.10)" stroke-width="0.8"/>
+      <text x="40" y="560" fill="#64748d" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <rect x="120" y="576" width="40" height="10" fill="rgba(83,58,253,0.08)" stroke="#533afd" stroke-width="1"/>
+      <text x="168" y="584" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Focal layer — portability boundary</text>
+
+      <rect x="440" y="576" width="40" height="10" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <text x="488" y="584" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Engine-neutral layer</text>
+
+      <line x1="680" y1="582" x2="708" y2="582" stroke="#64748d" stroke-width="1" marker-end="url(#arrow)"/>
+      <text x="716" y="584" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Direction — spec to artifact</text>
+    </svg>
+  </div>
+</body>
+</html>

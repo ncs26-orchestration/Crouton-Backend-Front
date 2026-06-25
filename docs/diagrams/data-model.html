@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pablo · Data model</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #ffffff;
+      --color-ink:     #061b31;
+      --color-muted:   #64748d;
+      --color-soft:    #94a3b8;
+      --color-accent:  #533afd;
+      --color-link:    #2874ad;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      color: var(--color-muted);
+      margin-bottom: 1.75rem;
+      max-width: 640px;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">ER · Pablo</p>
+    <h1>Data model — operator-tool shape</h1>
+    <p class="subtitle">Project is the aggregate root. Chats hold one process each; messages, attachments and IR versions all hang off the chat. Deploy targets are project-scoped.</p>
+
+    <svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#64748d"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#533afd"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#ffffff"/>
+
+      <!-- ===== Relationship lines (drawn behind entities) ===== -->
+
+      <!-- Project (1) — (N) Chat : vertical -->
+      <line x1="420" y1="152" x2="420" y2="220" stroke="#64748d" stroke-width="1"/>
+
+      <!-- Project (1) — (N) DeployTarget : horizontal -->
+      <line x1="520" y1="96" x2="700" y2="96" stroke="#64748d" stroke-width="1"/>
+
+      <!-- Chat (1) — (N) ChatAttachment : vertical -->
+      <line x1="420" y1="336" x2="420" y2="404" stroke="#64748d" stroke-width="1"/>
+
+      <!-- Chat (1) — (N) ChatMessage : L-path left-down -->
+      <path d="M 340 336 L 340 376 L 180 376 L 180 404" fill="none" stroke="#64748d" stroke-width="1"/>
+
+      <!-- Chat (1) — (N) WorkflowVersion : L-path right-down -->
+      <path d="M 500 336 L 500 376 L 700 376 L 700 404" fill="none" stroke="#64748d" stroke-width="1"/>
+
+      <!-- ===== Cardinality labels (mask rects) ===== -->
+
+      <rect x="412" y="160" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="420" y="168" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">1</text>
+      <rect x="412" y="206" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="420" y="214" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">N</text>
+
+      <rect x="528" y="90" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="536" y="98" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">1</text>
+      <rect x="676" y="90" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="684" y="98" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">N</text>
+
+      <rect x="412" y="344" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="420" y="352" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">1</text>
+      <rect x="412" y="390" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="420" y="398" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">N</text>
+
+      <rect x="332" y="344" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="340" y="352" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">1</text>
+      <rect x="172" y="390" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="180" y="398" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">N</text>
+
+      <rect x="492" y="344" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="500" y="352" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">1</text>
+      <rect x="692" y="390" width="16" height="10" rx="2" fill="#ffffff"/>
+      <text x="700" y="398" fill="#64748d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">N</text>
+
+      <!-- ========================================= -->
+      <!-- ENTITY: Project (FOCAL) -->
+      <!-- ========================================= -->
+      <rect x="320" y="40" width="200" height="112" rx="6" fill="#ffffff"/>
+      <rect x="320" y="40" width="200" height="112" rx="6" fill="rgba(83,58,253,0.08)" stroke="#533afd" stroke-width="1"/>
+      <line x1="320" y1="68" x2="520" y2="68" stroke="rgba(83,58,253,0.30)" stroke-width="0.8"/>
+      <rect x="328" y="48" width="44" height="12" rx="2" fill="transparent" stroke="rgba(83,58,253,0.50)" stroke-width="0.8"/>
+      <text x="350" y="57" fill="#533afd" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ROOT</text>
+      <text x="420" y="60" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Project</text>
+
+      <text x="332" y="84" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+      <text x="508" y="84" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+      <text x="332" y="100" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  name</text>
+      <text x="508" y="100" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+      <text x="332" y="116" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  description</text>
+      <text x="508" y="116" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+      <text x="332" y="132" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  created_at</text>
+      <text x="508" y="132" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">timestamptz</text>
+      <text x="332" y="148" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  archived_at</text>
+      <text x="508" y="148" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">timestamptz?</text>
+
+      <!-- ========================================= -->
+      <!-- ENTITY: DeployTarget -->
+      <!-- ========================================= -->
+      <rect x="700" y="40" width="220" height="124" rx="6" fill="#ffffff"/>
+      <rect x="700" y="40" width="220" height="124" rx="6" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <line x1="700" y1="68" x2="920" y2="68" stroke="rgba(6,27,49,0.12)" stroke-width="0.8"/>
+      <rect x="708" y="48" width="56" height="12" rx="2" fill="transparent" stroke="rgba(6,27,49,0.40)" stroke-width="0.8"/>
+      <text x="736" y="57" fill="#061b31" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ENTITY</text>
+      <text x="810" y="60" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">DeployTarget</text>
+
+      <text x="712" y="84" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+      <text x="908" y="84" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+      <text x="712" y="100" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">→ project_id</text>
+      <text x="908" y="100" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">FK</text>
+      <text x="712" y="116" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  kind</text>
+      <text x="908" y="116" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">camunda7 · elsa3</text>
+      <text x="712" y="132" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  endpoint</text>
+      <text x="908" y="132" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+      <text x="712" y="148" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  auth_kind</text>
+      <text x="908" y="148" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">none · basic · bearer</text>
+      <text x="712" y="162" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  created_at</text>
+      <text x="908" y="162" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">timestamptz</text>
+
+      <!-- ========================================= -->
+      <!-- ENTITY: Chat -->
+      <!-- ========================================= -->
+      <rect x="320" y="224" width="200" height="112" rx="6" fill="#ffffff"/>
+      <rect x="320" y="224" width="200" height="112" rx="6" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <line x1="320" y1="252" x2="520" y2="252" stroke="rgba(6,27,49,0.12)" stroke-width="0.8"/>
+      <rect x="328" y="232" width="56" height="12" rx="2" fill="transparent" stroke="rgba(6,27,49,0.40)" stroke-width="0.8"/>
+      <text x="356" y="241" fill="#061b31" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ENTITY</text>
+      <text x="420" y="244" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Chat</text>
+
+      <text x="332" y="268" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+      <text x="508" y="268" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+      <text x="332" y="284" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">→ project_id</text>
+      <text x="508" y="284" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">FK</text>
+      <text x="332" y="300" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  title</text>
+      <text x="508" y="300" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+      <text x="332" y="316" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">→ latest_version_id</text>
+      <text x="508" y="316" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">FK?</text>
+      <text x="332" y="332" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  created_at</text>
+      <text x="508" y="332" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">timestamptz</text>
+
+      <!-- ========================================= -->
+      <!-- ENTITY: ChatMessage -->
+      <!-- ========================================= -->
+      <rect x="80" y="404" width="200" height="112" rx="6" fill="#ffffff"/>
+      <rect x="80" y="404" width="200" height="112" rx="6" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <line x1="80" y1="432" x2="280" y2="432" stroke="rgba(6,27,49,0.12)" stroke-width="0.8"/>
+      <rect x="88" y="412" width="56" height="12" rx="2" fill="transparent" stroke="rgba(6,27,49,0.40)" stroke-width="0.8"/>
+      <text x="116" y="421" fill="#061b31" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ENTITY</text>
+      <text x="180" y="424" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ChatMessage</text>
+
+      <text x="92" y="448" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+      <text x="268" y="448" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+      <text x="92" y="464" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">→ chat_id</text>
+      <text x="268" y="464" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">FK</text>
+      <text x="92" y="480" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  role</text>
+      <text x="268" y="480" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">user · assistant</text>
+      <text x="92" y="496" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  body</text>
+      <text x="268" y="496" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">jsonb</text>
+      <text x="92" y="512" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  created_at</text>
+      <text x="268" y="512" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">timestamptz</text>
+
+      <!-- ========================================= -->
+      <!-- ENTITY: ChatAttachment -->
+      <!-- ========================================= -->
+      <rect x="320" y="404" width="200" height="124" rx="6" fill="#ffffff"/>
+      <rect x="320" y="404" width="200" height="124" rx="6" fill="rgba(6,27,49,0.04)" stroke="#64748d" stroke-width="1"/>
+      <line x1="320" y1="432" x2="520" y2="432" stroke="rgba(6,27,49,0.12)" stroke-width="0.8"/>
+      <rect x="328" y="412" width="56" height="12" rx="2" fill="transparent" stroke="rgba(100,116,141,0.60)" stroke-width="0.8"/>
+      <text x="356" y="421" fill="#64748d" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ENTITY</text>
+      <text x="420" y="424" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ChatAttachment</text>
+
+      <text x="332" y="448" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+      <text x="508" y="448" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+      <text x="332" y="464" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">→ chat_id</text>
+      <text x="508" y="464" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">FK</text>
+      <text x="332" y="480" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">→ message_id</text>
+      <text x="508" y="480" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">FK?</text>
+      <text x="332" y="496" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  kind</text>
+      <text x="508" y="496" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">doc · image · voice</text>
+      <text x="332" y="512" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  mime</text>
+      <text x="508" y="512" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+      <text x="332" y="528" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  text_content</text>
+      <text x="508" y="528" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+      <!-- ========================================= -->
+      <!-- ENTITY: WorkflowVersion -->
+      <!-- ========================================= -->
+      <rect x="580" y="404" width="240" height="124" rx="6" fill="#ffffff"/>
+      <rect x="580" y="404" width="240" height="124" rx="6" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <line x1="580" y1="432" x2="820" y2="432" stroke="rgba(6,27,49,0.12)" stroke-width="0.8"/>
+      <rect x="588" y="412" width="56" height="12" rx="2" fill="transparent" stroke="rgba(6,27,49,0.40)" stroke-width="0.8"/>
+      <text x="616" y="421" fill="#061b31" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ENTITY</text>
+      <text x="700" y="424" fill="#061b31" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">WorkflowVersion</text>
+
+      <text x="592" y="448" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+      <text x="808" y="448" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+      <text x="592" y="464" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">→ chat_id</text>
+      <text x="808" y="464" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">FK</text>
+      <text x="592" y="480" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">→ source_message_id</text>
+      <text x="808" y="480" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">FK?</text>
+      <text x="592" y="496" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  ir_json</text>
+      <text x="808" y="496" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">jsonb</text>
+      <text x="592" y="512" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  stage</text>
+      <text x="808" y="512" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">drafting · ready · approved</text>
+      <text x="592" y="528" fill="#061b31" font-size="10" font-family="'Geist Mono', monospace">  diagnostics_json</text>
+      <text x="808" y="528" fill="#64748d" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">jsonb</text>
+
+      <!-- ===== Legend ===== -->
+      <line x1="40" y1="568" x2="960" y2="568" stroke="rgba(6,27,49,0.10)" stroke-width="0.8"/>
+      <text x="40" y="584" fill="#64748d" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <rect x="40" y="600" width="14" height="10" rx="2" fill="rgba(83,58,253,0.08)" stroke="#533afd" stroke-width="1"/>
+      <text x="60" y="608" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Aggregate root</text>
+
+      <rect x="176" y="600" width="14" height="10" rx="2" fill="#ffffff" stroke="#061b31" stroke-width="1"/>
+      <text x="196" y="608" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Entity</text>
+
+      <rect x="260" y="600" width="14" height="10" rx="2" fill="rgba(6,27,49,0.04)" stroke="#64748d" stroke-width="1"/>
+      <text x="280" y="608" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Blob store</text>
+
+      <text x="368" y="608" fill="#64748d" font-size="8.5" font-family="'Geist Mono', monospace">#</text>
+      <text x="380" y="608" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Primary key</text>
+
+      <text x="468" y="608" fill="#64748d" font-size="8.5" font-family="'Geist Mono', monospace">→</text>
+      <text x="484" y="608" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Foreign key</text>
+
+      <text x="568" y="608" fill="#64748d" font-size="8.5" font-family="'Geist Mono', monospace">1 · N</text>
+      <text x="600" y="608" fill="#64748d" font-size="8.5" font-family="'Geist', sans-serif">Cardinality</text>
+    </svg>
+  </div>
+</body>
+</html>

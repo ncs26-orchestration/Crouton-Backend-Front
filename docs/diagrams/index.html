@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pablo · Diagrams</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #ffffff;
+      --color-ink:     #061b31;
+      --color-muted:   #64748d;
+      --color-soft:    #94a3b8;
+      --color-accent:  #533afd;
+      --color-rule:    rgba(6,27,49,0.10);
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 4rem 2rem;
+      display: flex;
+      justify-content: center;
+    }
+    .frame { max-width: 880px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(2rem, 3.4vw + 0.75rem, 2.75rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.10;
+      color: var(--color-ink);
+      margin-bottom: 1rem;
+    }
+    .lede {
+      font-family: var(--font-sans);
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--color-muted);
+      max-width: 640px;
+      margin-bottom: 3rem;
+    }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--color-rule);
+      margin-bottom: 1.75rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 1rem 1.25rem;
+    }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: 1.5rem 1.5rem 1.25rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .card:hover { border-color: var(--color-accent); }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      flex: 0 0 auto;
+    }
+    .card-dot.ink { background: var(--color-ink); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.soft { background: var(--color-soft); }
+
+    .card h3 {
+      font-family: var(--font-serif);
+      font-size: 1.35rem;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      line-height: 1.15;
+      color: var(--color-ink);
+    }
+    .card p {
+      font-size: 0.88rem;
+      color: var(--color-muted);
+      line-height: 1.5;
+    }
+    .card .kind {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-top: 0.5rem;
+    }
+
+    footer {
+      margin-top: 4rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--color-rule);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--color-muted);
+      letter-spacing: 0.08em;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Diagrams · Pablo</p>
+    <h1>How the system fits together.</h1>
+    <p class="lede">
+      Four views of Pablo as it is currently built — not as earlier planning docs described it.
+      Agent, API, and web run as three independent services; the portability promise lives on
+      a single row inside the compilation pipeline.
+    </p>
+
+    <p class="section-label">Views</p>
+
+    <div class="grid">
+      <a class="card" href="architecture.html">
+        <div class="card-head">
+          <span class="card-dot"></span>
+          <h3>Architecture</h3>
+        </div>
+        <p>The three services, the Postgres store, Ollama, and the target engines. Shows where every HTTP call goes.</p>
+        <p class="kind">Architecture</p>
+      </a>
+
+      <a class="card" href="flowchart.html">
+        <div class="card-head">
+          <span class="card-dot ink"></span>
+          <h3>User flow</h3>
+        </div>
+        <p>From chat message to deployed workflow. The copilot clarify loop sits between extraction and operator approval.</p>
+        <p class="kind">Flowchart</p>
+      </a>
+
+      <a class="card" href="compilation-layers.html">
+        <div class="card-head">
+          <span class="card-dot muted"></span>
+          <h3>Compilation pipeline</h3>
+        </div>
+        <p>ProcessIR → Lower → ExecutableIR → Adapter → Artifact. The engine adapter is the only layer that knows which engine it is writing for.</p>
+        <p class="kind">Layer stack</p>
+      </a>
+
+      <a class="card" href="data-model.html">
+        <div class="card-head">
+          <span class="card-dot soft"></span>
+          <h3>Data model</h3>
+        </div>
+        <p>Project is the aggregate root. Chats own messages, attachments, and IR versions. Deploy targets are project-scoped.</p>
+        <p class="kind">Entity relationship</p>
+      </a>
+    </div>
+
+    <footer>
+      <span>docs/diagrams</span>
+      <span>Pablo · 2026</span>
+    </footer>
+  </div>
+</body>
+</html>
