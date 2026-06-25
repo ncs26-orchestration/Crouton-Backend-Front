@@ -73,3 +73,14 @@ tf-ip: ## Print the VM external IP
 
 ansible-deploy: ## Deploy the stack to the VM (fill inventory.ini first)
 	ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml
+
+# ── Local LLM (Ollama) ──────────────────────────────────────────────────────
+
+ollama-start: ## Start Ollama server in the background
+	ollama serve &
+
+ollama-run: ## Run qwen2.5:7b interactively
+	ollama run qwen2.5:7b
+
+ollama-status: ## Check if Ollama is responding
+	@curl -s http://localhost:11434/api/tags | python3 -m json.tool || echo "Ollama not running — try: make ollama-start"
