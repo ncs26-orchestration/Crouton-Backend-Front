@@ -71,10 +71,9 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       APP_ENV: development
-      # Provider is set in .env via AGENT_EXTRACTOR_PROVIDER
-      # If not set, defaults to ollama (requires local Ollama)
-      # Set AGENT_EXTRACTOR_PROVIDER=groq in .env if you have GROQ_API_KEY
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      AGENT_EXTRACTOR_PROVIDER: ${AGENT_EXTRACTOR_PROVIDER:-ollama}
+      AGENT_EXTRACTOR_MODEL: ${AGENT_EXTRACTOR_MODEL:-qwen2.5:7b}
       GROQ_API_KEY: ${GROQ_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
