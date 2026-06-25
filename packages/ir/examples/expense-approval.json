@@ -1,0 +1,99 @@
+{
+  "version": "0.1",
+  "metadata": {
+    "name": "expense-approval",
+    "description": "Expense report routing. Employee submits; accounting verifies; if amount >= 50000 DZD or category is travel, management approves; then archive in OpenBee and notify the employee.",
+    "tenant_id": "demo",
+    "source_ids": ["transcript.md"]
+  },
+  "actors": [
+    { "id": "employee",   "name": "John (sales)",       "kind": "group", "is_ref": { "group_id": "sales" } },
+    { "id": "accountant", "name": "Mary (accounting)",  "kind": "group", "is_ref": { "group_id": "accounting" } },
+    { "id": "manager",    "name": "Peter (management)", "kind": "group", "is_ref": { "group_id": "management" } }
+  ],
+  "tasks": [
+    {
+      "id": "submit",
+      "name": "Submit expense",
+      "type": "user",
+      "actor_ref": "employee",
+      "form_ref": "expense_form",
+      "binding": { "candidate_group_id": "sales" }
+    },
+    {
+      "id": "verify",
+      "name": "Verify expense",
+      "type": "user",
+      "actor_ref": "accountant",
+      "form_ref": "decision_form",
+      "binding": { "candidate_group_id": "accounting" }
+    },
+    {
+      "id": "approve_manager",
+      "name": "Manager approval",
+      "type": "user",
+      "actor_ref": "manager",
+      "form_ref": "decision_form",
+      "binding": { "candidate_group_id": "management" }
+    },
+    {
+      "id": "archive",
+      "name": "Archive in OpenBee",
+      "type": "service",
+      "binding": {
+        "system_ref": "openbee",
+        "capability": "document.archive",
+        "params": { "folder": "/expenses/${year}", "file": "${receipt}" }
+      }
+    },
+    {
+      "id": "notify",
+      "name": "Notify employee",
+      "type": "service",
+      "binding": {
+        "system_ref": "m365",
+        "capability": "user.notify.email",
+        "params": { "to": "${employee_email}", "template": "expense_decision" }
+      }
+    }
+  ],
+  "gateways": [
+    { "id": "g_threshold", "type": "exclusive" },
+    { "id": "g_decision",  "type": "exclusive" }
+  ],
+  "events": [
+    { "id": "e_start", "type": "start" },
+    { "id": "e_approved", "type": "end" },
+    { "id": "e_rejected", "type": "end" }
+  ],
+  "flows": [
+    { "id": "f1", "from": "e_start",      "to": "submit" },
+    { "id": "f2", "from": "submit",       "to": "verify" },
+    { "id": "f3", "from": "verify",       "to": "g_threshold" },
+    { "id": "f4", "from": "g_threshold",  "to": "approve_manager", "condition": { "expression": "${amount >= 50000 || category == \"travel\"}", "language": "juel" } },
+    { "id": "f5", "from": "g_threshold",  "to": "g_decision",      "condition": { "expression": "${amount <  50000 && category != \"travel\"}", "language": "juel" } },
+    { "id": "f6", "from": "approve_manager", "to": "g_decision" },
+    { "id": "f7", "from": "g_decision",   "to": "archive",         "condition": { "expression": "${approved == true}", "language": "juel" } },
+    { "id": "f8", "from": "g_decision",   "to": "e_rejected",      "condition": { "expression": "${approved == false}", "language": "juel" } },
+    { "id": "f9", "from": "archive",      "to": "notify" },
+    { "id": "f10","from": "notify",       "to": "e_approved" }
+  ],
+  "forms": [
+    {
+      "id": "expense_form",
+      "fields": [
+        { "id": "amount",        "label": "Amount (DZD)",    "type": "long",    "required": true },
+        { "id": "category",      "label": "Category",        "type": "enum",    "required": true, "options": ["travel", "meal", "supplies", "other"] },
+        { "id": "justification", "label": "Justification",   "type": "string" },
+        { "id": "receipt",       "label": "Receipt URL",     "type": "string" }
+      ]
+    },
+    {
+      "id": "decision_form",
+      "fields": [
+        { "id": "approved", "label": "Approved?", "type": "boolean", "required": true },
+        { "id": "comment",  "label": "Comment",   "type": "string" }
+      ]
+    }
+  ]
+}

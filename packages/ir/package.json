@@ -1,0 +1,13 @@
+{
+  "name": "@repo/ir",
+  "version": "0.0.1",
+  "private": true,
+  "description": "AUP Workflow IR v0.1 schemas, engine capability profiles, and example IRs",
+  "files": [
+    "schema.json",
+    "is-registry.schema.json",
+    "engine-profiles",
+    "examples",
+    "README.md"
+  ]
+}

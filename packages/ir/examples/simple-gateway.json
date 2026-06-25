@@ -1,0 +1,47 @@
+{
+  "version": "0.1",
+  "metadata": {
+    "name": "simple-gateway",
+    "description": "Minimal example: start -> user task -> exclusive gateway -> end. Smallest valid IR exercising the core shape.",
+    "tenant_id": "demo",
+    "source_ids": []
+  },
+  "actors": [
+    { "id": "accountant", "name": "Mary (accounting)", "kind": "group", "is_ref": { "group_id": "accounting" } }
+  ],
+  "tasks": [
+    {
+      "id": "review",
+      "name": "Review request",
+      "type": "user",
+      "actor_ref": "accountant",
+      "form_ref": "decision",
+      "binding": {
+        "candidate_group_id": "accounting"
+      }
+    }
+  ],
+  "gateways": [
+    { "id": "g_decide", "type": "exclusive" }
+  ],
+  "events": [
+    { "id": "e_start", "type": "start" },
+    { "id": "e_approved", "type": "end" },
+    { "id": "e_rejected", "type": "end" }
+  ],
+  "flows": [
+    { "id": "f1", "from": "e_start",  "to": "review" },
+    { "id": "f2", "from": "review",   "to": "g_decide" },
+    { "id": "f3", "from": "g_decide", "to": "e_approved", "condition": { "expression": "${approved == true}", "language": "juel" } },
+    { "id": "f4", "from": "g_decide", "to": "e_rejected", "condition": { "expression": "${approved == false}", "language": "juel" } }
+  ],
+  "forms": [
+    {
+      "id": "decision",
+      "fields": [
+        { "id": "approved", "label": "Approved?", "type": "boolean", "required": true },
+        { "id": "comment",  "label": "Comment",   "type": "string" }
+      ]
+    }
+  ]
+}

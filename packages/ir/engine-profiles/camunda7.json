@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "camunda7",
+  "name": "Camunda 7 (self-managed)",
+  "description": "Capability profile for Camunda BPM Platform 7.x. BPMN 2.0 XML with the camunda: extension namespace. Default expression language: JUEL. Identity service is built-in.",
+  "xmlNamespaces": {
+    "bpmn": "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    "bpmndi": "http://www.omg.org/spec/BPMN/20100524/DI",
+    "dc": "http://www.omg.org/spec/DD/20100524/DC",
+    "di": "http://www.omg.org/spec/DD/20100524/DI",
+    "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "camunda": "http://camunda.org/schema/1.0/bpmn"
+  },
+  "actions":  ["user", "service", "script"],
+  "gateways": ["exclusive", "parallel"],
+  "events": {
+    "start":        ["none"],
+    "end":          ["none"]
+  },
+  "expressionLanguage": "juel",
+  "forms":              "embedded-camunda-formdata",
+  "serviceTaskModel":   "external-task",
+  "identitySource":     "engine-builtin",
+  "strictMode": true
+}
