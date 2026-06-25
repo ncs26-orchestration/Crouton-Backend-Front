@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="http://aup.dev/bpmn" id="defs-expense_approval">
+  <bpmn:process id="expense_approval" name="expense-approval" isExecutable="true" camunda:historyTimeToLive="P180D">
+    <bpmn:endEvent id="e_approved"></bpmn:endEvent>
+    <bpmn:endEvent id="e_rejected"></bpmn:endEvent>
+    <bpmn:startEvent id="e_start"></bpmn:startEvent>
+    <bpmn:exclusiveGateway id="g_decision"></bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="g_threshold"></bpmn:exclusiveGateway>
+    <bpmn:userTask id="approve_manager" name="Manager approval" camunda:candidateGroups="management">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="approved" label="Approved?" type="boolean">
+            <camunda:validation>
+              <camunda:constraint name="required"></camunda:constraint>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="comment" label="Comment" type="string"></camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="archive" name="Archive in OpenBee" camunda:type="external" camunda:topic="openbee.document.archive"></bpmn:serviceTask>
+    <bpmn:serviceTask id="notify" name="Notify employee" camunda:type="external" camunda:topic="m365.user.notify.email"></bpmn:serviceTask>
+    <bpmn:userTask id="submit" name="Submit expense" camunda:candidateGroups="sales">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="amount" label="Amount (DZD)" type="long">
+            <camunda:validation>
+              <camunda:constraint name="required"></camunda:constraint>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="category" label="Category" type="enum">
+            <camunda:validation>
+              <camunda:constraint name="required"></camunda:constraint>
+            </camunda:validation>
+            <camunda:value id="travel" name="travel"></camunda:value>
+            <camunda:value id="meal" name="meal"></camunda:value>
+            <camunda:value id="supplies" name="supplies"></camunda:value>
+            <camunda:value id="other" name="other"></camunda:value>
+          </camunda:formField>
+          <camunda:formField id="justification" label="Justification" type="string"></camunda:formField>
+          <camunda:formField id="receipt" label="Receipt URL" type="string"></camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+    <bpmn:userTask id="verify" name="Verify expense" camunda:candidateGroups="accounting">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="approved" label="Approved?" type="boolean">
+            <camunda:validation>
+              <camunda:constraint name="required"></camunda:constraint>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="comment" label="Comment" type="string"></camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f1" sourceRef="e_start" targetRef="submit"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f10" sourceRef="notify" targetRef="e_approved"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f2" sourceRef="submit" targetRef="verify"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f3" sourceRef="verify" targetRef="g_threshold"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f4" name="${amount &gt;= 50000 || category == &#34;travel&#34;}" sourceRef="g_threshold" targetRef="approve_manager">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${amount &gt;= 50000 || category == &#34;travel&#34;}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f5" name="${amount &lt;  50000 &amp;&amp; category != &#34;travel&#34;}" sourceRef="g_threshold" targetRef="g_decision">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${amount &lt;  50000 &amp;&amp; category != &#34;travel&#34;}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f6" sourceRef="approve_manager" targetRef="g_decision"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f7" name="${approved == true}" sourceRef="g_decision" targetRef="archive">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f8" name="${approved == false}" sourceRef="g_decision" targetRef="e_rejected">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f9" sourceRef="archive" targetRef="notify"></bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="diagram-expense_approval">
+    <bpmndi:BPMNPlane id="plane-expense_approval" bpmnElement="expense_approval">
+      <bpmndi:BPMNShape id="approve_manager_di" bpmnElement="approve_manager">
+        <dc:Bounds x="760" y="193" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="archive_di" bpmnElement="archive">
+        <dc:Bounds x="1120" y="40" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_approved_di" bpmnElement="e_approved">
+        <dc:Bounds x="1512" y="117" width="36" height="36"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_rejected_di" bpmnElement="e_rejected">
+        <dc:Bounds x="1152" y="172" width="36" height="36"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_start_di" bpmnElement="e_start">
+        <dc:Bounds x="72" y="117" width="36" height="36"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_decision_di" bpmnElement="g_decision">
+        <dc:Bounds x="965" y="103" width="50" height="50"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_threshold_di" bpmnElement="g_threshold">
+        <dc:Bounds x="605" y="103" width="50" height="50"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="notify_di" bpmnElement="notify">
+        <dc:Bounds x="1300" y="73" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="submit_di" bpmnElement="submit">
+        <dc:Bounds x="220" y="73" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="verify_di" bpmnElement="verify">
+        <dc:Bounds x="400" y="73" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
+        <di:waypoint x="108" y="135"></di:waypoint>
+        <di:waypoint x="164" y="135"></di:waypoint>
+        <di:waypoint x="164" y="113"></di:waypoint>
+        <di:waypoint x="220" y="113"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f10_di" bpmnElement="f10">
+        <di:waypoint x="1400" y="113"></di:waypoint>
+        <di:waypoint x="1456" y="113"></di:waypoint>
+        <di:waypoint x="1456" y="135"></di:waypoint>
+        <di:waypoint x="1512" y="135"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
+        <di:waypoint x="320" y="113"></di:waypoint>
+        <di:waypoint x="400" y="113"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
+        <di:waypoint x="500" y="113"></di:waypoint>
+        <di:waypoint x="552" y="113"></di:waypoint>
+        <di:waypoint x="552" y="128"></di:waypoint>
+        <di:waypoint x="605" y="128"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
+        <di:waypoint x="655" y="128"></di:waypoint>
+        <di:waypoint x="707" y="128"></di:waypoint>
+        <di:waypoint x="707" y="233"></di:waypoint>
+        <di:waypoint x="760" y="233"></di:waypoint>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="597" y="160" width="220" height="14"></dc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5">
+        <di:waypoint x="655" y="128"></di:waypoint>
+        <di:waypoint x="965" y="128"></di:waypoint>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="700" y="108" width="220" height="14"></dc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6">
+        <di:waypoint x="860" y="233"></di:waypoint>
+        <di:waypoint x="912" y="233"></di:waypoint>
+        <di:waypoint x="912" y="128"></di:waypoint>
+        <di:waypoint x="965" y="128"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7">
+        <di:waypoint x="1015" y="128"></di:waypoint>
+        <di:waypoint x="1067" y="128"></di:waypoint>
+        <di:waypoint x="1067" y="80"></di:waypoint>
+        <di:waypoint x="1120" y="80"></di:waypoint>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1010" y="84" width="114" height="14"></dc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8">
+        <di:waypoint x="1015" y="128"></di:waypoint>
+        <di:waypoint x="1083" y="128"></di:waypoint>
+        <di:waypoint x="1083" y="190"></di:waypoint>
+        <di:waypoint x="1152" y="190"></di:waypoint>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1023" y="139" width="120" height="14"></dc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f9_di" bpmnElement="f9">
+        <di:waypoint x="1220" y="80"></di:waypoint>
+        <di:waypoint x="1260" y="80"></di:waypoint>
+        <di:waypoint x="1260" y="113"></di:waypoint>
+        <di:waypoint x="1300" y="113"></di:waypoint>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

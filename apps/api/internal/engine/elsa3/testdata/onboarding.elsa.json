@@ -1,0 +1,120 @@
+{
+  "definitionId": "onboarding",
+  "id": "onboarding-v1",
+  "isLatest": true,
+  "isPublished": true,
+  "name": "onboarding",
+  "root": {
+    "activities": [
+      {
+        "id": "prepare_contract",
+        "name": "Prepare contract",
+        "taskName": {
+          "expression": {
+            "type": "Literal",
+            "value": "Prepare contract"
+          },
+          "typeName": "String"
+        },
+        "type": "Elsa.RunTask"
+      },
+      {
+        "id": "prepare_workstation",
+        "name": "Prepare workstation",
+        "taskName": {
+          "expression": {
+            "type": "Literal",
+            "value": "Prepare workstation"
+          },
+          "typeName": "String"
+        },
+        "type": "Elsa.RunTask"
+      },
+      {
+        "id": "provision_accounts",
+        "name": "Provision accounts",
+        "taskName": {
+          "expression": {
+            "type": "Literal",
+            "value": "Provision accounts"
+          },
+          "typeName": "String"
+        },
+        "type": "Elsa.RunTask"
+      },
+      {
+        "id": "send_welcome",
+        "method": {
+          "expression": {
+            "type": "Literal",
+            "value": "POST"
+          },
+          "typeName": "String"
+        },
+        "name": "Send welcome email",
+        "type": "Elsa.FlowSendHttpRequest",
+        "url": {
+          "expression": {
+            "type": "Literal",
+            "value": "https://aup.dev/connectors/m365/user.notify.email"
+          },
+          "typeName": "String"
+        }
+      },
+      {
+        "id": "g_join",
+        "type": "Elsa.Fork"
+      },
+      {
+        "id": "g_split",
+        "type": "Elsa.Fork"
+      }
+    ],
+    "connections": [
+      {
+        "source": "g_split",
+        "sourcePort": "Done",
+        "target": "prepare_contract",
+        "targetPort": "In"
+      },
+      {
+        "source": "g_split",
+        "sourcePort": "Done",
+        "target": "prepare_workstation",
+        "targetPort": "In"
+      },
+      {
+        "source": "g_split",
+        "sourcePort": "Done",
+        "target": "provision_accounts",
+        "targetPort": "In"
+      },
+      {
+        "source": "prepare_contract",
+        "sourcePort": "Done",
+        "target": "g_join",
+        "targetPort": "In"
+      },
+      {
+        "source": "prepare_workstation",
+        "sourcePort": "Done",
+        "target": "g_join",
+        "targetPort": "In"
+      },
+      {
+        "source": "provision_accounts",
+        "sourcePort": "Done",
+        "target": "g_join",
+        "targetPort": "In"
+      },
+      {
+        "source": "g_join",
+        "sourcePort": "Done",
+        "target": "send_welcome",
+        "targetPort": "In"
+      }
+    ],
+    "id": "Flowchart1",
+    "type": "Elsa.Flowchart"
+  }
+}

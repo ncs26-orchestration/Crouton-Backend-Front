@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="http://aup.dev/bpmn" id="defs-onboarding">
+  <bpmn:process id="onboarding" name="onboarding" isExecutable="true" camunda:historyTimeToLive="P180D">
+    <bpmn:endEvent id="e_end"></bpmn:endEvent>
+    <bpmn:startEvent id="e_start"></bpmn:startEvent>
+    <bpmn:parallelGateway id="g_join"></bpmn:parallelGateway>
+    <bpmn:parallelGateway id="g_split"></bpmn:parallelGateway>
+    <bpmn:userTask id="prepare_contract" name="Prepare contract" camunda:candidateGroups="camunda-admin">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="full_name" label="Full name" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required"></camunda:constraint>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="start_date" label="Start date" type="date">
+            <camunda:validation>
+              <camunda:constraint name="required"></camunda:constraint>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="role_title" label="Role title" type="string"></camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+    <bpmn:userTask id="prepare_workstation" name="Prepare workstation" camunda:candidateGroups="sales"></bpmn:userTask>
+    <bpmn:userTask id="provision_accounts" name="Provision accounts" camunda:candidateGroups="management"></bpmn:userTask>
+    <bpmn:serviceTask id="send_welcome" name="Send welcome email" camunda:type="external" camunda:topic="m365.user.notify.email"></bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f1" sourceRef="e_start" targetRef="g_split"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f2" sourceRef="g_split" targetRef="prepare_contract"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f3" sourceRef="g_split" targetRef="prepare_workstation"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f4" sourceRef="g_split" targetRef="provision_accounts"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f5" sourceRef="prepare_contract" targetRef="g_join"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f6" sourceRef="prepare_workstation" targetRef="g_join"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f7" sourceRef="provision_accounts" targetRef="g_join"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f8" sourceRef="g_join" targetRef="send_welcome"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f9" sourceRef="send_welcome" targetRef="e_end"></bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="diagram-onboarding">
+    <bpmndi:BPMNPlane id="plane-onboarding" bpmnElement="onboarding">
+      <bpmndi:BPMNShape id="e_end_di" bpmnElement="e_end">
+        <dc:Bounds x="972" y="194" width="36" height="36"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_start_di" bpmnElement="e_start">
+        <dc:Bounds x="72" y="194" width="36" height="36"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_join_di" bpmnElement="g_join">
+        <dc:Bounds x="605" y="180" width="50" height="50"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_split_di" bpmnElement="g_split">
+        <dc:Bounds x="245" y="180" width="50" height="50"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="prepare_contract_di" bpmnElement="prepare_contract">
+        <dc:Bounds x="400" y="40" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="prepare_workstation_di" bpmnElement="prepare_workstation">
+        <dc:Bounds x="400" y="150" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="provision_accounts_di" bpmnElement="provision_accounts">
+        <dc:Bounds x="400" y="260" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="send_welcome_di" bpmnElement="send_welcome">
+        <dc:Bounds x="760" y="150" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
+        <di:waypoint x="108" y="212"></di:waypoint>
+        <di:waypoint x="176" y="212"></di:waypoint>
+        <di:waypoint x="176" y="205"></di:waypoint>
+        <di:waypoint x="245" y="205"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
+        <di:waypoint x="295" y="205"></di:waypoint>
+        <di:waypoint x="347" y="205"></di:waypoint>
+        <di:waypoint x="347" y="80"></di:waypoint>
+        <di:waypoint x="400" y="80"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
+        <di:waypoint x="295" y="205"></di:waypoint>
+        <di:waypoint x="347" y="205"></di:waypoint>
+        <di:waypoint x="347" y="190"></di:waypoint>
+        <di:waypoint x="400" y="190"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
+        <di:waypoint x="295" y="205"></di:waypoint>
+        <di:waypoint x="347" y="205"></di:waypoint>
+        <di:waypoint x="347" y="300"></di:waypoint>
+        <di:waypoint x="400" y="300"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5">
+        <di:waypoint x="500" y="80"></di:waypoint>
+        <di:waypoint x="552" y="80"></di:waypoint>
+        <di:waypoint x="552" y="205"></di:waypoint>
+        <di:waypoint x="605" y="205"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6">
+        <di:waypoint x="500" y="190"></di:waypoint>
+        <di:waypoint x="552" y="190"></di:waypoint>
+        <di:waypoint x="552" y="205"></di:waypoint>
+        <di:waypoint x="605" y="205"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7">
+        <di:waypoint x="500" y="300"></di:waypoint>
+        <di:waypoint x="552" y="300"></di:waypoint>
+        <di:waypoint x="552" y="205"></di:waypoint>
+        <di:waypoint x="605" y="205"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8">
+        <di:waypoint x="655" y="205"></di:waypoint>
+        <di:waypoint x="707" y="205"></di:waypoint>
+        <di:waypoint x="707" y="190"></di:waypoint>
+        <di:waypoint x="760" y="190"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f9_di" bpmnElement="f9">
+        <di:waypoint x="860" y="190"></di:waypoint>
+        <di:waypoint x="916" y="190"></di:waypoint>
+        <di:waypoint x="916" y="212"></di:waypoint>
+        <di:waypoint x="972" y="212"></di:waypoint>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

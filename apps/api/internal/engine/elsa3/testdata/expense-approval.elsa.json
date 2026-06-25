@@ -1,0 +1,153 @@
+{
+  "definitionId": "expense_approval",
+  "id": "expense_approval-v1",
+  "isLatest": true,
+  "isPublished": true,
+  "name": "expense-approval",
+  "root": {
+    "activities": [
+      {
+        "id": "approve_manager",
+        "name": "Manager approval",
+        "taskName": {
+          "expression": {
+            "type": "Literal",
+            "value": "Manager approval"
+          },
+          "typeName": "String"
+        },
+        "type": "Elsa.RunTask"
+      },
+      {
+        "id": "archive",
+        "method": {
+          "expression": {
+            "type": "Literal",
+            "value": "POST"
+          },
+          "typeName": "String"
+        },
+        "name": "Archive in OpenBee",
+        "type": "Elsa.FlowSendHttpRequest",
+        "url": {
+          "expression": {
+            "type": "Literal",
+            "value": "https://aup.dev/connectors/openbee/document.archive"
+          },
+          "typeName": "String"
+        }
+      },
+      {
+        "id": "notify",
+        "method": {
+          "expression": {
+            "type": "Literal",
+            "value": "POST"
+          },
+          "typeName": "String"
+        },
+        "name": "Notify employee",
+        "type": "Elsa.FlowSendHttpRequest",
+        "url": {
+          "expression": {
+            "type": "Literal",
+            "value": "https://aup.dev/connectors/m365/user.notify.email"
+          },
+          "typeName": "String"
+        }
+      },
+      {
+        "id": "submit",
+        "name": "Submit expense",
+        "taskName": {
+          "expression": {
+            "type": "Literal",
+            "value": "Submit expense"
+          },
+          "typeName": "String"
+        },
+        "type": "Elsa.RunTask"
+      },
+      {
+        "id": "verify",
+        "name": "Verify expense",
+        "taskName": {
+          "expression": {
+            "type": "Literal",
+            "value": "Verify expense"
+          },
+          "typeName": "String"
+        },
+        "type": "Elsa.RunTask"
+      },
+      {
+        "condition": {
+          "expression": {
+            "type": "JavaScript",
+            "value": "${approved == true}"
+          },
+          "typeName": "Boolean"
+        },
+        "id": "g_decision",
+        "type": "Elsa.If"
+      },
+      {
+        "condition": {
+          "expression": {
+            "type": "JavaScript",
+            "value": "${amount \u003e= 50000 || category == \"travel\"}"
+          },
+          "typeName": "Boolean"
+        },
+        "id": "g_threshold",
+        "type": "Elsa.If"
+      }
+    ],
+    "connections": [
+      {
+        "source": "submit",
+        "sourcePort": "Done",
+        "target": "verify",
+        "targetPort": "In"
+      },
+      {
+        "source": "verify",
+        "sourcePort": "Done",
+        "target": "g_threshold",
+        "targetPort": "In"
+      },
+      {
+        "source": "g_threshold",
+        "sourcePort": "Then",
+        "target": "approve_manager",
+        "targetPort": "In"
+      },
+      {
+        "source": "g_threshold",
+        "sourcePort": "Else",
+        "target": "g_decision",
+        "targetPort": "In"
+      },
+      {
+        "source": "approve_manager",
+        "sourcePort": "Done",
+        "target": "g_decision",
+        "targetPort": "In"
+      },
+      {
+        "source": "g_decision",
+        "sourcePort": "Then",
+        "target": "archive",
+        "targetPort": "In"
+      },
+      {
+        "source": "archive",
+        "sourcePort": "Done",
+        "target": "notify",
+        "targetPort": "In"
+      }
+    ],
+    "id": "Flowchart1",
+    "type": "Elsa.Flowchart"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "definitionId": "simple_gateway",
+  "id": "simple_gateway-v1",
+  "isLatest": true,
+  "isPublished": true,
+  "name": "simple-gateway",
+  "root": {
+    "activities": [
+      {
+        "id": "review",
+        "name": "Review request",
+        "taskName": {
+          "expression": {
+            "type": "Literal",
+            "value": "Review request"
+          },
+          "typeName": "String"
+        },
+        "type": "Elsa.RunTask"
+      },
+      {
+        "condition": {
+          "expression": {
+            "type": "JavaScript",
+            "value": "${approved == true}"
+          },
+          "typeName": "Boolean"
+        },
+        "id": "g_decide",
+        "type": "Elsa.If"
+      }
+    ],
+    "connections": [
+      {
+        "source": "review",
+        "sourcePort": "Done",
+        "target": "g_decide",
+        "targetPort": "In"
+      }
+    ],
+    "id": "Flowchart1",
+    "type": "Elsa.Flowchart"
+  }
+}

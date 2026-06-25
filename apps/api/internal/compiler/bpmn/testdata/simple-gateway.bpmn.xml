@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="http://aup.dev/bpmn" id="defs-simple_gateway">
+  <bpmn:process id="simple_gateway" name="simple-gateway" isExecutable="true" camunda:historyTimeToLive="P180D">
+    <bpmn:endEvent id="e_approved"></bpmn:endEvent>
+    <bpmn:endEvent id="e_rejected"></bpmn:endEvent>
+    <bpmn:startEvent id="e_start"></bpmn:startEvent>
+    <bpmn:exclusiveGateway id="g_decide"></bpmn:exclusiveGateway>
+    <bpmn:userTask id="review" name="Review request" camunda:candidateGroups="accounting">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="approved" label="Approved?" type="boolean">
+            <camunda:validation>
+              <camunda:constraint name="required"></camunda:constraint>
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="comment" label="Comment" type="string"></camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f1" sourceRef="e_start" targetRef="review"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="g_decide"></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f3" name="${approved == true}" sourceRef="g_decide" targetRef="e_approved">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f4" name="${approved == false}" sourceRef="g_decide" targetRef="e_rejected">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="diagram-simple_gateway">
+    <bpmndi:BPMNPlane id="plane-simple_gateway" bpmnElement="simple_gateway">
+      <bpmndi:BPMNShape id="e_approved_di" bpmnElement="e_approved">
+        <dc:Bounds x="612" y="62" width="36" height="36"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_rejected_di" bpmnElement="e_rejected">
+        <dc:Bounds x="612" y="128" width="36" height="36"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_start_di" bpmnElement="e_start">
+        <dc:Bounds x="72" y="95" width="36" height="36"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_decide_di" bpmnElement="g_decide">
+        <dc:Bounds x="425" y="81" width="50" height="50"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="review_di" bpmnElement="review">
+        <dc:Bounds x="220" y="51" width="100" height="80"></dc:Bounds>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
+        <di:waypoint x="108" y="113"></di:waypoint>
+        <di:waypoint x="164" y="113"></di:waypoint>
+        <di:waypoint x="164" y="91"></di:waypoint>
+        <di:waypoint x="220" y="91"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
+        <di:waypoint x="320" y="91"></di:waypoint>
+        <di:waypoint x="372" y="91"></di:waypoint>
+        <di:waypoint x="372" y="106"></di:waypoint>
+        <di:waypoint x="425" y="106"></di:waypoint>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
+        <di:waypoint x="475" y="106"></di:waypoint>
+        <di:waypoint x="543" y="106"></di:waypoint>
+        <di:waypoint x="543" y="80"></di:waypoint>
+        <di:waypoint x="612" y="80"></di:waypoint>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="486" y="73" width="114" height="14"></dc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
+        <di:waypoint x="475" y="106"></di:waypoint>
+        <di:waypoint x="543" y="106"></di:waypoint>
+        <di:waypoint x="543" y="146"></di:waypoint>
+        <di:waypoint x="612" y="146"></di:waypoint>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="483" y="106" width="120" height="14"></dc:Bounds>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

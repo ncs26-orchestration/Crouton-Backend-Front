@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aup.dev/schemas/is-registry/0.1",
+  "title": "AUP IS Registry",
+  "description": "A per-tenant projection of the information systems AUP can reference. Two classes: projected (pulled read-only from an engine or IdP) and declared (capability catalogs for systems AUP cannot auto-discover). AUP never owns identities in this document — it is a cache + catalog.",
+  "type": "object",
+  "required": ["tenant_id", "users", "groups", "systems"],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "engine_connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "endpoint"],
+        "additionalProperties": false,
+        "properties": {
+          "id":       { "type": "string" },
+          "kind":     { "enum": ["camunda7", "camunda8", "elsa3"] },
+          "endpoint": { "type": "string", "format": "uri" },
+          "last_synced_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "users": {
+      "type": "array",
+      "description": "Projected from the engine's identity service (or external IdP). Read-only.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id":           { "type": "string" },
+          "name":         { "type": "string" },
+          "email":        { "type": "string" },
+          "group_ids":    { "type": "array", "items": { "type": "string" } },
+          "engine_ref":   { "type": "string" }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "description": "Projected from the engine's identity service. Read-only.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id":         { "type": "string" },
+          "name":       { "type": "string" },
+          "engine_ref": { "type": "string" }
+        }
+      }
+    },
+    "deployed_forms": {
+      "type": "array",
+      "description": "Projected form keys already present in the engine. Tasks can reference these by form_key.",
+      "items": {
+        "type": "object",
+        "required": ["form_key"],
+        "additionalProperties": false,
+        "properties": {
+          "form_key":   { "type": "string" },
+          "engine_ref": { "type": "string" }
+        }
+      }
+    },
+    "systems": {
+      "type": "array",
+      "description": "Declared systems (OpenBee, Odoo, M365...) with their capability catalogs. Populated by the tenant via Copilot or form. Identities live elsewhere; this is purely capabilities + endpoint.",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "capabilities"],
+        "additionalProperties": false,
+        "properties": {
+          "id":           { "type": "string" },
+          "name":         { "type": "string" },
+          "kind":         { "enum": ["ecm", "erp", "comms", "idp", "crm", "signer", "other"] },
+          "endpoint":     { "type": "string" },
+          "capabilities": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
