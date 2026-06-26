@@ -16,6 +16,7 @@ type fakeStore struct {
 	nodes       []*repo.WorkflowNode
 	edges       []repo.WorkflowEdge
 	tasks       []repo.AgentTask
+	auditEvents []repo.AuditEvent
 	reqStatus   string
 	reqProgress int
 	deps        []fakeDep
@@ -125,6 +126,11 @@ func (s *fakeStore) ListUnresolvedDepsByRequest(_ context.Context, _ string) ([]
 	return out, nil
 }
 
+func (s *fakeStore) AppendAuditEvent(_ context.Context, e repo.AuditEvent) error {
+	s.auditEvents = append(s.auditEvents, e)
+	return nil
+}
+
 type fakeAgent struct {
 	err       error
 	blockOnIT bool // when true, finance returns blocked_on:IT if no IT in upstream
@@ -181,7 +187,7 @@ func newGraph() *fakeStore {
 
 func quietEngine(store Store, agent AgentRunner) *Engine {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewEngine(context.Background(), log, store, agent, 0)
+	return NewEngine(context.Background(), log, store, agent, 0, NewBus())
 }
 
 func TestRunCompletesEveryNode(t *testing.T) {
@@ -273,6 +279,47 @@ func TestRunCompletesParallelBranches(t *testing.T) {
 	appr := store.byID("n_appr")
 	if appr.Status != "completed" {
 		t.Errorf("approval node not completed: %q", appr.Status)
+	}
+}
+
+func TestRunWritesAuditEvents(t *testing.T) {
+	store := newGraph()
+	e := quietEngine(store, fakeAgent{})
+
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// Every node should have at least a "node.started" and a
+	// "node.completed" audit event, plus the request-level
+	// "request.completed" event.
+	got := len(store.auditEvents)
+	// 3 nodes * 2 events (started + completed) + 1 request.completed = 7
+	wantMin := 3*2 + 1
+	if got < wantMin {
+		t.Errorf("audit events = %d, want at least %d (node.started + node.completed per node + request.completed)", got, wantMin)
+	}
+
+	// Check that the request.completed event exists.
+	hasReqCompleted := false
+	for _, ae := range store.auditEvents {
+		if ae.Action == "request.completed" {
+			hasReqCompleted = true
+			break
+		}
+	}
+	if !hasReqCompleted {
+		t.Error("no request.completed audit event")
+	}
+
+	// All audit events should carry a non-empty actor and action.
+	for _, ae := range store.auditEvents {
+		if ae.Actor == "" {
+			t.Errorf("audit event %s has empty actor", ae.ID)
+		}
+		if ae.Action == "" {
+			t.Errorf("audit event %s has empty action", ae.ID)
+		}
 	}
 }
 

@@ -80,14 +80,25 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
 	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
 
+	// Me — current user's work items (requests they created or need to act on).
+	mh := handler.NewMeHandler(d.Logger, d.PgPool)
+	e.GET("/me/work", mh.GetMyWork, authMiddleware)
+
 	// Requests — submission, listing, detail with the workflow graph, and
 	// node detail. The intake planner turns a request into a department
 	// workflow; the orchestration engine then runs each node through its
 	// department agent on a background worker (F3).
 	agentClient := agentclient.New(d.AgentURL)
+	auditRepo := repo.NewAuditRepo(d.PgPool)
+
+	// SSE event bus — shared between the engine (publishes) and the events
+	// handler (subscribes + streams to the browser).
+	eventBus := orchestrator.NewBus()
+
 	store := orchestrator.NewDBStore(
 		repo.NewRequestRepo(d.PgPool),
 		repo.NewWorkflowRepo(d.PgPool),
+		auditRepo,
 		repo.NewDependencyRepo(d.PgPool),
 	)
 	rootCtx := d.RootCtx
@@ -95,7 +106,7 @@ func NewServer(d Deps) *echo.Echo {
 		rootCtx = context.Background()
 	}
 	orchEngine := orchestrator.NewEngine(rootCtx, d.Logger, store, agentClient,
-		time.Duration(d.OrchStepDelayMS)*time.Millisecond)
+		time.Duration(d.OrchStepDelayMS)*time.Millisecond, eventBus)
 	// Resume any request a prior run left mid-orchestration (restart recovery).
 	go orchEngine.ResumeInProgress()
 	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, agentClient, orchEngine)
@@ -103,6 +114,14 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
 	e.GET("/requests/:id/nodes/:nodeId", reqh.GetNode, authMiddleware)
+	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
+	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)
+
+	// SSE events endpoint — authenticates via ?token= so EventSource can
+	// connect (it cannot set custom headers). The auth middleware is not
+	// used here; the handler reads the token from the query parameter.
+	evh := handler.NewEventsHandler(d.Logger, d.PgPool, d.JWTSecret, eventBus)
+	e.GET("/requests/:id/events", evh.Stream)
 
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup

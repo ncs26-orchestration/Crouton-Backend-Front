@@ -322,12 +322,23 @@ export interface NodeTask {
   completed_at: string | null;
 }
 
-// Node detail payload from GET /requests/:id/nodes/:nodeId. activity (audit)
-// arrives in F6.
+// A single audit event recording a state change.
+export interface AuditEvent {
+	id: string;
+	request_id: string;
+	node_id: string | null;
+	actor: string;
+	action: string;
+	reason: string;
+	created_at: string;
+}
+
+// Node detail payload from GET /requests/:id/nodes/:nodeId. activity is
+// the node-scoped audit trail.
 export interface NodeDetailResponse {
-  node: WorkflowNodeData;
-  tasks: NodeTask[];
-  activity: unknown[];
+	node: WorkflowNodeData;
+	tasks: NodeTask[];
+	activity: AuditEvent[];
 }
 
 // Binding state drives node color. Resolved at canvas build time
@@ -336,6 +347,28 @@ export interface NodeDetailResponse {
 // and an explicit ambiguity flag (set by later extractor iterations)
 // is "warn".
 export type BindingState = "ok" | "warn" | "idle" | "error";
+
+// --- SSE Event Types (F4 — live canvas) ---
+
+export type SSEEventType = "node_status" | "request_status" | "task" | "audit";
+
+// The JSON body of every SSE event matches the bus.Event shape. Fields
+// are optional because each event type carries only its own subset.
+export interface SSEEvent {
+  type: SSEEventType;
+  request_id: string;
+  node_id?: string;
+  key?: string;
+  status?: string;
+  progress_percent?: number;
+  status_text?: string;
+  task_id?: string;
+  title?: string;
+  actor?: string;
+  action?: string;
+  reason?: string;
+  at: string;
+}
 
 // --- Workflow Versioning (Phase 4) ---
 

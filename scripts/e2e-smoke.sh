@@ -77,6 +77,13 @@ curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}" \
        and ([.nodes[].key] | index("exec_approval")) != null' >/dev/null \
   || fail "request detail / workflow graph shape"
 
+# F4: start a background SSE listener BEFORE the engine runs so we capture
+# live events. We kill it after the request completes.
+say "SSE events endpoint: starting background listener"
+sse_out=$(mktemp)
+curl -fsS -N --max-time 10 "$API/requests/${req_id}/events?token=${token}" >"$sse_out" 2>/dev/null &
+sse_pid=$!
+
 # F5: the engine should produce a transient blocked state (Finance blocked on
 # IT) because finance_review runs before it_assessment in the default plan and
 # the deterministic Python _finance() returns blocked_on without IT output.
@@ -111,11 +118,34 @@ echo "$detail" | jq -e \
    and ([.nodes[] | select(.status_text == "")] | length) == 0' >/dev/null \
   || fail "request did not run to completion (every node completed with a status line)"
 
+# Stop the SSE listener and check it received events.
+kill "$sse_pid" 2>/dev/null || true
+wait "$sse_pid" 2>/dev/null || true
+events=$(grep -c "^event: " "$sse_out" || true)
+rm "$sse_out"
+say "SSE events captured: $events"
+[ "$events" -ge 1 ] || fail "SSE endpoint: expected at least 1 event, got $events"
+
 say "a completed node carries the agent's tasks"
 node_id=$(echo "$detail" | jq -r '.nodes[0].id')
-curl -fsS "$API/requests/${req_id}/nodes/${node_id}" -H "authorization: Bearer ${token}" \
-  | jq -e '(.tasks | length) >= 1 and (.tasks[0].status == "completed") and (.node.status == "completed")' >/dev/null \
+node_detail=$(curl -fsS "$API/requests/${req_id}/nodes/${node_id}" -H "authorization: Bearer ${token}")
+echo "$node_detail" | jq -e '(.tasks | length) >= 1 and (.tasks[0].status == "completed") and (.node.status == "completed")' >/dev/null \
   || fail "node detail / tasks shape"
+
+# F6: verify the audit trail is populated after a completed run.
+say "node detail includes audit activity (F6)"
+echo "$node_detail" | jq -e '(.activity | length) >= 1 and (.activity[0].actor != null and .activity[0].action != null)' >/dev/null \
+  || fail "node detail / audit activity is empty"
+
+say "request audit endpoint returns events (F6)"
+curl -fsS "$API/requests/${req_id}/audit" -H "authorization: Bearer ${token}" \
+  | jq -e '(.events | length) >= 1' >/dev/null \
+  || fail "request audit endpoint returned empty events"
+
+say "org audit endpoint returns events (F6)"
+curl -fsS "$API/orgs/${org_id}/audit" -H "authorization: Bearer ${token}" \
+  | jq -e '(.events | length) >= 1' >/dev/null \
+  || fail "org audit endpoint returned empty events"
 
 echo
 echo "SMOKE OK"
