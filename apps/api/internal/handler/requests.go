@@ -483,6 +483,109 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 	})
 }
 
+// maxJustificationLen caps the written approval reason.
+const maxJustificationLen = 2000
+
+// validateApprovalInput normalizes and validates an approval decision. It
+// accepts only "approve" or "reject", and requires a non-empty justification
+// (the written reason is the point of the gate). Pure so it can be table-tested
+// without a DB or HTTP context. Returns the trimmed justification and a
+// non-empty message describing the first failure (empty means valid).
+func validateApprovalInput(decision, justification string) (normJustification, errMsg string) {
+	switch decision {
+	case "approve", "reject":
+	default:
+		return "", "decision must be approve or reject"
+	}
+	justification = strings.TrimSpace(justification)
+	if justification == "" {
+		return "", "justification is required"
+	}
+	if len(justification) > maxJustificationLen {
+		return "", fmt.Sprintf("justification must be at most %d characters", maxJustificationLen)
+	}
+	return justification, ""
+}
+
+// ApproveRequest handles POST /requests/:id/approve. An org approver (admin)
+// decides a request parked at the executive gate, with a required written
+// justification. Approve completes the gate and resumes the workflow into the
+// execution stages; reject stops the request. The caller must belong to the
+// request's org and hold the approver role.
+func (h *RequestsHandler) ApproveRequest(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	if h.engine == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	id := c.Param("id")
+
+	ctx := c.Request().Context()
+	req, err := h.requests.GetByID(ctx, id)
+	if errors.Is(err, repo.ErrNotFound) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+	}
+	if err != nil {
+		h.logger.Error("approve request: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	// Authorize via the request's org. A non-member is told "not found" (same
+	// probe protection as GetRequest); a member without the approver role gets
+	// a 403.
+	role, err := requireOrgMember(c, h.pg, req.OrgID, claims.UserID)
+	if err != nil {
+		var he *echo.HTTPError
+		if errors.As(err, &he) && he.Code == http.StatusForbidden {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+		}
+		return handleOrgMemberErr(c, err)
+	}
+	if role != "admin" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only an approver can decide this request"})
+	}
+
+	var body struct {
+		Decision      string `json:"decision"`
+		Justification string `json:"justification"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+	justification, verr := validateApprovalInput(body.Decision, body.Justification)
+	if verr != "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": verr})
+	}
+
+	if req.Status != "awaiting_approval" {
+		return c.JSON(http.StatusConflict, map[string]string{"error": "request is not awaiting approval"})
+	}
+
+	if err := h.engine.Approve(ctx, id, orchestrator.ApprovalDecision(body.Decision), justification); err != nil {
+		if errors.Is(err, orchestrator.ErrNotAwaitingApproval) {
+			return c.JSON(http.StatusConflict, map[string]string{"error": "request is not awaiting approval"})
+		}
+		h.logger.Error("approve request: engine", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	// On approve, resume the worker into the execution stages — the same way
+	// CreateRequest launches it after persisting the plan.
+	if body.Decision == string(orchestrator.ApprovalApprove) {
+		h.engine.Start(id)
+	}
+
+	updated, err := h.requests.GetByID(ctx, id)
+	if err != nil {
+		h.logger.Error("approve request: reload", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	names := h.requesterNames(ctx, []int64{updated.RequesterUserID})
+	return c.JSON(http.StatusOK, map[string]any{"request": toRequestResponse(*updated, names[updated.RequesterUserID])})
+}
+
 // ListRequestAudit handles GET /requests/:id/audit, returning all audit
 // events for a request, newest first.
 func (h *RequestsHandler) ListRequestAudit(c echo.Context) error {

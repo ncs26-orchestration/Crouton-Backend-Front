@@ -23,7 +23,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/m
 | F4 | Live canvas (real-time SSE) | – | ✅ | – | ✅ | ✅ | 🟡 |
 | F5 | Cross-department dependencies | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | F6 | Traceability / audit trail | ✅ | ✅ | – | ✅ | ✅ | 🟡 |
-| F7 | Human executive approval | – | ⬜ | – | ⬜ | ⬜ | ⬜ |
+| F7 | Human executive approval | – | ✅ | – | ✅ | ✅ | 🟡 |
 | F8 | Execution stage & final report | – | ⬜ | 🟡 | ⬜ | ⬜ | ⬜ |
 | F9 | Roster, Policies & Integrations views | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
 | F10 | Seeding & demo data | ⬜ | ⬜ | – | – | – | ⬜ |
@@ -106,6 +106,7 @@ the rest layer on.
 - **FE:** My Work pending-approval queue + Approve/Reject with a required justification. (FE-7)
 - **Link:** FE approve → api resume → engine continues → SSE.
 - **Done-check:** the workflow halts at approval and appears in My Work; approving with a justification resumes execution; rejecting stops the request; both are audited with the text.
+- **Status note (Overall 🟡):** the gate, the `POST /requests/:id/approve` endpoint (approver-only, justification required), and the My Work queue ship and are wired; the e2e walks park → reject-empty-justification → approve → completion with no LLM keys. The "audited with the text" clause is the one piece deferred: durable audit persistence is F6's `audit_events`, which isn't built yet, so for now the justification is required and validated at the API and logged. Overall flips ✅ when F6 lands and the gate transitions append the reason.
 
 ### F8 — Execution stage & final report
 *Post-approval work runs and a report is produced.*

@@ -1,5 +1,6 @@
 import type {
 	Attachment,
+	ApprovalDecision,
 	AuditEvent,
 	Chat,
 	ChatMessage,
@@ -524,6 +525,18 @@ export const api = {
 		fetchJSON(
 			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}`,
 		),
+
+	// Decide a request parked at the executive gate (F7). Approve resumes the
+	// workflow into the execution stages; reject stops it. justification is
+	// required.
+	approve: (
+		id: string,
+		payload: { decision: ApprovalDecision; justification: string },
+	): Promise<{ request: OrgRequest }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(id)}/approve`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
 
 	// --- Audit trail (F6) ---
 

@@ -114,6 +114,10 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
 	e.GET("/requests/:id/nodes/:nodeId", reqh.GetNode, authMiddleware)
+	// Executive approval gate (F7): an approver decides a request parked at
+	// awaiting_approval; approve resumes the worker, reject stops it.
+	e.POST("/requests/:id/approve", reqh.ApproveRequest, authMiddleware)
+	// Audit reads (F6).
 	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
 	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)
 
