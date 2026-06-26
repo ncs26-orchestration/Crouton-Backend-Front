@@ -1,36 +1,45 @@
-# Pablo Diagrams
+# AI Organization OS — Diagrams
 
-These are static renders of the system diagrams so they display directly in
-Markdown. The HTML versions remain available for full-page viewing.
+Static renders of system diagrams for Markdown viewing.
 
-## Architecture
+## Architecture (legacy — from Pablo era)
 
-[Open full architecture diagram](architecture.html)
+These diagrams were created for the previous "Pablo" workflow authoring
+system. They will be updated as the AI Organization OS features land.
 
-![Pablo architecture](01.webp)
+![Architecture](01.webp)
 
-## User Flow
+## Data Model (legacy)
 
-[Open full user-flow diagram](flowchart.html)
+![Data model](04.webp)
 
-![Pablo user flow](02.webp)
+## Target: Multi-Agent Workflow
 
-## Compilation Pipeline
+The target architecture is described in the root documentation:
+- `../../SYSTEM.md` — system definition and data flow
+- `../../FEATURES.md` — the 10 MVP features
+- `../../.agents/MVP-SPEC.md` — screenshot breakdown
 
-[Open full compilation diagram](compilation-layers.html)
+The workflow graph for the "Open New Office in Berlin" demo:
 
-![Pablo compilation pipeline](03.webp)
-
-## Data Model
-
-[Open full data-model diagram](data-model.html)
-
-![Pablo data model](04.webp)
-
-## Runtime Visibility
-
-![Pablo runtime visibility](05.webp)
-
-## Compact Pipeline
-
-![Pablo compact pipeline](06.png)
+```
+Request Intake → Planning & Analysis
+                        │
+            ┌───────────┼───────────┐
+            │           │           │
+      Finance Rev   Legal Rev   IT Assessment
+            │           │           │
+            └───────────┼───────────┘
+                        │
+            ┌───────────┼───────────┐
+            │                       │
+      HR Planning          Operations Planning
+            │                       │
+            └───────────┬───────────┘
+                        │
+               Executive Approval
+                        │
+                  Implementation
+                        │
+                 Review & Report
+```

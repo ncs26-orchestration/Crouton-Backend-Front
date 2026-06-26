@@ -1,123 +1,132 @@
-# Pablo Design System And Technical Architecture
+# AI Organization OS — Design System
 
 This document covers two design layers:
 
-1. The solution design system: architecture, runtime boundaries, UI surfaces,
-   and engine-adapter behavior.
+1. The solution design system: architecture, UI surfaces, and interaction model.
 2. The visual design language used by the frontend, inspired by Stripe.
 
 For the product rationale see `VISION.md`. For formal system boundaries see
-`SYSTEM.md`. For implementation method and AI skills see `plan.md`.
+`SYSTEM.md`. For feature specifications see `FEATURES.md`.
 
 ## Solution Design System
 
 ### 1. Technical Architecture
 
-Pablo is designed as an operator cockpit above workflow engines:
-
-![Pablo architecture](docs/diagrams/01.webp)
+AI Organization OS is a multi-agent workflow system where specialized AI
+agents process business requests through a visible, traceable pipeline:
 
 ```text
-React operator UI
-  project tree, chat, canvas, settings, deploy controls
+React Web UI
+  shell rail, workflow canvas, request panels, agent roster,
+  audit trail, reports, integrations
         |
         v
-Go API control plane
-  persistence, validation, lowering, compiler registry, deploy dispatch
+Go API (control plane)
+  auth (JWT), org/team/member management,
+  request CRUD, workflow graph engine (state machine),
+  agent orchestration, audit event logging
         |
-        +---- Python agent
-        |     extraction from chat + documents
+        +---- Python Agent Service
+        |     department agent logic, LLM-powered decisions,
+        |     intake planning, status update generation
         |
-        +---- PostgreSQL / Redis
-        |     durable state + supporting infrastructure
+        +---- PostgreSQL 18 + pgvector
+        |     orgs, teams, users, requests, workflow nodes/edges,
+        |     agent tasks, dependencies, audit events
         |
-        +---- Camunda 7 adapter
-        |     BPMN XML + Cockpit
-        |
-        +---- Elsa 3 adapter
-              WorkflowDefinition JSON + Studio
+        +---- Redis 8
+              cache, queues, real-time state
 ```
 
-The design principle is separation of ownership:
+The design principle is separation of concerns:
 
-- Pablo owns workflow specification, versions, approval, deploy targets, and
-  operator context.
-- Engines own execution, incidents, timers, runtime state, and task inboxes.
-- The AI agent owns extraction and clarification, not runtime execution.
+- The **Go API** owns workflow state, transitions, orchestration, and audit.
+- The **Python Agent Service** owns LLM calls, agent reasoning, and decision logic.
+- The **React UI** owns visualization, interaction, and real-time display.
+- **PostgreSQL** is the single source of truth for all state.
 
-### 2. Authoring Experience
+### 2. UI Surface Layout
 
-The first screen is the actual working tool:
+The app is a full-screen workspace with a persistent left rail:
 
-- left rail for global navigation;
-- project tree for client/workflow scope;
-- chat thread for the operator conversation;
-- canvas for immediate visual feedback;
-- top bar for target selection, compile, approve, and deploy.
+```
+┌──────────┬──────────────────────────────────────────────────┐
+│ SHELL    │                                                  │
+│ RAIL     │  MAIN CONTENT AREA                               │
+│          │  (changes based on active sidebar tab)            │
+│ [Logo]   │                                                  │
+│ Home     │  Home      → Dashboard, stats, recent activity   │
+│ My Work  │  My Work   → Personal inbox, assigned tasks      │
+│ Requests │  Requests  → Request list, create new, filter    │
+│ Workflows│  Workflows → Canvas + node detail + agents panel │
+│ Agents   │  Agents    → Full agent roster with details      │
+│ Reports  │  Reports   → Audit trail, generated reports      │
+│ Integr.  │  Integr.   → Connected systems & data sources    │
+│          │                                                  │
+│ ──────── │                                                  │
+│ TEAMS    │                                                  │
+│ Finance  │                                                  │
+│ IT       │                                                  │
+│ HR       │                                                  │
+│ Ops      │                                                  │
+└──────────┴──────────────────────────────────────────────────┘
+```
 
-The UI intentionally keeps chat and canvas side by side. A workflow generated
-from text must be visible immediately, because the operator verifies the
-model by looking at both the assistant questions and the graph.
+The **Workflows tab** is the centerpiece — the workflow canvas. It has its
+own internal layout: top bar, left request/agents panel, center graph,
+right node detail panel. See `FEATURES.md` F8 for the full spec.
 
-### 3. Workflow IR Design
+### 3. Workflow Graph Model
 
-The Workflow IR is the portability layer. It contains:
+The workflow is a directed graph of stages (nodes) connected by edges:
 
-- actors;
-- user, service, and script tasks;
-- exclusive and parallel gateways;
-- start/end events;
-- directed flows;
-- forms;
-- confidence and evidence metadata.
+- **Sequential edges** (solid arrows): one stage after another.
+- **Parallel branches**: multiple stages start when their shared parent completes.
+- **Merge points** (dashed arrows): a stage waits for all incoming branches.
 
-The IR is not Camunda-specific and not Elsa-specific. Engine details are
-introduced only during lowering and compilation.
+Node statuses: `Pending → In Progress → Completed` or `→ Blocked`.
+Blocked nodes have a declared dependency on another agent's output.
 
-### 4. Compiler And Adapter Design
+The graph is not a static diagram — it reflects live backend state.
+Every status change triggers an audit event.
 
-![Pablo compilation pipeline](docs/diagrams/03.webp)
+### 4. Agent Model
 
-Each engine adapter implements the same contract:
+Each AI agent represents a department role:
 
-- report capabilities;
-- compile ExecutableIR into an engine artifact;
-- optionally discover engine data;
-- deploy the artifact.
+| Agent | Department | Decision Type |
+|-------|-----------|--------------|
+| Intake Processor | — | Workflow planning (which stages, what order) |
+| Planning Analyst | Planning | Scope breakdown, resource identification |
+| Finance Reviewer | Finance | Budget analysis, ROI, financial impact |
+| Legal Reviewer | Legal | Compliance, regulatory, risk assessment |
+| IT Manager | IT | Technical feasibility, security, infrastructure |
+| HR Manager | HR | Staffing, hiring plan, policy compliance |
+| Operations Manager | Operations | Logistics, facilities, operational timeline |
+| Executive Approver | Executive | Final approval/rejection with justification |
 
-Camunda receives BPMN 2.0 XML with diagram coordinates. Elsa receives
-WorkflowDefinition JSON using activity descriptors that exist in the stock
-Elsa Server + Studio image. This is why user tasks map differently between
-engines: Camunda can use BPMN user tasks, while stock Elsa maps generic human
-steps to `Elsa.RunTask`.
+Agents are not chatbots. Each has:
+- A fixed task list relevant to its domain
+- Decision logic that validates, flags, approves, or blocks
+- The ability to declare dependencies on other agents
+- Plain-language status updates (explainability)
 
-### 5. Runtime Visibility
+### 5. Traceability Design
 
-![Pablo runtime visibility](docs/diagrams/05.webp)
+The audit trail is a first-class feature, not an afterthought.
+Every event records: timestamp, actor (agent name), action, target node,
+and a one-line reason.
 
-Deployment is only considered successful when the engine dashboard can show
-the workflow:
-
-- Camunda: Cockpit opens a process definition with BPMN DI layout.
-- Elsa: Studio opens an editable WorkflowDefinition and renders supported
-  activity types.
-
-This rule shaped recent compiler decisions: invalid bare Camunda service
-tasks are avoided, and unsupported Elsa activity types are not emitted.
+The audit trail powers:
+- **Activity tab** in the node detail panel (per-node events)
+- **Reports tab** with organization-wide audit log
+- **Report generation** (F10) — pulls from audit events to auto-summarize
 
 ### 6. Development Method
 
-The implementation follows the method in `plan.md`:
-
-- plan a vertical slice;
-- inspect the codebase;
-- implement narrowly;
-- verify with tests and real Docker services;
-- update documentation and diagrams.
-
-AI assistance was used through scoped skills: code exploration, frontend UX,
-backend/API, compiler engineering, runtime diagnostics, and documentation
-synthesis.
+Each feature is a vertical slice: migration → API handler → agent logic →
+UI component → audit events. Start with mock data for the canvas, wire to
+real APIs as backend features land. See `plan.md` for build order.
 
 ---
 

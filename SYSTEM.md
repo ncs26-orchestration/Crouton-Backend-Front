@@ -1,319 +1,281 @@
-# Pablo — System definition
+# AI Organization OS — System Definition
 
-This document defines Pablo as a system. No pitch, no narrative.
+This document defines the system precisely. No pitch, no narrative.
 
-## 0. Related documents
-
-This file is the formal system definition. The rest of the documentation is
-split by audience:
+## 0. Related Documents
 
 | Document | Role |
 |---|---|
-| `README.md` | Main entry point: architecture summary, stack, setup. |
-| `DESIGN.md` | Technical and UI design system for the solution. |
-| `VISION.md` | Product story, value proposition, and demo narrative. |
-| `PHASES.md` | User stories, phases, and implementation status. |
-| `plan.md` | Development method, AI skills/workflows, validation plan. |
-| `docs/diagrams/README.md` | Markdown-rendered diagrams. |
-| `docs/diagrams/index.html` | HTML diagram hub for architecture, data, compilation, and flow. |
+| `README.md` | Entry point: architecture, stack, setup, API routes. |
+| `FEATURES.md` | The 10 MVP features (F1–F10) as vertical slices. |
+| `VISION.md` | Product vision, demo narrative, value proposition. |
+| `DESIGN.md` | Visual design system (Stripe-inspired) and UI specs. |
+| `PHASES.md` | Implementation phases and current status. |
+| `plan.md` | Development method, build order, verification. |
+| `.agents/` | AI agent alignment files for contributors. |
 
-## 1. What Pablo is
+## 1. What This System Is
 
-An **operator tool** that turns a conversation about a business process —
-text, documents, questions, answers — into an executable workflow
-deployed on a real engine (Camunda 7 or Elsa 3 in v0.1).
+A **multi-agent workflow system** that processes a business request through
+specialized AI agents organized into department teams. The system owns:
 
-- **Input:** natural-language prompts, PDF/TXT attachments, clarifying
-  answers, refinements — all exchanged in a persistent chat thread.
-- **Output:** a compiled artifact (BPMN 2.0 XML or Elsa 3 JSON)
-  pushed to a project-registered deploy target and published there.
+- **Request intake and workflow planning** — an Intake Agent reads a request
+  and decides which stages are needed.
+- **Workflow state management** — a graph engine tracks nodes (stages) and
+  edges (dependencies) with per-node status.
+- **Agent orchestration** — department agents (Finance, Legal, IT, HR,
+  Operations, Executive) run tasks within their assigned nodes.
+- **Cross-agent dependencies** — agents can declare they need data from
+  another agent; the system models and resolves these dependencies.
+- **Audit trail** — every status change, decision, and handoff is logged.
+- **Live visualization** — a canvas UI renders the graph in real time.
 
-One operator organization runs Pablo and designs workflows for many
-client companies.
+## 2. Domain Objects
 
-## 2. What Pablo owns, what it delegates
-
-A workflow's life has three layers. Pablo owns two of them.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  SPECIFICATION LAYER  — what the process is                 │  ← Pablo
-│  Workflow IR, chat context, attachments, versions, stages   │
-├─────────────────────────────────────────────────────────────┤
-│  EXECUTION LAYER      — tokens moving through a state graph │  ← engine
-│  instances, timers, persistence of running state            │
-├─────────────────────────────────────────────────────────────┤
-│  INTEGRATION LAYER    — actually calling real systems       │  ← engine
-│  task inboxes, connector modules, retries                   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-Pablo is the **authoring** system. The engine is the **runtime**. Unlike
-earlier drafts of this system, **Pablo does not maintain a separate
-Information System Registry** — the only grounding signal the
-extractor has is the chat itself (prior messages + attached documents +
-the current IR). This matches how an operator actually works: the
-client tells them about their systems in conversation, sometimes drops
-an architecture doc, iterates by chatting.
-
-### What Pablo keeps
-
-| Thing Pablo owns | Why |
-|---|---|
-| **Workflow IR + version history** | Portability. One IR → two engine dialects. Edits always create new versions; approved snapshots are immutable. |
-| **Chat thread (messages + attachments)** | The grounding substrate. Extraction, refinement, and clarification all re-read the thread. |
-| **Extractor prompt contract** | The small LM emits `{ir, questions}` in one call; we validate the IR and render the questions inline. |
-| **Engine adapters + compiler registry** | Same IR → BPMN for Camunda, WorkflowDefinition for Elsa. New engines plug in by implementing `engine.Adapter`. |
-| **Deploy-target catalog (per project)** | Client-specific engine endpoints, credentials, auth modes — scoped per project, not tenant-wide. |
-
-### What Pablo delegates
-
-| Delegated to | What |
-|---|---|
-| Engine (Camunda 7 / Elsa 3) | Token execution, timers, instance persistence, task inboxes, BPMN/DMN evaluation |
-| The operator's conversation | Identities ("the manager", "the CFO"), systems ("OpenBee", "Odoo") — extracted as free strings; the engine is the source of truth for identity resolution at runtime |
-| Engine-side connector runtimes | Actually calling external systems — Camunda topics / Elsa HTTP activities / etc. |
-
-## 3. Domain objects
-
-| Object | What it is | Scope |
+| Object | What It Is | Scope |
 |---|---|---|
-| **Project** | One client company. | Root |
-| **Chat** | One workflow-design session inside a project. Has a persistent message thread + attachments + a pointer to its latest workflow version. | Per project |
-| **Message** | One entry in a chat thread. `role ∈ user/assistant/system`. Body is a JSON envelope: `{text, attachment_ids?, questions?, workflow_version_id?, error?}`. | Per chat |
-| **Attachment** | A PDF/TXT (voice/image stubs exist) the user dropped into the composer. Normalized to `text_content` — the binary is not kept. | Per chat |
-| **Workflow Version** | One snapshot of the IR. Stage: `drafting` (schema issues or extractor errors), `ready` (schema-clean), or `approved` (operator explicitly sanctioned). New turns always create a new version. | Per chat |
-| **Deploy Target** | A registered engine endpoint a project can push to. `kind ∈ camunda7 / elsa3`, with auth mode (`none / apikey / bearer / basic / credentials`). | Per project |
-| **Workflow IR** | Canonical, engine-agnostic JSON of a process — actors, tasks, gateways, events, flows, forms. Every element carries a `confidence` (0.0–1.0) + an `evidence` span quoting the source text. | Per workflow version |
+| **Organization** | A workspace. Has teams, members, projects. | Root |
+| **Team** | A department group within an org (Finance Team, Legal Team, etc.). | Per org |
+| **Member** | A user belonging to an org with a role (admin/executor/employee) and optionally to teams (lead/member). | Per org |
+| **User** | An authenticated account (email, password, JWT). | Global |
+| **Request** | A business need submitted for processing. Has: title, description, requester, priority, status, progress. | Per org |
+| **Workflow** | The graph of stages (nodes + edges) created for a request. One workflow per request. | Per request |
+| **Workflow Node** | A stage in the workflow. Has: name, type, owning agent, status (Pending/In Progress/Completed/Blocked), tasks, timestamps, description. | Per workflow |
+| **Workflow Edge** | A directed connection between nodes. Type: sequential (solid) or parallel-merge (dashed). | Per workflow |
+| **Agent** | A specialized AI actor assigned to a workflow node. Has: name, department, avatar, status. Each agent type has domain-specific decision logic. | Per node |
+| **Agent Task** | A sub-task within a node's task list. Has: title, status, timestamp. Agents progress through their tasks using domain logic. | Per node |
+| **Dependency** | A declared need from one agent for another's output. Models cross-agent collaboration. When the blocking agent completes, the dependent agent is unblocked. | Per workflow |
+| **Audit Event** | An append-only log entry. Has: timestamp, actor (agent name), action, target node, reason. Powers the Activity and Audit Trail views. | Per workflow |
+| **Project** | An org-scoped container for requests and workflows. | Per org |
 
-## 4. Services (concrete, maps 1:1 to the repo)
+## 3. Agent Types
+
+| Agent | Department | Role in Workflow |
+|---|---|---|
+| **Intake Agent** | — | Reads the request, generates the workflow plan (which stages, what order, what's parallel). |
+| **Planning Analyst** | Planning | Breaks down the request into actionable analysis areas. |
+| **Finance Reviewer** | Finance | Budget feasibility, financial impact analysis, ROI projection. |
+| **Legal Reviewer** | Legal | Compliance check, regulatory review, contract assessment. |
+| **IT Manager** | IT | Technical feasibility, infrastructure assessment, security review. |
+| **HR Manager** | HR | Staffing requirements, hiring plan, policy compliance. |
+| **Operations Manager** | Operations | Logistics, facilities, operational planning. |
+| **Executive Approver** | Executive | Convergence gate — reviews all upstream results, approves or rejects with justification. |
+
+Each agent has:
+- A fixed task list relevant to its domain.
+- Decision logic that moves through tasks and reaches an end state.
+- The ability to declare dependencies on other agents.
+- Status updates written in plain language (explainability).
+
+## 4. Workflow State Machine
+
+### Node Status
+```
+Pending ──→ In Progress ──→ Completed
+                │
+                ├──→ Blocked (dependency declared)
+                │       │
+                │       └──→ In Progress (dependency resolved)
+                │
+                └──→ Completed
+```
+
+### Request Status
+```
+Submitted ──→ In Progress ──→ Completed
+                                  │
+                                  └──→ Report Generated
+```
+
+### Workflow Execution Rules
+1. A node becomes **In Progress** when all its incoming sequential
+   dependencies are Completed.
+2. Parallel branches start simultaneously when their shared parent completes.
+3. A merge node (after parallel branches) only activates when **all**
+   incoming branches are Completed or Resolved.
+4. A node becomes **Blocked** when its agent declares a dependency on
+   another agent that hasn't completed yet.
+5. A Blocked node automatically transitions to In Progress when the
+   blocking agent completes.
+6. The Executive Approval node only activates after all review and
+   planning branches complete.
+
+## 5. Services
 
 | Service | Role | Stack |
 |---|---|---|
-| `apps/web` | UI. Project tree, chat view with canvas + composer + attachment tray, Compile/Approve/Deploy controls, deploy-target CRUD. | React 19 + Vite + React Flow + framer-motion + Tailwind v4 |
-| `apps/api` | HTTP API. CRUD (projects, chats, messages, attachments, deploy targets), extraction orchestration, compile + deploy dispatch, validator + lowering, adapter registry. | Go + Echo + pgx |
-| `apps/agent` | LLM frontend. One `/extract` endpoint that wraps the extractor prompt + provider dispatch (Ollama default, Gemini/Anthropic fallbacks); one `/attachments/extract-text` for PDF/TXT normalization; Copilot Ask/Clarify endpoints. | Python 3.13 + FastAPI + LangGraph |
-| `postgres` (pgvector) | Authoritative store: projects, chats, messages, attachments, workflow_versions, deploy_targets. | pgvector/pgvector:pg18 |
-| `redis` | Queues, caches. | redis:8-alpine |
-| `camunda7` | Dev-mode Camunda 7 Run distribution (`camunda/camunda-bpm-platform:run-latest`) for round-trip testing. | Upstream image |
-| `elsa3` | Dev-mode Elsa Server 3 + Studio (`elsaworkflows/elsa-server-and-studio-v3`). Admin login `admin/password`. | Upstream image |
+| `apps/web` | UI. Shell rail, workflow canvas (React Flow), request overview panel, node detail panel (tabs: Overview, Tasks, Activity), agent roster, audit trail view. | React 19 + Vite + React Flow + TanStack Query |
+| `apps/api` | HTTP API. Auth (JWT), org/team/member CRUD, request management, workflow graph engine (nodes, edges, state transitions), agent task management, audit event logging, dependency resolution. | Go 1.25 + Echo + pgx |
+| `apps/agent` | Agent logic. Department-specific decision making, LLM-powered reasoning for intake planning and agent status updates. | Python 3.13 + FastAPI + LangGraph |
+| `postgres` | Persistent store. Orgs, teams, users, requests, workflow nodes/edges, agent tasks, audit events, dependencies. | pgvector/pgvector:pg18 |
+| `redis` | Cache, queues, real-time state propagation. | redis:8-alpine |
 
-## 4.1 Technical architecture
+## 6. Data Flow
 
-![Pablo architecture](docs/diagrams/01.webp)
-
-```text
-Browser
-  |
-  | Vite/nginx proxy: /api, /agent
-  v
-apps/web  ------------------------------+
-React canvas + chat + settings          |
-                                         |
-                                         v
-apps/api -------------------------- Postgres
-Go Echo API                         projects, chats, messages,
-IR validation/lowering              attachments, workflow versions,
-compile/deploy registry             deploy targets
-  |
-  +------ apps/agent
-  |       FastAPI extraction, document text normalization,
-  |       provider dispatch: Groq/Gemini/Anthropic/Ollama
-  |
-  +------ Camunda 7
-  |       BPMN deployment + Cockpit visibility
-  |
-  +------ Elsa 3
-          WorkflowDefinition deployment + Studio visibility
+### Request Submission
+```
+User submits request (title, description, priority)
+  → API creates Request record (status: Submitted)
+  → API calls Agent service: Intake Agent
+  → Intake Agent returns workflow plan (nodes + edges + agent assignments)
+  → API creates Workflow with nodes and edges
+  → API logs audit event: "Request submitted, workflow created"
+  → UI renders canvas with all nodes
 ```
 
-The API is the control plane. It never directly executes a workflow instance.
-It validates and compiles specifications, then delegates runtime behavior to
-the configured engine.
-
-Additional rendered diagrams are available in [docs/diagrams/README.md](docs/diagrams/README.md).
-
-## 5. The Conversation → Workflow pipeline
-
-Each user message is one turn. The extractor, invoked once per turn,
-returns a single envelope:
-
-```json
-{ "ir":       { /* Workflow IR with confidence + evidence per element */ },
-  "questions": [ { "id", "ir_ref", "text" } ] }
+### Agent Execution
+```
+Workflow Engine checks: which nodes have all dependencies met?
+  → For each ready node: status → In Progress
+  → Agent service runs the node's agent logic
+  → Agent progresses through its task list
+  → Agent writes status updates (→ audit events)
+  → If agent needs data from another: declare Dependency (→ node Blocked)
+  → When agent completes: status → Completed
+  → Engine checks: does this unblock any downstream nodes?
+  → If yes: unblock them (Blocked → In Progress)
+  → Log all transitions as audit events
 ```
 
-This lets the UI render two interleaved signals in the same assistant
-bubble without a second LLM roundtrip (critical on a local 3–9B model
-where each call costs tens of seconds):
-
-- **modify** — `questions` empty → the canvas updates, assistant posts
-  a summary ("Extracted 5 tasks, 1 gateway.")
-- **clarify** — `questions` non-empty → the canvas still updates with
-  the best current draft, assistant posts a lead-in + numbered
-  questions ("I've drafted 3 tasks, but I need 2 clarifications:").
-
-The user answers the questions in their next message; the extractor
-sees the full Q&A in the chat-context block and re-emits the IR with
-higher confidence. The loop terminates when every element crosses the
-0.8 confidence threshold — this is a client-side predicate derived
-from `collectLowConfidence(workflow)`, not a server flag.
-
+### Approval Gate
 ```
-DRAFTING ───▶ READY ──(operator clicks Approve)──▶ APPROVED
-   ▲            │                                    │
-   │            │  new user message that modifies the IR
-   └────────────┴────────────────────────────────────┘
-                  new workflow_version; older 'approved' row stays in history
+All review branches Completed
+  → Executive Approval node: Pending → In Progress
+  → Executive Approver reviews upstream results
+  → Decision: Approve (with justification) or Reject (with reason)
+  → If Approve: downstream nodes unblocked
+  → If Reject: workflow halted, reason logged
+  → Audit event with full decision text
 ```
 
-`drafting` = schema-invalid or extractor error. `ready` = schema-clean.
-`approved` = operator explicit. Compile + Deploy read the latest
-version regardless of approval, but the Approve button is gated on
-`ready` + zero low-confidence items.
+### Report Generation
+```
+Implementation node Completed
+  → Review & Report node: In Progress
+  → Auto-generate summary from audit trail:
+    - What was requested
+    - Who approved
+    - What was flagged
+    - What was executed
+    - Total time
+  → Report attached to workflow
+  → Request status → Completed
+```
 
-## 6. Extraction (agent side)
+## 7. UI Structure (all sidebar tabs)
 
-One prompt, one call, one response. No multi-node LangGraph today.
+### Shell Rail (persistent left sidebar)
+```
+[Logo] AI Organization OS
 
-Key rules embedded in the prompt (`apps/agent/app/nodes/extract.py`):
+Home           → F11: Dashboard, stats, recent activity
+My Work        → F12: Personal inbox, assigned tasks
+Requests       → F13: Request list, create, filter
+Workflows      → F8:  Workflow canvas (main view)
+Agents         → F14: Full agent roster with details
+Reports        → F15: Audit trail, generated reports
+Integrations   → F16: Connected systems & data sources
 
-1. Output `{"ir": ..., "questions": ...}`. No prose, no markdown fences.
-2. Preserve the current IR on refinement prompts unless the user
-   explicitly says "start over". Meta questions ("why did you remove X?")
-   return the IR unchanged.
-3. Decisions with multiple outcomes ("si A alors X, sinon Y") become
-   exclusive gateways, not parallel end events. Parallel activities
-   ("simultanément") become parallel gateways.
-4. Every actor, task, gateway, binding, and flow-condition carries a
-   `confidence` (0.0–1.0) + an `evidence` span from the source text.
-5. For every element with `confidence < 0.8`, emit one clarifying
-   question targeting it. Questions are single-sentence, picker-style
-   when possible, ≤ 120 characters.
+─── TEAMS ───
+Finance Team   → filter by department
+IT Team
+HR Team
+Operations Team
+```
 
-Provider is switchable via `AGENT_EXTRACTOR_PROVIDER`:
+### Workflows Tab Layout (the centerpiece)
+```
+┌──────────┬──────────────────────────────────┬──────────────┐
+│ SHELL    │ TOP BAR                          │              │
+│ RAIL     │ Workflow title, ID, priority,    │              │
+│          │ status badge, share              │              │
+│          ├──────────┬───────────────────────┤ NODE DETAIL  │
+│          │ REQUEST  │                       │ PANEL        │
+│          │ OVERVIEW │  WORKFLOW CANVAS      │              │
+│          │          │                       │ Overview tab │
+│          │ Title    │  Nodes + Edges        │  Description │
+│          │ Progress │  Color-coded status   │  Agent       │
+│          │ Steps    │  Click to select      │  Progress %  │
+│          │ ETA      │  Zoom / Fit controls  │  Task list   │
+│          │          │  Legend               │  Latest upd  │
+│          ├──────────┤                       │              │
+│          │ AGENTS   │                       │ Activity tab │
+│          │ ROSTER   │                       │  Event log   │
+│          │          │                       │              │
+│          │ Agent 1  │                       │              │
+│          │ Agent 2  │                       │              │
+│          │ ...      │                       │              │
+└──────────┴──────────┴───────────────────────┴──────────────┘
+```
 
-| Provider | Model | Latency (M-series Mac) | Notes |
-|---|---|---|---|
-| `ollama` (default) | `qwen2.5:3b` | 50–70 s | No quota, no cost, runs fully offline. |
-| `gemini` | `gemini-2.5-flash-lite` | 3–8 s | Needs `GOOGLE_API_KEY`. Free tier has daily quota. |
-| `anthropic` | configurable | 3–8 s | Needs `ANTHROPIC_API_KEY`. |
+## 8. Database Schema (target)
 
-Ollama calls use `format: "json"` (loose) — schema-constrained
-decoding with the full IR schema pathologically slows small models.
-The Go validator still enforces the schema on the other side.
+```sql
+-- Foundation (IMPLEMENTED)
+users          (id UUID PK, email, name, password_hash, created_at)
+organizations  (id UUID PK, name, slug UNIQUE, accent_color, created_at)
+org_members    (org_id FK, user_id FK, role, joined_at, PK(org_id, user_id))
+teams          (id UUID PK, org_id FK, name, description, color, created_at)
+team_members   (team_id FK, user_id FK, role, joined_at, PK(team_id, user_id))
+projects       (id UUID PK, org_id FK, name, created_at)
 
-## 7. Compilation
+-- Workflow engine (TO BUILD: F1, F2)
+requests       (id UUID PK, org_id FK, project_id FK, title, description,
+                requester_name, priority, status, progress_current,
+                progress_total, estimated_completion, created_at, updated_at)
 
-A compiler is a pure deterministic function `ExecutableIR → artifact_bytes`.
-Two compilers in v0.1, each registered as an `engine.Adapter`:
+workflow_nodes (id UUID PK, request_id FK, name, node_type, agent_type,
+                agent_name, status, description, position_x, position_y,
+                sort_order, created_at, updated_at)
 
-| Adapter | `Kind` | Artifact | Deploy? |
-|---|---|---|---|
-| `camunda7` | `camunda7` | BPMN 2.0 XML + BPMNDI diagram layout | Yes (POST `/engine-rest/deployment/create`) |
-| `elsa3` | `elsa3` | Elsa WorkflowDefinition JSON | Yes (POST `/elsa/api/workflow-definitions` with `{model, publish}` wrapper) |
+workflow_edges (id UUID PK, request_id FK, source_node_id FK, target_node_id FK,
+                edge_type, created_at)
+                -- edge_type: 'sequential' | 'parallel_merge'
 
-Before compilation, the IR goes through a `Lower()` pass:
+-- Agent tasks (TO BUILD: F3)
+agent_tasks    (id UUID PK, node_id FK, title, status, completed_at,
+                sort_order, created_at)
 
-- **Condition normalization** — `${{amount >= 50000}}` / `amount >= 50000` etc. all canonicalize.
-- **Default-branch synthesis** — an exclusive gateway with no explicit
-  default gets one (+ a synthesized end event) so the engine never
-  token-stalls.
-- **Actor resolution** — tasks inherit their lane's actor when unbound.
-- **Confidence propagation** — a task's effective confidence is the
-  min of `task.confidence` and `binding.confidence`.
+-- Dependencies (TO BUILD: F4)
+agent_dependencies (id UUID PK, request_id FK, dependent_node_id FK,
+                    blocking_node_id FK, reason, resolved, resolved_at,
+                    created_at)
 
-Every compile is also scanned for **decision tables** — exclusive
-gateways whose branches share a pivot variable collapse into a
-DMN-style table, surfaced in the compile response for UI review.
+-- Audit trail (TO BUILD: F6)
+audit_events   (id UUID PK, request_id FK, node_id FK NULL, actor,
+                action, reason, created_at)
+                -- append-only, never updated or deleted
+```
 
-## 8. Deploy
+## 9. Critical Files
 
-Route: `POST /chats/:id/deploy` with `{target_id}`.
+### Backend
+| File | What It Does |
+|---|---|
+| `apps/api/cmd/server/main.go` | Server entry point, DB/Redis init |
+| `apps/api/internal/config/config.go` | Environment config (DATABASE_URL, JWT_SECRET, etc.) |
+| `apps/api/internal/http/server.go` | Route registration |
+| `apps/api/internal/auth/jwt.go` | JWT generation and validation |
+| `apps/api/internal/middleware/auth.go` | Auth middleware |
+| `apps/api/internal/handler/auth.go` | Login/register handlers |
+| `apps/api/internal/handler/orgs.go` | Org/team/member CRUD |
+| `apps/api/internal/handler/projects.go` | Project + chat handlers |
+| `apps/api/migrations/` | SQL migrations |
 
-1. Load the chat's latest IR. Refuse if it doesn't exist.
-2. Load the named deploy target. Refuse if it belongs to a different
-   project from the chat (cross-client isolation).
-3. Lower + compile using the adapter for `target.kind`.
-4. Call `adapter.Deploy(endpoint, authUser, authSecret, name, artifact)`
-   which returns a `DeploymentResult` (engine-side id, process key).
-5. Construct a browser-openable **Studio URL** when known (Elsa Studio
-   lives at the compose-published port; Camunda Cockpit URL is the
-   obvious follow-up) and include it in the response.
+### Frontend
+| File | What It Does |
+|---|---|
+| `apps/web/src/App.tsx` | Root routing, auth flow |
+| `apps/web/src/components/ShellRail.tsx` | Left navigation rail |
+| `apps/web/src/contexts/AuthContext.tsx` | JWT token + user state |
+| `apps/web/src/contexts/OrgContext.tsx` | Active org tracking |
+| `apps/web/src/views/LoginView.tsx` | Login page |
+| `apps/web/src/views/RegisterView.tsx` | Registration page |
+| `apps/web/src/views/OrgSetupView.tsx` | 3-step org onboarding |
+| `apps/web/src/lib/api.ts` | API client (auth, orgs, teams, members) |
+| `apps/web/src/lib/auth.ts` | Token persistence (localStorage) |
 
-The web deploy toast uses the returned `studio_url` to surface an
-"Open in Elsa Studio →" link that deep-links into the definition's
-detail page.
-
-Deploy targets are project-scoped. This matters because one Pablo operator may
-serve multiple client organizations; a target registered for one project must
-not be usable by another project.
-
-### Elsa 3 deploy specifics
-
-- Endpoint: `POST /elsa/api/workflow-definitions`.
-- Envelope: **`{ "model": <WorkflowDefinition>, "publish": true }`** —
-  the compiler emits a bare definition so it's also drag-drop
-  importable into Elsa Studio; the transport wrapper is added at
-  deploy time.
-- Auth modes: `none | apikey | bearer | basic | credentials`.
-  `credentials` does login-on-demand against `/elsa/api/identity/login`
-  (default admin is `admin/password`) and caches the JWT on the client.
-
-### Camunda 7 deploy specifics
-
-- Endpoint: `POST /engine-rest/deployment/create` (multipart).
-- Auth: HTTP Basic with the target's user + secret.
-- Response feeds Cockpit + Tasklist URL derivation so the UI can
-  link into the engine's own runtime views.
-- Unresolved service tasks are compiled as BPMN manual tasks instead of bare
-  service tasks, because Camunda rejects service tasks without an
-  implementation (`camunda:type`, class, delegate expression, or expression).
-
-## 9. Development method and AI assistance
-
-Pablo was implemented with an AI-assisted engineering process, documented in
-`plan.md`. The important development workflows were:
-
-- codebase exploration before edits;
-- frontend UX implementation and visual verification;
-- backend/API implementation;
-- compiler and adapter work;
-- Docker Compose runtime diagnostics;
-- direct engine smoke tests against Camunda and Elsa;
-- documentation synthesis across README, SYSTEM, DESIGN, VISION, PHASES, and
-  diagrams.
-
-The AI assistance was used as scoped engineering skills, not as an unchecked
-generator. Every runtime-critical change was verified through tests and/or
-real container endpoints.
-
-## 10. Non-goals
-
-- Pablo does **not** host a workflow engine. It compiles and deploys to
-  existing ones.
-- Pablo does **not** replace task inboxes. Users work in the engine's
-  native UI.
-- Pablo does **not** maintain an IS Registry, manage client identities,
-  or mirror the client's business data. All grounding comes from the
-  chat and all execution lives on the engine.
-- Pablo does **not** require a hosted LLM. Local Ollama is the default;
-  Gemini / Anthropic are opt-in fallbacks.
-
-## 10. Critical files
-
-Grounding signals for anyone extending the system:
-
-- `packages/ir/schema.json` — the IR shape. Stable across engine targets.
-- `apps/api/internal/compiler/lower.go` — the lowering pass.
-- `apps/api/internal/engine/adapter.go` — the adapter contract.
-- `apps/api/internal/handler/projects.go` — `AppendMessage` (the per-turn
-  dispatch) + `ApproveWorkflow`.
-- `apps/api/internal/handler/deploy_targets.go` — `DeployChat` (the
-  compile+push glue).
-- `apps/agent/app/nodes/extract.py` — the prompt + provider dispatch
-  + the `{ir, questions}` splitter.
-- `apps/web/src/views/ChatView.tsx` — the thread, composer, canvas,
-  TopBar (Compile/Approve/Deploy).
-- `apps/web/src/lib/confidence.ts` — `collectLowConfidence` — the
-  single source of truth for "is the workflow fully resolved".
+### Agent
+| File | What It Does |
+|---|---|
+| `apps/agent/app/nodes/extract.py` | LLM extraction (existing, to be adapted) |

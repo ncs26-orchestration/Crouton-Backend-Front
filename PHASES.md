@@ -1,160 +1,272 @@
-# Pablo — Implementation Phase Specification
+# AI Organization OS — Implementation Phases
 
-## User Stories Mapping
+## Phase 0: Foundation ✅ COMPLETE
 
-### Phase 1: Core Platform Structure ✅
+Everything needed before the 10 MVP features can be built.
 
-| ID | User Story | Status |
-|----|-----------|--------|
-| US-001 | As an integrator, I want a workspace per client organisation, so I can manage workflows separately | ✅ |
-| US-002 | As an integrator, I want to create a new client workspace, so I can start a new engagement | ✅ |
-| US-003 | As an integrator, I want to list all my client organisations, so I can navigate between workspaces | ✅ |
+| Component | Status | What's Built |
+|-----------|--------|-------------|
+| Auth (JWT) | ✅ | Login, register, token validation, bcrypt passwords |
+| Users | ✅ | User table with email, name, password_hash |
+| Organizations | ✅ | Org CRUD, slug, accent color |
+| Org Members | ✅ | Add/remove/update members, role-based (admin/executor/employee) |
+| Teams | ✅ | Team CRUD within orgs, description, color |
+| Team Members | ✅ | Add/remove users to teams, lead/member roles |
+| Projects (org-scoped) | ✅ | Projects belong to orgs via org_id FK |
+| Web Auth Flow | ✅ | Login → Register → Org Setup (3-step wizard) |
+| Shell Navigation | ✅ | ShellRail with Home, Inbox, Workflows, Org, Agents, Settings |
+| Org Management UI | ✅ | Teams tab, Members tab, add/remove, role assignment |
+| API Client | ✅ | TypeScript client for all auth/org/team/member endpoints |
+| Auth Context | ✅ | React context for JWT token + user state |
+| Org Context | ✅ | React context for active organization |
+| DB Migrations | ✅ | organizations, org_members, teams, team_members, projects (org-scoped) |
 
-**Completed Features:**
-- Project CRUD (create, list, get, delete)
-- Chat CRUD per project
-- Message persistence per chat
-- Basic UI: shell, project tree, chat view
-
----
-
-### Phase 2: Organisation Onboarding ✅
-
-| ID | User Story | Status |
-|----|-----------|--------|
-| US-004 | As an integrator, I want to start an onboarding interview for a new organisation, so I can understand their context | ✅ |
-| US-005 | As an integrator, I want the AI to ask objective questions (not subjective), so I get factual answers | ✅ |
-| US-006 | As an integrator, I want the AI to build an organisation overview from interview responses, so I have a factual baseline | ✅ |
-
-**Completed Features:**
-- Deterministic Onboarding Flow: 8 fixed questions (name, industry, size, regions, systems, processes, compliance, languages)
-- Objective Questions Only: Multi-choice with "Other" and "None" options → factual answers
-- Project Creation at End: Project only created when onboarding completes or skipped
-- Chip/Tag Input: Type + Enter to create custom chips, click X to remove
-- Organisation Settings Modal: Accessed from ProjectTree header when project scoped
-- Go API: GET /onboarding, POST /onboard endpoints
-- Web UI: OnboardingWizard component with ChipInput
+**Key files:**
+- `apps/api/internal/handler/auth.go` — login/register
+- `apps/api/internal/handler/orgs.go` — org/team/member CRUD
+- `apps/api/internal/auth/jwt.go` — JWT logic
+- `apps/api/internal/middleware/auth.go` — auth middleware
+- `apps/web/src/contexts/AuthContext.tsx` — auth state
+- `apps/web/src/contexts/OrgContext.tsx` — org state
+- `apps/web/src/views/LoginView.tsx` — login
+- `apps/web/src/views/RegisterView.tsx` — register
+- `apps/web/src/views/OrgSetupView.tsx` — org onboarding
 
 ---
 
-### Phase 3: Conversation → Workflow Pipeline ✅
+## Phase 1: Request Intake + Workflow Graph ⏳ NEXT
 
-| ID | User Story | Status |
-|----|-----------|--------|
-| US-009 | As an integrator, I want to start a conversation about a process, so I can explore workflow ideas | ✅ |
-| US-010 | As an integrator, I want each prompt to either modify the workflow OR ask clarifying questions, so ambiguity is eliminated | ✅ |
-| US-011 | As an integrator, I want the AI to ask multiple questions until fully resolved, so no ambiguous nodes exist in final workflow | ✅ |
-| US-012 | As an integrator, I want to preview the workflow as we chat, so I see changes in real-time | ✅ |
-| US-013 | As an integrator, I want to approve the workflow when it's complete, so we move to formalization | ✅ |
+> **Features:** F1 (Request Intake), F2 (Workflow Graph Engine), F6 (Audit Trail start)
 
-**Completed Features:**
-- Message → Extractor call (one-call: IR + questions)
-- Workflow IR schema (actors, tasks, gateways, flows, events)
-- Canvas rendering with React Flow
-- Low-confidence questions inline (clarify loop)
-- Refinement prompts (modify IR without re-extracting)
-- Compile to BPMN 2.0 / Elsa 3
-- Approve workflow → stage flips to approved
-- Multi-source data: PDF/TXT attachments as extractor context
+### F1 — Request Intake & Workflow Plan
 
----
+| Task | Status |
+|------|--------|
+| Create `requests` table migration | ⏳ |
+| Request CRUD endpoints (create, get, list) | ⏳ |
+| Intake Agent logic — reads request, generates workflow plan | ⏳ |
+| Request Overview UI panel (title, progress, ETA, status) | ⏳ |
+| Submit Request form/modal | ⏳ |
 
-### Phase 4: Workflow Versioning & Forking ⏳
+### F2 — Workflow Graph Engine
 
-| ID | User Story | Status |
-|----|-----------|--------|
-| US-014 | As an integrator, I want to version a workflow, so I can track changes over time | ⏳ |
-| US-015 | As an integrator, I want to fork an existing workflow, so I can create variants without losing original | ⏳ |
-| US-016 | As an integrator, I want to see a diff between versions, so I understand what changed | ⏳ |
-| US-017 | As an integrator, I want to restore a previous version, so I can rollback if needed | ⏳ |
+| Task | Status |
+|------|--------|
+| Create `workflow_nodes` + `workflow_edges` tables | ⏳ |
+| Node state machine (Pending → In Progress → Completed / Blocked) | ⏳ |
+| Graph traversal — unblock downstream nodes when dependencies clear | ⏳ |
+| API endpoints: get workflow for request, update node status | ⏳ |
+| Parallel branch support (multiple nodes start when parent completes) | ⏳ |
+| Merge point logic (wait for all incoming branches) | ⏳ |
 
----
+### F6 — Audit Trail (start early)
 
-### Phase 5: RAG & Confidence ⚠️
-
-| ID | User Story | Status |
-|----|-----------|--------|
-| US-018 | As an integrator, I want sentences from onboarding to be stored with embeddings, so AI can cite sources | ⏳ |
-| US-019 | As an integrator, I want every workflow node to show confidence score + evidence, so I know what needs verification | ⚠️ Partial |
-| US-020 | As an integrator, I want to flag ambiguous nodes, so they can be resolved before deployment | ⏳ |
-
-**Partial:**
-- confidence + evidence fields exist in IR schema (apps/api/internal/ir/types.go)
-- compiler propagates confidence through bindings
-- UI does not yet surface confidence scores visually
+| Task | Status |
+|------|--------|
+| Create `audit_events` table (append-only) | ⏳ |
+| Log audit events on every state change from day one | ⏳ |
+| API endpoint: list audit events for a request/node | ⏳ |
 
 ---
 
-### Phase 6: Elsa 3 Execution ✅
+## Phase 2: Department Agents + Dependencies ⏳
 
-| ID | User Story | Status |
-|----|-----------|--------|
-| US-021 | As an integrator, I want to deploy a workflow to Elsa 3, so it can execute | ✅ |
-| US-022 | As an integrator, I want a mock activity dialog, so I can simulate human tasks during testing | ⏳ |
-| US-023 | As an integrator, I want to see execution history, so I can debug issues | ⏳ |
+> **Features:** F3 (Department Agents), F4 (Cross-Agent Dependencies)
 
-**Completed Features:**
-- Deploy to Elsa 3 with real artifact push
-- Credentials auth (basic, bearer, apikey)
-- Toast with clickable Elsa Studio link
-- Artifact wrapped in `{model, publish}` envelope
+### F3 — Department Agents
+
+| Task | Status |
+|------|--------|
+| Create `agent_tasks` table | ⏳ |
+| Finance Reviewer agent (budget check, impact analysis, ROI) | ⏳ |
+| Legal Reviewer agent (compliance, regulatory, contracts) | ⏳ |
+| IT Manager agent (technical feasibility, infra, security) | ⏳ |
+| Each agent writes plain-language status updates | ⏳ |
+| Agent task progression logic (move through task list) | ⏳ |
+
+### F4 — Cross-Agent Dependencies
+
+| Task | Status |
+|------|--------|
+| Create `agent_dependencies` table | ⏳ |
+| Dependency declaration API (agent X needs agent Y) | ⏳ |
+| Auto-unblock when blocking agent completes | ⏳ |
+| Node status → Blocked when dependency declared | ⏳ |
+| At least one visible dependency: Finance ← IT | ⏳ |
 
 ---
 
-## Non-Functional Requirements
+## Phase 3: Approval + Execution ⏳
 
-| ID | Requirement | Status |
-|----|------------|--------|
-| NFR-001 | Objective analysis only — AI never expresses opinions, only cites facts from onboarding/interview | ✅ |
-| NFR-002 | Zero ambiguity — No workflow can be exported until all nodes resolved | ⏳ |
-| NFR-003 | Platform isolation — Integrator never needs client credentials; all data extracted/forked | ✅ |
-| NFR-004 | Multi-modal input — Support documents, images, voice from day 1 | ⚠️ Partial |
+> **Features:** F5 (Executive Approval), F7 (Execution Stage)
+
+### F5 — Executive Approval
+
+| Task | Status |
+|------|--------|
+| Approval gate logic — only activates when all upstream complete | ⏳ |
+| Executive Approver agent with decision logic | ⏳ |
+| Written approve/reject justification | ⏳ |
+| On reject: workflow halted with reason | ⏳ |
+
+### F7 — Execution Stage
+
+| Task | Status |
+|------|--------|
+| HR Manager agent (staffing, hiring plan, policies) | ⏳ |
+| Operations Manager agent (logistics, facilities) | ⏳ |
+| Implementation node (completes when sub-tasks done) | ⏳ |
+| Both must complete before Implementation can start | ⏳ |
 
 ---
 
-## Technical Notes
+## Phase 4: UI — Canvas + Panels + Report ⏳
 
-### Deterministic Questions Schema (Phase 2)
+> **Features:** F8 (Workflow Canvas), F9 (Agent Roster), F10 (Final Report)
 
-```go
-Questions: []Question{
-  { ID: "org_name",    Type: "text",   Label: "Organisation Name", Required: true },
-  { ID: "industry",    Type: "select", Label: "Industry", Options: [...] },
-  { ID: "company_size",Type: "select", Label: "Company Size", Options: [...] },
-  { ID: "regions",    Type: "multi",   Label: "Operating Regions", Options: [...] },
-  { ID: "systems",    Type: "multi",   Label: "Business Systems", Options: [...] },
-  { ID: "processes",  Type: "multi",   Label: "Main Processes", Options: [...] },
-  { ID: "compliance", Type: "multi",   Label: "Compliance", Options: [...] },
-  { ID: "languages",  Type: "multi",   Label: "Languages", Options: [...] },
-}
+### F8 — Workflow Canvas UI (Workflows tab)
+
+| Task | Status |
+|------|--------|
+| React Flow canvas rendering nodes + edges from API | ⏳ |
+| Node color-coding by status (green/blue/yellow/red) | ⏳ |
+| Click node → open right-side detail panel | ⏳ |
+| Detail panel tabs: Overview, Tasks, Activity | ⏳ |
+| Overview tab: description, agent, progress %, task list, latest update | ⏳ |
+| Activity tab: audit events for this node | ⏳ |
+| Top bar: workflow title, request ID, priority badge, status badge | ⏳ |
+| Left Request Overview card (progress bar, steps, ETA) | ⏳ |
+| Legend (Completed/In Progress/Pending/Blocked) | ⏳ |
+| Zoom/Fit controls | ⏳ |
+| Stripe-inspired design per DESIGN.md | ⏳ |
+
+### F9 — Agent Roster Panel
+
+| Task | Status |
+|------|--------|
+| Participating agents list with live status badges | ⏳ |
+| Agent avatars and department grouping | ⏳ |
+| Teams section in sidebar matches org teams | ⏳ |
+
+### F10 — Final Report
+
+| Task | Status |
+|------|--------|
+| Auto-generate summary when Implementation completes | ⏳ |
+| Report content: request, approvals, flags, execution, time | ⏳ |
+| Attach report to Review & Report node | ⏳ |
+
+---
+
+## Phase 5: Sidebar Tab Views ⏳
+
+> **Features:** F11 (Home), F12 (My Work), F13 (Requests), F14 (Agents), F15 (Reports), F16 (Integrations)
+
+### F11 — Home Dashboard
+
+| Task | Status |
+|------|--------|
+| Recent/active requests list with status badges | ⏳ |
+| Agent activity summary (active count, tasks completed) | ⏳ |
+| Quick stats cards (requests, completion rate, avg time) | ⏳ |
+| "New Request" quick action button | ⏳ |
+| Recent audit events feed (last 5–10) | ⏳ |
+
+### F12 — My Work (Personal Inbox)
+
+| Task | Status |
+|------|--------|
+| Tasks assigned to current user/department | ⏳ |
+| Pending approval items | ⏳ |
+| Blocked items with "Waiting for [agent]" indicator | ⏳ |
+| Recently completed items | ⏳ |
+| Each item links to workflow node | ⏳ |
+
+### F13 — Requests List
+
+| Task | Status |
+|------|--------|
+| All requests table with title, requester, priority, status, progress | ⏳ |
+| Status and priority filter controls | ⏳ |
+| "New Request" button with submission form | ⏳ |
+| Click request → navigate to workflow canvas | ⏳ |
+
+### F14 — Agents Management Page
+
+| Task | Status |
+|------|--------|
+| Full agent roster with name, department, avatar, status | ⏳ |
+| Agent capability descriptions | ⏳ |
+| Agent activity stats (tasks completed, current workload) | ⏳ |
+| Group by team (Finance, Legal, IT, HR, Operations) | ⏳ |
+| Click agent → detail view with recent actions | ⏳ |
+
+### F15 — Reports Page
+
+| Task | Status |
+|------|--------|
+| Completed workflow reports list | ⏳ |
+| Full audit trail browser with filters | ⏳ |
+| Filter by request, agent, date, action type | ⏳ |
+| Key metrics: requests processed, avg time, most active agents | ⏳ |
+
+### F16 — Integrations Page
+
+| Task | Status |
+|------|--------|
+| Integration cards: name, icon, status, which agents use it | ⏳ |
+| Financial systems (SAP, QuickBooks) | ⏳ |
+| Legal databases (LexisNexis, compliance) | ⏳ |
+| IT infrastructure (AWS, Azure, CMDB) | ⏳ |
+| HR systems (Workday, BambooHR) | ⏳ |
+| Communication (Slack, Email) | ⏳ |
+
+---
+
+## Definition of Done (MVP)
+
+**Core workflow (must have):**
+- [ ] One request can be submitted and generates a real workflow plan (F1)
+- [ ] The graph shows correct branching/merging and live status per node (F2)
+- [ ] At least 2 agents run in true parallel with independent task lists (F3)
+- [ ] At least one real cross-agent dependency is visible and resolves (F4)
+- [ ] Approval only unlocks after dependencies clear, with written decision (F5)
+- [ ] Every state change is logged and viewable node by node (F6)
+- [ ] Execution stage runs post-approval and completes (F7)
+- [ ] Full graph is visible, clickable, matches live backend state (F8)
+- [ ] Agent roster reflects real-time status (F9)
+- [ ] Final report generated automatically at the end (F10)
+
+**All sidebar tabs functional:**
+- [ ] Home shows dashboard with recent activity (F11)
+- [ ] My Work shows personal task inbox (F12)
+- [ ] Requests shows list with create/filter/navigate (F13)
+- [ ] Agents shows full roster with details (F14)
+- [ ] Reports shows audit trail and completed reports (F15)
+- [ ] Integrations shows connected systems (F16)
+
+---
+
+## Build Priority
+
 ```
+Phase 0 ✅ (Foundation — auth, orgs, teams, members)
+    │
+    ▼
+Phase 1 ⏳ (F1 + F2 + F6 — the backbone)
+    │        F13 (Requests list — thin, reads F1)
+    ▼
+Phase 2 ⏳ (F3 + F4 — agents + dependencies)
+    │        F14 (Agents page — reads F3)
+    ▼
+Phase 3 ⏳ (F5 + F7 — approval + execution)
+    │        F12 (My Work — reads F3/F5)
+    ▼
+Phase 4 ⏳ (F8 + F9 + F10 — canvas + roster + report)
+    │
+    ▼
+Phase 5 ⏳ (F11 + F15 + F16 — dashboard + reports + integrations)
 
-### Organisation Overview Storage
-
-- Stored in `projects.overview_json` as JSONB
-- Fields: name, industry, size, regions[], systems[], processes[], compliance[], languages[]
-- Fetched via GET /projects/{id} → used as AI context in extractor prompts
-
-### Workflow IR Schema (Phase 3)
-
-Every element carries:
-- `confidence` (float, 0.0–1.0)
-- `evidence` (string — quoted source text)
-
-Elements: actors, tasks, gateways, events, flows, forms.
-
-### Database Migration (Phase 2)
-
-```sql
-ALTER TABLE chats ADD COLUMN kind TEXT NOT NULL DEFAULT 'workflow';
-ALTER TABLE projects ADD COLUMN overview_json JSONB;
-```
-
-### Elsa 3 Deploy Contract (Phase 6)
-
-```json
-{
-  "model": { /* BPMN 2.0 XML */ },
-  "publish": true
-}
+F8/F9: start with mock data immediately.
+F16 (Integrations): display-only cards, build last.
 ```
