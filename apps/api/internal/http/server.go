@@ -85,7 +85,8 @@ func NewServer(d Deps) *echo.Echo {
 	// workflow; the orchestration engine then runs each node through its
 	// department agent on a background worker (F3).
 	agentClient := agentclient.New(d.AgentURL)
-	store := orchestrator.NewDBStore(repo.NewRequestRepo(d.PgPool), repo.NewWorkflowRepo(d.PgPool))
+	auditRepo := repo.NewAuditRepo(d.PgPool)
+	store := orchestrator.NewDBStore(repo.NewRequestRepo(d.PgPool), repo.NewWorkflowRepo(d.PgPool), auditRepo)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {
 		rootCtx = context.Background()
@@ -99,6 +100,8 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
 	e.GET("/requests/:id/nodes/:nodeId", reqh.GetNode, authMiddleware)
+	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
+	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)
 
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup

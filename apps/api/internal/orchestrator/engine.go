@@ -34,6 +34,7 @@ type Store interface {
 	ClearNodeTasks(ctx context.Context, nodeID string) error
 	InsertTasks(ctx context.Context, tasks []repo.AgentTask) error
 	UpdateRequestProgress(ctx context.Context, requestID, status string, progressPercent int) error
+	AppendAuditEvent(ctx context.Context, e repo.AuditEvent) error
 }
 
 // Engine advances requests on background goroutines.
@@ -137,7 +138,19 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			}
 		}
 		if completed == len(nodes) {
-			return e.store.UpdateRequestProgress(ctx, requestID, "completed", 100)
+			if err := e.store.UpdateRequestProgress(ctx, requestID, "completed", 100); err != nil {
+				return fmt.Errorf("mark request completed: %w", err)
+			}
+			if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+				ID:        "aev_" + shortID(),
+				RequestID: requestID,
+				Actor:     "engine",
+				Action:    "request.completed",
+				Reason:    "All " + fmt.Sprintf("%d", completed) + " nodes completed",
+			}); err != nil {
+				return fmt.Errorf("audit request.completed: %w", err)
+			}
+			return nil
 		}
 
 		eligible := eligibleNodes(nodes, edges, status)
@@ -163,10 +176,21 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 
 // runNode marks a node in_progress, runs its agent (falling back to a
 // deterministic decision on error so it never stalls), persists the tasks, and
-// marks the node completed with the agent's plain-language status.
+// marks the node completed with the agent's plain-language status. Every state
+// change is written to the audit trail (F6).
 func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.WorkflowNode, byID map[string]repo.WorkflowNode, edges []repo.WorkflowEdge) error {
 	if err := e.store.UpdateNodeStatus(ctx, node.ID, "in_progress", node.Department+" reviewing the request…", 25); err != nil {
 		return fmt.Errorf("mark in_progress: %w", err)
+	}
+	if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+		ID:        "aev_" + shortID(),
+		RequestID: req.ID,
+		NodeID:    &node.ID,
+		Actor:     "engine",
+		Action:    "node.started",
+		Reason:    node.Name + " started — " + node.Department + " reviewing",
+	}); err != nil {
+		return fmt.Errorf("audit node.started: %w", err)
 	}
 	e.pace(ctx)
 
@@ -185,6 +209,16 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		e.log.Warn("orchestrator: agent unavailable, using fallback decision",
 			slog.String("node_id", node.ID), slog.String("agent_type", node.AgentType), slog.String("err", err.Error()))
 		decision = agentclient.DefaultDecision(node.AgentType)
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID:        "aev_" + shortID(),
+			RequestID: req.ID,
+			NodeID:    &node.ID,
+			Actor:     "engine",
+			Action:    "agent.fallback",
+			Reason:    node.Name + " — agent unavailable, used deterministic fallback: " + err.Error(),
+		}); err != nil {
+			return fmt.Errorf("audit agent.fallback: %w", err)
+		}
 	}
 
 	now := time.Now()
@@ -216,6 +250,16 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 	}
 	if err := e.store.UpdateNodeStatus(ctx, node.ID, "completed", statusText, 100); err != nil {
 		return fmt.Errorf("mark completed: %w", err)
+	}
+	if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+		ID:        "aev_" + shortID(),
+		RequestID: req.ID,
+		NodeID:    &node.ID,
+		Actor:     node.Department,
+		Action:    "node.completed",
+		Reason:    statusText,
+	}); err != nil {
+		return fmt.Errorf("audit node.completed: %w", err)
 	}
 	return nil
 }
