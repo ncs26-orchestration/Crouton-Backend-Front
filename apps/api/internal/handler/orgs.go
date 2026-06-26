@@ -99,10 +99,10 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 
 	// Seed standard department teams, agents, and starter policies (F10).
 	type deptSeed struct {
-		teamID      string
-		name        string
-		agentType   string
-		agentName   string
+		teamID       string
+		name         string
+		agentType    string
+		agentName    string
 		capabilities string
 	}
 	depts := []deptSeed{

@@ -70,9 +70,9 @@ var teams = []teamSpec{
 
 // agentSpec is one seeded department agent linked to a team.
 type agentSpec struct {
-	id         string
-	agentType  string
-	name       string
+	id           string
+	agentType    string
+	name         string
 	capabilities string
 }
 
