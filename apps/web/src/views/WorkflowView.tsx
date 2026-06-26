@@ -154,7 +154,7 @@ function WorkflowCanvas({
         </div>
 
         <div className="px-4 py-3 flex flex-col gap-2.5 text-xs">
-          <InfoRow label="Requester" value={req.requester} />
+          <InfoRow label="Requester" value={req.requester_name} />
           <InfoRow label="Priority" value={statusLabel(req.priority)} />
           <InfoRow label="Status">
             <span className={`font-medium ${REQUEST_STATUS_COLOR[req.status] ?? ""}`}>

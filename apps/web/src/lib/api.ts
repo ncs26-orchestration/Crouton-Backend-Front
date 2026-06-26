@@ -13,6 +13,7 @@ import type {
   OrgRequest,
   Project,
   RequestGraph,
+  RequestPriority,
   Workflow,
   WorkflowDiff,
   WorkflowVersion,
@@ -500,16 +501,19 @@ export const api = {
   lookupUser: (email: string): Promise<{ id: number; name: string; email: string }> =>
     fetchJSON(`/api/users/lookup?email=${encodeURIComponent(email)}`),
 
-  // --- Requests (AI Organization OS) ---
+  // --- Requests + workflow graph (AI Organization OS) ---
 
-  createRequest: (orgId: string, payload: { title: string; description?: string; priority?: string }): Promise<{ request: OrgRequest }> =>
+  listRequests: (orgId: string): Promise<{ requests: OrgRequest[] }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`),
+
+  createRequest: (
+    orgId: string,
+    payload: { title: string; description?: string; priority: RequestPriority },
+  ): Promise<{ request: OrgRequest }> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-
-  listRequests: (orgId: string): Promise<{ requests: OrgRequest[] }> =>
-    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`),
 
   getRequest: (id: string): Promise<RequestGraph> =>
     fetchJSON(`/api/requests/${encodeURIComponent(id)}`),

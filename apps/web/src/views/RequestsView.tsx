@@ -18,7 +18,7 @@ const PRIORITY_LABELS: Record<RequestPriority, { label: string; cls: string }> =
   low: { label: "Low", cls: "text-[var(--color-fg-subtle)]" },
   medium: { label: "Medium", cls: "text-[var(--color-fg-muted)]" },
   high: { label: "High", cls: "text-[#f59e0b]" },
-  critical: { label: "Critical", cls: "text-[#ea2261]" },
+  urgent: { label: "Urgent", cls: "text-[#ea2261]" },
 };
 
 function statusLabel(s: RequestStatus): string {
@@ -143,7 +143,7 @@ function RequestRow({ request: r, onClick }: { request: OrgRequest; onClick: () 
           {r.title}
         </span>
       </td>
-      <td className="px-4 py-3 text-[var(--color-fg-muted)]">{r.requester}</td>
+      <td className="px-4 py-3 text-[var(--color-fg-muted)]">{r.requester_name}</td>
       <td className="px-4 py-3">
         <span className={`text-xs font-medium ${pri.cls}`}>{pri.label}</span>
       </td>
@@ -169,7 +169,7 @@ function NewRequestModal({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<string>("medium");
+  const [priority, setPriority] = useState<RequestPriority>("medium");
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -215,13 +215,13 @@ function NewRequestModal({
             <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Priority</label>
             <select
               value={priority}
-              onChange={(e) => setPriority(e.target.value)}
+              onChange={(e) => setPriority(e.target.value as RequestPriority)}
               className="w-full px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-transparent"
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
-              <option value="critical">Critical</option>
+              <option value="urgent">Urgent</option>
             </select>
           </div>
         </div>

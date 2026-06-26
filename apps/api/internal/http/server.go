@@ -2,7 +2,6 @@ package http
 
 import (
 	"log/slog"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
@@ -72,8 +71,10 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
 	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
 
-	// Requests — submission, listing, and detail with workflow graph.
-	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, strings.TrimRight(d.AgentURL, "/"))
+	// Requests — submission, listing, and detail with the workflow graph.
+	// The intake planner (agent service) turns a request into a department
+	// workflow; the client trims the URL and falls back when unavailable.
+	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, d.AgentURL)
 	orgGroup.POST("/:orgId/requests", reqh.CreateRequest)
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)

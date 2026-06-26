@@ -16,9 +16,9 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/m
 
 | # | Feature (vertical slice) | DB | BE | AG | FE | Link | Overall |
 |---|---|----|----|----|----|----|----|
-| F0 | App shell & navigation | – | – | – | 🟡 | – | 🟡 |
-| F1 | Submit & track a request | 🟡 | 🟡 | – | 🟡 | 🟡 | 🟡 |
-| F2 | Auto-planned workflow graph | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 |
+| F0 | App shell & navigation | – | – | – | ✅ | – | ✅ |
+| F1 | Submit & track a request | ✅ | ✅ | – | ✅ | ✅ | ✅ |
+| F2 | Auto-planned workflow graph | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | F3 | Agents do the work (status progression) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | F4 | Live canvas (real-time SSE) | – | ⬜ | – | ⬜ | ⬜ | ⬜ |
 | F5 | Cross-department dependencies | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
@@ -129,6 +129,75 @@ the rest layer on.
 - **BE:** on org creation seed departments(teams)+agents+policies+approver; demo-seed path: one org + approver login + a completed sample request + audit history. (BE-10)
 - **Link:** runs inside org-create + a boot/seed path.
 - **Done-check:** a fresh org has departments/agents/policies; with the demo seed, Home/Reports/Agents are populated before any new request runs.
+
+---
+
+## Dependencies & optimal sequencing
+
+What must come before what, so we know what can run in parallel and what is strictly sequential.
+
+### Dependency map
+
+`A → B` = A must be **done** before B's done-check can pass. *(soft)* = nicer-with but can be
+developed concurrently and integrated.
+
+| Feature | Must come after | Nicer-with (soft) | Can start |
+|---|---|---|---|
+| F0 shell | — | — | ✅ done |
+| F1 request spine | F0 | — | ✅ done |
+| F2 workflow graph | F1 | — | **now** |
+| F3 agents run | F2 | — | after F2 |
+| F4 live SSE | F3 | — | plumbing can start mid-F3; done-check after F3 |
+| F5 cross-deps | F3 | F4 *(to see unblock live)* | after F3 |
+| F6 audit trail | F3 | — | after F3 |
+| F7 approval | F3 | F4 | after F3 |
+| F8 execution + report | F7 (and F3) | — | after F7 |
+| F9 roster/policies/integrations | F0 | F3 *(live status)*, F10 *(policy data)* | read-views after F0; finalize after F3 |
+| F10 seeding | agents/policies tables (created in F2/F3) | F1–F8 *(for the demo request)* | basic seed early; full demo seed last |
+
+```
+F0 ✅ ─▶ F1 ✅ ─▶ F2 ─▶ F3 ─┬─▶ F4
+                            ├─▶ F5     (after F4 for live unblock)
+                            ├─▶ F6
+                            └─▶ F7 ─▶ F8
+F0 ─────────────────▶ F9   (read-views early; live status needs F3)
+(agents/policies tables) ─▶ F10-basic ;  F1..F8 ─▶ F10-demo
+```
+
+**Critical path:** `F0 → F1 → F2 → F3 → F7 → F8`. That chain is the floor on wall-clock time;
+everything else (F4, F5, F6, F9, F10) overlaps alongside it.
+
+### Optimal plan (wave by wave)
+
+F0 and F1 are done, so we are entering Wave A. **Tip that unlocks parallelism:** front-load the
+schema — create *all* remaining tables (`workflow_nodes`/`edges`, `agent_tasks`,
+`node_dependencies`, `audit_events`, `agents`, `department_policies`) in one early migration at the
+start of F2. That single DB step lets F9 and F10-basic proceed in parallel instead of waiting.
+
+- **Wave A — now.**
+  - *Critical track:* **F2** (the graph — nothing downstream can start until it lands).
+  - *Parallel (spare hands):* front-load the schema migration; scaffold **F9** read-views (Agents /
+    Policies / Integrations) against seeded/stub data; start **F10-basic** (seed
+    departments/agents/policies on org create).
+- **Wave B — after F2.**
+  - *Critical track:* **F3** (the orchestration run loop).
+  - *Parallel:* finish **F9** (wire live status once F3 lands); finish **F10-basic**.
+- **Wave C — after F3 (the fan-out: up to 4 parallel tracks).**
+  - **F4** (live SSE), **F5** (cross-deps), **F6** (audit), **F7** (approval) are independent
+    concerns built on F3's loop. Land **F4 first** so F5 and F7 get live visuals; integrate the rest
+    as they finish.
+- **Wave D — after F7.**
+  - **F8** (execution + final report). Then **F10-demo** (the demo org with a completed sample
+    request + audit) — it needs the whole pipeline, so it goes last.
+
+So after F0/F1, the remaining minimum is **4 waves** (A→B→C→D) versus 9 if done strictly one at a
+time — the win comes from fanning out F4/F5/F6/F7 in Wave C and overlapping F9/F10 into A/B.
+
+### If working solo / one track at a time
+
+Strict sequential order that respects every dependency and keeps each step demoable:
+**F2 → F3 → F4 → F6 → F5 → F7 → F8 → F9 → F10.** (F4 before F5/F7 so they're live; F6 early so the
+audit trail exists as soon as agents run; F9/F10 last as polish + demo dressing.)
 
 ---
 
