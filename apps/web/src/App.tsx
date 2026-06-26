@@ -224,7 +224,7 @@ function Shell() {
       {section === "policies" && <PoliciesView />}
       {section === "integrations" && <IntegrationsView />}
       {section === "teams" && <OrgView />}
-      {section === "settings" && <SettingsView scopedProjectId={null} />}
+      {section === "settings" && <SettingsView />}
 
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
