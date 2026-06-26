@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
 
+    # DeepSeek — OpenAI-compatible. `deepseek-v4-flash` is fast + cheap and
+    # follows JSON well; the agents use it for real per-request reasoning.
+    deepseek_api_key: str | None = Field(default=None, alias="DEEPSEEK_API_KEY")
+    deepseek_base_url: str = Field(default="https://api.deepseek.com", alias="DEEPSEEK_BASE_URL")
+    deepseek_model: str = Field(default="deepseek-v4-flash", alias="DEEPSEEK_MODEL")
+
     default_model: str = Field(default="claude-opus-4-7", alias="AGENT_DEFAULT_MODEL")
 
     # Extractor stack:
