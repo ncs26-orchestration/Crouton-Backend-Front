@@ -18,7 +18,7 @@ aligned with the MVP goal.
 | `FRONTEND-GUIDE.md` | React patterns, component structure, design system rules. |
 | `AGENT-GUIDE.md` | Python agent service patterns, department agent logic. |
 | `skills/` | Vendored engineering + design skills (frontend / backend / agent). Read the relevant `SKILL.md` before working. See `skills/README.md`. |
-| `build-feature.md` | Agent-agnostic procedure for shipping one PRD feature end-to-end. Invokable in Claude as `/build-feature <id>` (`.claude/commands/build-feature.md`). |
+| `build-feature.md` | Agent-agnostic procedure for shipping one PRD feature end-to-end. Invokable as `/build-feature <id>` in Claude (`.claude/commands/`) and OpenCode (`.opencode/command/`). |
 
 ## Work split (PRDs)
 
