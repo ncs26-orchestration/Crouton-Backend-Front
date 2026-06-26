@@ -247,8 +247,11 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
   const StatusIcon = config.icon;
 
   // Tasks load lazily per node and keep polling while the node is mid-flight.
+  // status is part of the key so the panel refetches once the node flips to
+  // completed (tasks are written at that moment) instead of holding the empty
+  // in-progress result.
   const tasksQuery = useQuery({
-    queryKey: ["node", requestId, node.id],
+    queryKey: ["node", requestId, node.id, node.status],
     queryFn: () => api.getNode(requestId, node.id),
     refetchInterval: node.status === "in_progress" ? 1500 : false,
   });
