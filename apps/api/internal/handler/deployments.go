@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 
-	"github.com/Noussour/aup/apps/api/internal/engine/camunda7"
-	"github.com/Noussour/aup/apps/api/internal/repo"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/camunda7"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
 // DeploymentsHandler proxies the subset of Camunda 7 REST that the

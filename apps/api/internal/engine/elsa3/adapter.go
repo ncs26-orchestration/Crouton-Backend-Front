@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Noussour/aup/apps/api/internal/engine"
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // Adapter is the engine.Adapter for Elsa 3. Compile + Deploy are

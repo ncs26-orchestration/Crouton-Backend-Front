@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Noussour/aup/apps/api/internal/auth"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/auth"
 	"github.com/labstack/echo/v4"
 )
 

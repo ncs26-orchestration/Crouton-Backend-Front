@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Noussour/aup/apps/api/internal/config"
-	apihttp "github.com/Noussour/aup/apps/api/internal/http"
-	"github.com/Noussour/aup/apps/api/internal/repo"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/config"
+	apihttp "github.com/ncs26-orchestration/solution/apps/api/internal/http"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
 func main() {

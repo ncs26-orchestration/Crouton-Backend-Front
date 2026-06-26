@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Noussour/aup/apps/api/internal/engine/camunda7"
-	"github.com/Noussour/aup/apps/api/internal/ir"
-	"github.com/Noussour/aup/apps/api/internal/repo"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/camunda7"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
 // Discovery handles the sync flow: given an engine connection, pull

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Noussour/aup/apps/api/internal/compiler/bpmn"
-	"github.com/Noussour/aup/apps/api/internal/engine"
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/compiler/bpmn"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // Adapter is the engine.Adapter implementation for Camunda 7. It

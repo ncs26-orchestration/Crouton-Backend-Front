@@ -15,7 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // Profile is the minimal subset of the Camunda 7 engine capability

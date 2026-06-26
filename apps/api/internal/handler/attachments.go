@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 
-	"github.com/Noussour/aup/apps/api/internal/repo"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
 // AttachmentsHandler owns POST /chats/:id/attachments. It accepts a

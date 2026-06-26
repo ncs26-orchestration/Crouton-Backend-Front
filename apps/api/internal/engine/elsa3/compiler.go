@@ -30,7 +30,7 @@ import (
 	"maps"
 	"sort"
 
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // Compile takes a lowered ExecutableIR and returns Elsa 3

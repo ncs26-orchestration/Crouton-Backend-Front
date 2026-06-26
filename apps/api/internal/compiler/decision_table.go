@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // DecisionTable is a view over one exclusive gateway's outgoing

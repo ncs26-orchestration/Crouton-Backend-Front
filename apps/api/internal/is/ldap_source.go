@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Noussour/aup/apps/api/internal/engine"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine"
 )
 
 // LDAPSource is the typed stub for an LDAP / Active Directory

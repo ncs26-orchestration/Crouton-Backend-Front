@@ -8,9 +8,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/Noussour/aup/apps/api/internal/compiler"
-	"github.com/Noussour/aup/apps/api/internal/engine"
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/compiler"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // CompileHandler owns the validator and the adapter registry. The

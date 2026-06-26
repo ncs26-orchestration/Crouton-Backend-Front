@@ -3,7 +3,7 @@ package bpmn
 import (
 	"sort"
 
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // Standard Camunda Modeler node sizes (px). Keeping these fixed means

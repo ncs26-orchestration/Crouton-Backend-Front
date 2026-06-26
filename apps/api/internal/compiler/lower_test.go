@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Noussour/aup/apps/api/internal/compiler"
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/compiler"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 func TestLower_ResolvesActorIsRefIntoBinding(t *testing.T) {

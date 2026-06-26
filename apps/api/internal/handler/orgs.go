@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/Noussour/aup/apps/api/internal/middleware"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"

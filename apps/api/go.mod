@@ -1,4 +1,4 @@
-module github.com/Noussour/aup/apps/api
+module github.com/ncs26-orchestration/solution/apps/api
 
 go 1.25
 

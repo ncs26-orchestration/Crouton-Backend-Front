@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Noussour/aup/apps/api/internal/is"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/is"
 )
 
 // TestRegistry verifies the lookup + listing behaviour. This is the

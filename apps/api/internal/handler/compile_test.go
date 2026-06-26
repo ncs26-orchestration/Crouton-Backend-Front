@@ -13,9 +13,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/Noussour/aup/apps/api/internal/engine"
-	"github.com/Noussour/aup/apps/api/internal/engine/camunda7"
-	"github.com/Noussour/aup/apps/api/internal/handler"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/camunda7"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/handler"
 )
 
 func loadExample(t *testing.T, name string) []byte {

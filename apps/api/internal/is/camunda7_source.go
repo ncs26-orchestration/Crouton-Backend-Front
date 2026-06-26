@@ -3,8 +3,8 @@ package is
 import (
 	"context"
 
-	"github.com/Noussour/aup/apps/api/internal/engine"
-	"github.com/Noussour/aup/apps/api/internal/engine/camunda7"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/camunda7"
 )
 
 // Camunda7Source exposes a running Camunda 7 engine as an identity

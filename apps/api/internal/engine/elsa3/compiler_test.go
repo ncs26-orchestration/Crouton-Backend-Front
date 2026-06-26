@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Noussour/aup/apps/api/internal/engine/elsa3"
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/elsa3"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 var update = flag.Bool("update", false, "rewrite golden Elsa JSON files from current compiler output")

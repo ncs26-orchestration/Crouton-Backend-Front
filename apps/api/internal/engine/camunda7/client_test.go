@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/Noussour/aup/apps/api/internal/engine/camunda7"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/camunda7"
 )
 
 // newMockEngine spins up an httptest server that responds with canned

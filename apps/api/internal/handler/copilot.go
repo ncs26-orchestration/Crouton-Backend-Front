@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 
-	"github.com/Noussour/aup/apps/api/internal/ir"
-	"github.com/Noussour/aup/apps/api/internal/repo"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
 // CopilotHandler proxies Ask/Clarify/Apply requests to the agent

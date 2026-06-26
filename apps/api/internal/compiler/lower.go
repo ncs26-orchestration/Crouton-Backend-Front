@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // LoweringSource is the diagnostic `ir_ref` prefix for issues that

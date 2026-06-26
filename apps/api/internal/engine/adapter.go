@@ -20,7 +20,7 @@ package engine
 import (
 	"context"
 
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // Adapter is the one shape every engine backend implements.

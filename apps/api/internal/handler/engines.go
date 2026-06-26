@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 
-	"github.com/Noussour/aup/apps/api/internal/ir"
-	"github.com/Noussour/aup/apps/api/internal/repo"
-	"github.com/Noussour/aup/apps/api/internal/service"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/service"
 )
 
 // EnginesHandler groups the endpoints that manage engine connections

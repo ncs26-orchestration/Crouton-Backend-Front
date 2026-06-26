@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Noussour/aup/apps/api/internal/compiler/bpmn"
-	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/compiler/bpmn"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/ir"
 )
 
 // -update regenerates the golden .bpmn.xml files. Use it when the
