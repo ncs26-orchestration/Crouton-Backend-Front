@@ -25,14 +25,14 @@ import (
 //
 // Orchestration shape:
 //
-//   client ──POST /extract──▶ Go API
-//                               │
-//                               │  1. Read tenant IS projection from Postgres
-//                               │  2. Forward {text, is_registry} to agent
-//                               │  3. Cross-ref validate returned IR
-//                               │
-//                               ▼
-//                             Go API ──────▶ client { ir, diagnostics, error? }
+//	client ──POST /extract──▶ Go API
+//	                            │
+//	                            │  1. Read tenant IS projection from Postgres
+//	                            │  2. Forward {text, is_registry} to agent
+//	                            │  3. Cross-ref validate returned IR
+//	                            │
+//	                            ▼
+//	                          Go API ──────▶ client { ir, diagnostics, error? }
 type ExtractHandler struct {
 	logger    *slog.Logger
 	engines   *repo.EngineRepo

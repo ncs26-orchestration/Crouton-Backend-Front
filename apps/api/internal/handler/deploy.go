@@ -46,23 +46,23 @@ func NewDeployHandler(logger *slog.Logger, pg *pgxpool.Pool) (*DeployHandler, er
 }
 
 type deployRequest struct {
-	TenantID        string          `json:"tenant_id,omitempty"`
-	EngineID        string          `json:"engine_id,omitempty"`
-	IR              json.RawMessage `json:"ir"`
-	Start           bool            `json:"start,omitempty"`
-	StartVariables  map[string]any  `json:"start_variables,omitempty"`
+	TenantID       string          `json:"tenant_id,omitempty"`
+	EngineID       string          `json:"engine_id,omitempty"`
+	IR             json.RawMessage `json:"ir"`
+	Start          bool            `json:"start,omitempty"`
+	StartVariables map[string]any  `json:"start_variables,omitempty"`
 }
 
 type deployResponse struct {
-	EngineID             string          `json:"engine_id"`
-	DeploymentID         string          `json:"deployment_id"`
-	ProcessDefinitionID  string          `json:"process_definition_id,omitempty"`
-	ProcessKey           string          `json:"process_key,omitempty"`
-	CockpitURL           string          `json:"cockpit_url,omitempty"`
-	TasklistURL          string          `json:"tasklist_url,omitempty"`
-	InstanceID           string          `json:"instance_id,omitempty"`
-	ArtifactBytes        int             `json:"artifact_bytes"`
-	Diagnostics          []ir.Diagnostic `json:"diagnostics,omitempty"`
+	EngineID            string          `json:"engine_id"`
+	DeploymentID        string          `json:"deployment_id"`
+	ProcessDefinitionID string          `json:"process_definition_id,omitempty"`
+	ProcessKey          string          `json:"process_key,omitempty"`
+	CockpitURL          string          `json:"cockpit_url,omitempty"`
+	TasklistURL         string          `json:"tasklist_url,omitempty"`
+	InstanceID          string          `json:"instance_id,omitempty"`
+	ArtifactBytes       int             `json:"artifact_bytes"`
+	Diagnostics         []ir.Diagnostic `json:"diagnostics,omitempty"`
 }
 
 var slugPattern = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)

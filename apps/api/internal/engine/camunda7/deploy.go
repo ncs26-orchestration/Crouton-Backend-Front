@@ -14,9 +14,9 @@ import (
 // DeploymentResult is what Camunda's REST returns on a successful
 // deployment — the subset AUP cares about.
 type DeploymentResult struct {
-	ID                          string                             `json:"id"`
-	Name                        string                             `json:"name"`
-	DeployedProcessDefinitions  map[string]DeployedProcessDefinition `json:"deployedProcessDefinitions"`
+	ID                         string                               `json:"id"`
+	Name                       string                               `json:"name"`
+	DeployedProcessDefinitions map[string]DeployedProcessDefinition `json:"deployedProcessDefinitions"`
 }
 
 type DeployedProcessDefinition struct {

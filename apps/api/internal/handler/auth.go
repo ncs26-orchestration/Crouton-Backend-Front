@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ncs26-orchestration/solution/apps/api/internal/auth"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/auth"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -128,9 +128,9 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	var (
-		userID   int64
-		name     string
-		hashStr  string
+		userID  int64
+		name    string
+		hashStr string
 	)
 	err := h.db.QueryRow(ctx,
 		`SELECT id, name, password_hash FROM users WHERE email = $1 LIMIT 1`, body.Email,

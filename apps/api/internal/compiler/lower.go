@@ -94,9 +94,9 @@ func resolveActors(wf *ir.ExecutableIR, reg *ir.ISRegistry) []ir.Diagnostic {
 				// No hint at all — let the BPMN compiler render a
 				// human stub and surface this in Suggestions.
 				diags = append(diags, ir.Diagnostic{
-					Severity: "warning",
-					IRRef:    fmt.Sprintf("%s/tasks/%d/actor_ref", LoweringSource, i),
-					Message:  fmt.Sprintf("user task %q has no assignee and its actor %q has no is_ref — task will render as a human stub", t.ID, a.ID),
+					Severity:   "warning",
+					IRRef:      fmt.Sprintf("%s/tasks/%d/actor_ref", LoweringSource, i),
+					Message:    fmt.Sprintf("user task %q has no assignee and its actor %q has no is_ref — task will render as a human stub", t.ID, a.ID),
 					Suggestion: "Map the actor to a real user or group in the IS Registry.",
 				})
 				continue
@@ -139,9 +139,9 @@ func resolveActors(wf *ir.ExecutableIR, reg *ir.ISRegistry) []ir.Diagnostic {
 			}
 			if t.Binding.AssigneeUserID != "" && !userIDs[t.Binding.AssigneeUserID] {
 				diags = append(diags, ir.Diagnostic{
-					Severity: "warning",
-					IRRef:    fmt.Sprintf("%s/tasks/%d/binding/assignee_user_id", LoweringSource, i),
-					Message:  fmt.Sprintf("assignee_user_id %q is not in the IS Registry projection", t.Binding.AssigneeUserID),
+					Severity:   "warning",
+					IRRef:      fmt.Sprintf("%s/tasks/%d/binding/assignee_user_id", LoweringSource, i),
+					Message:    fmt.Sprintf("assignee_user_id %q is not in the IS Registry projection", t.Binding.AssigneeUserID),
 					Suggestion: "Run a fresh engine sync, or pick an existing user.",
 				})
 			}

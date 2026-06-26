@@ -43,11 +43,11 @@ type compileRequest struct {
 }
 
 type compileResponse struct {
-	Artifact       string                     `json:"artifact"`
-	Mime           string                     `json:"mime,omitempty"`
-	Diagnostics    []ir.Diagnostic            `json:"diagnostics"`
-	Target         string                     `json:"target,omitempty"`
-	DecisionTables []compiler.DecisionTable   `json:"decision_tables,omitempty"`
+	Artifact       string                   `json:"artifact"`
+	Mime           string                   `json:"mime,omitempty"`
+	Diagnostics    []ir.Diagnostic          `json:"diagnostics"`
+	Target         string                   `json:"target,omitempty"`
+	DecisionTables []compiler.DecisionTable `json:"decision_tables,omitempty"`
 }
 
 type compileError struct {

@@ -11,12 +11,12 @@
 //
 // v0.1 ships two implementations:
 //
-//   camunda7_source.go — wraps the Camunda 7 engine adapter's
-//                        existing Discover method, so a Camunda
-//                        engine doubles as an identity source.
-//   ldap_source.go     — a typed stub. The config is real; the
-//                        Discover call returns ErrNotImplemented
-//                        until we ship an LDAP search client.
+//	camunda7_source.go — wraps the Camunda 7 engine adapter's
+//	                     existing Discover method, so a Camunda
+//	                     engine doubles as an identity source.
+//	ldap_source.go     — a typed stub. The config is real; the
+//	                     Discover call returns ErrNotImplemented
+//	                     until we ship an LDAP search client.
 //
 // Future implementations drop in against this same interface — an
 // OIDC/OpenID Connect source, a SCIM source, a SharePoint /

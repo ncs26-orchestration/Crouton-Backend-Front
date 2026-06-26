@@ -32,8 +32,8 @@ type Validator struct {
 // carries enough context for the UI to point the user at the offending
 // IR element.
 type Diagnostic struct {
-	Severity   string `json:"severity"`              // "error" | "warning"
-	IRRef      string `json:"ir_ref,omitempty"`       // JSON pointer-ish path into the IR
+	Severity   string `json:"severity"`         // "error" | "warning"
+	IRRef      string `json:"ir_ref,omitempty"` // JSON pointer-ish path into the IR
 	Message    string `json:"message"`
 	Suggestion string `json:"suggestion,omitempty"`
 }

@@ -50,15 +50,15 @@ func NewAttachmentsHandler(logger *slog.Logger, pg *pgxpool.Pool, agentURL strin
 }
 
 type attachmentResponse struct {
-	ID            string    `json:"id"`
-	ChatID        string    `json:"chat_id"`
-	Kind          string    `json:"kind"`
-	Filename      string    `json:"filename"`
-	Mime          string    `json:"mime"`
-	SizeBytes     int64     `json:"size_bytes"`
-	TextPreview   string    `json:"text_preview"`
-	TextFull      bool      `json:"text_full"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	ChatID      string    `json:"chat_id"`
+	Kind        string    `json:"kind"`
+	Filename    string    `json:"filename"`
+	Mime        string    `json:"mime"`
+	SizeBytes   int64     `json:"size_bytes"`
+	TextPreview string    `json:"text_preview"`
+	TextFull    bool      `json:"text_full"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // Upload handles POST /chats/:id/attachments. Multipart form:

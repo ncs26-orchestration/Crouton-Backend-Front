@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ncs26-orchestration/solution/apps/api/internal/auth"
 	"github.com/labstack/echo/v4"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/auth"
 )
 
 const claimsKey = "user"

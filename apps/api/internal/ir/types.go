@@ -8,14 +8,14 @@ package ir
 // AUP; every compiler target (BPMN, Elsa, n8n, DMN) emits a derived
 // artifact from an instance of this type.
 type Workflow struct {
-	Version  string   `json:"version"`
-	Metadata Metadata `json:"metadata"`
-	Actors   []Actor  `json:"actors"`
-	Tasks    []Task   `json:"tasks"`
+	Version  string    `json:"version"`
+	Metadata Metadata  `json:"metadata"`
+	Actors   []Actor   `json:"actors"`
+	Tasks    []Task    `json:"tasks"`
 	Gateways []Gateway `json:"gateways,omitempty"`
-	Events   []Event  `json:"events"`
-	Flows    []Flow   `json:"flows"`
-	Forms    []Form   `json:"forms,omitempty"`
+	Events   []Event   `json:"events"`
+	Flows    []Flow    `json:"flows"`
+	Forms    []Form    `json:"forms,omitempty"`
 }
 
 type Metadata struct {

@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
 )
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9\-]*[a-z0-9]$`)

@@ -60,8 +60,8 @@ func TestCompileBPMN_BareIR_OK(t *testing.T) {
 		t.Fatalf("status: want 200, got %d, body=%s", rec.Code, rec.Body.String())
 	}
 	var resp struct {
-		Artifact    string          `json:"artifact"`
-		Diagnostics []any           `json:"diagnostics"`
+		Artifact    string `json:"artifact"`
+		Diagnostics []any  `json:"diagnostics"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)

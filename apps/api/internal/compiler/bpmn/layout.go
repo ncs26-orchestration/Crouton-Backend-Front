@@ -10,15 +10,15 @@ import (
 // shapes in Cockpit look identical to what the Modeler would draw by
 // hand, and gives our layout a predictable bounding box.
 const (
-	eventSize    = 36  // start/end events render as 36x36 circles
-	gatewayW     = 50  // exclusive/parallel render as 50x50 diamonds
-	gatewayH     = 50
-	taskW        = 100 // user/service/script render as 100x80 rounded rects
-	taskH        = 80
-	rankDx       = 180 // horizontal spacing between ranks (left→right flow)
-	rankDy       = 110 // vertical spacing between siblings in the same rank
-	marginX      = 40
-	marginY      = 40
+	eventSize = 36 // start/end events render as 36x36 circles
+	gatewayW  = 50 // exclusive/parallel render as 50x50 diamonds
+	gatewayH  = 50
+	taskW     = 100 // user/service/script render as 100x80 rounded rects
+	taskH     = 80
+	rankDx    = 180 // horizontal spacing between ranks (left→right flow)
+	rankDy    = 110 // vertical spacing between siblings in the same rank
+	marginX   = 40
+	marginY   = 40
 )
 
 // shapeBox holds the pixel bounds of one emitted BPMNShape.

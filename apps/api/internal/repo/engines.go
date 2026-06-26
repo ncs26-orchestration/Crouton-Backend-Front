@@ -231,13 +231,13 @@ func (r *EngineRepo) ReplaceProjection(
 // systems. Shaped for direct conversion into ir.ISRegistry at the
 // service layer.
 type TenantProjection struct {
-	Tenant          string
+	Tenant            string
 	EngineConnections []EngineConnection
-	Users           []ProjectedUser
-	Groups          []ProjectedGroup
-	Memberships     []ProjectedGroupMember
-	DeployedForms   []ProjectedForm
-	DeclaredSystems []DeclaredSystem
+	Users             []ProjectedUser
+	Groups            []ProjectedGroup
+	Memberships       []ProjectedGroupMember
+	DeployedForms     []ProjectedForm
+	DeclaredSystems   []DeclaredSystem
 }
 
 func (r *EngineRepo) ReadTenantProjection(ctx context.Context, tenantID string) (*TenantProjection, error) {

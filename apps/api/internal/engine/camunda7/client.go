@@ -17,10 +17,10 @@ import (
 // Client is safe to share across goroutines. Endpoint should be the
 // root of the Camunda REST API — e.g. "http://camunda7:8080/engine-rest".
 type Client struct {
-	Endpoint  string
-	Username  string
-	Password  string
-	HTTP      *http.Client
+	Endpoint string
+	Username string
+	Password string
+	HTTP     *http.Client
 }
 
 // New builds a client with a sane default HTTP timeout. Pass your own
@@ -143,9 +143,9 @@ type Deployment struct {
 // DeploymentResource mirrors DeploymentResourceDto. AUP looks at the
 // name to identify deployed forms (resources ending in .form).
 type DeploymentResource struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	DeploymentID   string `json:"deploymentId"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	DeploymentID string `json:"deploymentId"`
 }
 
 // ListDeployments returns all deployments visible to the engine.

@@ -4,13 +4,13 @@
 //
 // An adapter encapsulates three things per engine kind:
 //
-//   1. how to turn an ExecutableIR into the engine's native artifact
-//      (Compile — XML for Camunda, JSON for Elsa, ...);
+//  1. how to turn an ExecutableIR into the engine's native artifact
+//     (Compile — XML for Camunda, JSON for Elsa, ...);
 //
-//   2. how to discover identities and existing deployments on a
-//      running instance (Discover);
+//  2. how to discover identities and existing deployments on a
+//     running instance (Discover);
 //
-//   3. how to hand that artifact to the live engine (Deploy).
+//  3. how to hand that artifact to the live engine (Deploy).
 //
 // Discover and Deploy are optional per adapter — some engines (Elsa
 // in the 48h scope) ship with Compile only; the registry exposes

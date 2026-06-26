@@ -20,10 +20,10 @@ import (
 // "category == 'travel'", "approved == true") without building a
 // parser for an LLM-generated syntax we don't fully control.
 type DecisionTable struct {
-	GatewayID string            `json:"gateway_id"`
-	Variables []string          `json:"variables"`
-	Rules     []DecisionRule    `json:"rules"`
-	Evidence  []string          `json:"evidence,omitempty"`
+	GatewayID string         `json:"gateway_id"`
+	Variables []string       `json:"variables"`
+	Rules     []DecisionRule `json:"rules"`
+	Evidence  []string       `json:"evidence,omitempty"`
 }
 
 // DecisionRule is one outgoing branch: a map from variable name to
@@ -31,10 +31,10 @@ type DecisionTable struct {
 // flow points at. Variables missing from the predicate map means
 // "don't care" in DMN parlance — anything goes.
 type DecisionRule struct {
-	FlowID   string            `json:"flow_id"`
-	Target   string            `json:"target"`
+	FlowID     string            `json:"flow_id"`
+	Target     string            `json:"target"`
 	Predicates map[string]string `json:"predicates"` // variable -> human expression
-	IsDefault bool             `json:"is_default"`
+	IsDefault  bool              `json:"is_default"`
 }
 
 // Minimal threshold: consolidation only triggers when a gateway has

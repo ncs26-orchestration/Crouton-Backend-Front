@@ -894,12 +894,12 @@ var deterministicQuestions = []DeterministicQuestion{
 		Options:  []string{"ERP", "CRM", "Accounting", "HRM", "Supply Chain", "None", "Other"},
 	},
 	{
-		Index:       5,
-		ID:          "processes",
-		Text:        "What are your main business processes?",
-		Type:        "multi",
-		Required:    false,
-		Options:     []string{"Order Management", "Invoicing", "Inventory", "Procurement", "HR", "Customer Support", "Finance", "Marketing", "Sales", "Other"},
+		Index:    5,
+		ID:       "processes",
+		Text:     "What are your main business processes?",
+		Type:     "multi",
+		Required: false,
+		Options:  []string{"Order Management", "Invoicing", "Inventory", "Procurement", "HR", "Customer Support", "Finance", "Marketing", "Sales", "Other"},
 	},
 	{
 		Index:    6,
@@ -1148,8 +1148,8 @@ type WorkflowVersionResponse struct {
 	Stage           string          `json:"stage"`
 	IR              json.RawMessage `json:"ir"`
 	Diagnostics     json.RawMessage `json:"diagnostics,omitempty"`
-	SourceMessageID *string        `json:"source_message_id,omitempty"`
-	CreatedAt       time.Time      `json:"created_at"`
+	SourceMessageID *string         `json:"source_message_id,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
 }
 
 func (h *ProjectsHandler) ListWorkflowVersions(c echo.Context) error {

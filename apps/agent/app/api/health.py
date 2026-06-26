@@ -44,7 +44,5 @@ async def readyz() -> ReadyResponse:
         except Exception:
             redis_state = "down"
 
-    status: Literal["ok", "degraded"] = (
-        "ok" if db == "up" and redis_state == "up" else "degraded"
-    )
+    status: Literal["ok", "degraded"] = "ok" if db == "up" and redis_state == "up" else "degraded"
     return {"status": status, "db": db, "redis": redis_state}

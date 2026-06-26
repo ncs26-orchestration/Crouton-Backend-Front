@@ -10,11 +10,11 @@ import (
 
 func TestLower_ResolvesActorIsRefIntoBinding(t *testing.T) {
 	proc := &ir.ProcessIR{
-		Version: "0.1",
+		Version:  "0.1",
 		Metadata: ir.Metadata{Name: "n"},
 		Actors: []ir.Actor{
 			{ID: "mary", Kind: "person", Name: "Mary", IsRef: &ir.ActorRef{UserID: "mary"}},
-			{ID: "acc",  Kind: "group",  Name: "Accounting", IsRef: &ir.ActorRef{GroupID: "accounting"}},
+			{ID: "acc", Kind: "group", Name: "Accounting", IsRef: &ir.ActorRef{GroupID: "accounting"}},
 		},
 		Tasks: []ir.Task{
 			{ID: "t1", Type: "user", Name: "Review", ActorRef: "mary"},
@@ -56,7 +56,7 @@ func TestLower_ResolvesActorIsRefIntoBinding(t *testing.T) {
 
 func TestLower_SynthesizesDefaultBranchForExclusiveGateway(t *testing.T) {
 	proc := &ir.ProcessIR{
-		Version: "0.1",
+		Version:  "0.1",
 		Metadata: ir.Metadata{Name: "n"},
 		Tasks:    []ir.Task{{ID: "t1", Type: "user", Name: "A"}, {ID: "t2", Type: "user", Name: "B"}},
 		Gateways: []ir.Gateway{{ID: "g1", Type: "exclusive"}},
@@ -111,7 +111,7 @@ func TestLower_SynthesizesDefaultBranchForExclusiveGateway(t *testing.T) {
 
 func TestLower_LeavesGatewayWithExistingDefaultAlone(t *testing.T) {
 	proc := &ir.ProcessIR{
-		Version: "0.1",
+		Version:  "0.1",
 		Metadata: ir.Metadata{Name: "n"},
 		Gateways: []ir.Gateway{{ID: "g1", Type: "exclusive"}},
 		Events:   []ir.Event{{ID: "s", Type: "start"}, {ID: "e1", Type: "end"}, {ID: "e2", Type: "end"}},
@@ -137,7 +137,7 @@ func TestLower_LeavesGatewayWithExistingDefaultAlone(t *testing.T) {
 
 func TestLower_NormalizesMissingConditionLanguage(t *testing.T) {
 	proc := &ir.ProcessIR{
-		Version: "0.1",
+		Version:  "0.1",
 		Metadata: ir.Metadata{Name: "n"},
 		Events:   []ir.Event{{ID: "s", Type: "start"}, {ID: "e", Type: "end"}},
 		Flows: []ir.Flow{
@@ -157,7 +157,7 @@ func TestLower_PropagatesConfidence(t *testing.T) {
 	tc := 0.9
 	bc := 0.5
 	proc := &ir.ProcessIR{
-		Version: "0.1",
+		Version:  "0.1",
 		Metadata: ir.Metadata{Name: "n"},
 		Tasks: []ir.Task{
 			{ID: "t1", Type: "user", Name: "A", Confidence: &tc, Binding: &ir.Binding{Confidence: &bc}},
@@ -183,7 +183,7 @@ func TestLower_PropagatesConfidence(t *testing.T) {
 
 func TestLower_FlagsActorWithoutIsRef(t *testing.T) {
 	proc := &ir.ProcessIR{
-		Version: "0.1",
+		Version:  "0.1",
 		Metadata: ir.Metadata{Name: "n"},
 		Actors:   []ir.Actor{{ID: "unknown", Kind: "role", Name: "mystery"}},
 		Tasks:    []ir.Task{{ID: "t1", Type: "user", Name: "A", ActorRef: "unknown"}},
