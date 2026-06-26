@@ -1,16 +1,15 @@
 import { motion } from "framer-motion";
-import { Building2, HelpCircle, Home, Inbox, Moon, Settings, Sun, Workflow } from "lucide-react";
+import { BarChart3, Bot, FileText, HelpCircle, Home, Inbox, ListTodo, Moon, Plug, ScrollText, Settings, Sun, Users, Workflow } from "lucide-react";
 
 import { BrandMark } from "./Brand";
 import { useTheme } from "../lib/theme";
 import { useAuth } from "../contexts/AuthContext";
 
-// ShellRail — the narrow icon column on the far left. Keeps the
-// operator-level actions (home, inbox, workflows, agents, settings, help,
-// theme, command palette hook-in slot) always reachable regardless of
-// whether a chat is open.
+// ShellRail — the narrow icon column on the far left. Maps to the
+// MVP specification: main sections + TEAMS group at the bottom.
+// "help" is a transient overlay triggered from any section.
 
-export type ShellSection = "home" | "inbox" | "workflows" | "agents" | "settings" | "help";
+export type ShellSection = "home" | "my-work" | "requests" | "workflows" | "agents" | "reports" | "policies" | "integrations" | "teams" | "settings" | "help";
 
 interface Props {
   active: ShellSection;
@@ -23,12 +22,21 @@ interface Props {
 }
 
 const ITEMS: { id: ShellSection; icon: typeof Home; label: string; hint?: string }[] = [
-  { id: "home",      icon: Home,       label: "Projects",  hint: "Home" },
-  { id: "inbox",     icon: Inbox,      label: "My Work",   hint: "Tasks assigned to you" },
-  { id: "workflows", icon: Workflow,   label: "Workflows", hint: "Workflow builder" },
-  { id: "agents",    icon: Building2,  label: "Organization", hint: "Teams & members" },
-  { id: "settings",  icon: Settings,   label: "Settings",  hint: "Deploy targets + theme" },
-  { id: "help",      icon: HelpCircle, label: "Help",      hint: "Shortcuts" },
+  { id: "home",        icon: Home,       label: "Home",         hint: "Dashboard" },
+  { id: "my-work",     icon: Inbox,      label: "My Work",      hint: "Tasks & approvals" },
+  { id: "requests",    icon: ListTodo,   label: "Requests",     hint: "All requests" },
+  { id: "workflows",   icon: Workflow,   label: "Workflows",    hint: "Workflow canvas" },
+  { id: "agents",      icon: Bot,        label: "Agents",       hint: "Agent roster" },
+  { id: "reports",     icon: BarChart3,  label: "Reports",      hint: "Audit trail" },
+  { id: "policies",    icon: ScrollText, label: "Policies",     hint: "Department policies" },
+  { id: "integrations",icon: Plug,       label: "Integrations", hint: "Connected systems" },
+];
+
+const TEAMS: { id: string; name: string; color: string }[] = [
+  { id: "finance", name: "Finance Team",  color: "#533afd" },
+  { id: "it",      name: "IT Team",       color: "#15be53" },
+  { id: "hr",      name: "HR Team",       color: "#f59e0b" },
+  { id: "ops",     name: "Operations Team", color: "#ea2261" },
 ];
 
 export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props) {
@@ -93,6 +101,33 @@ export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props
           );
         })}
       </ul>
+
+      {/* TEAMS section divider */}
+      <div className="mt-3 mb-2 flex flex-col items-center gap-2">
+        <span className="text-[8px] uppercase tracking-[0.2em] text-[var(--color-fg-subtle)] font-medium">
+          Teams
+        </span>
+        <div className="flex flex-col gap-1">
+          {TEAMS.map((team) => {
+            const isTeamActive = active === "teams" || false;
+            return (
+              <div key={team.id} className="relative group">
+                <motion.button
+                  onClick={() => onSelect("teams")}
+                  aria-label={team.name}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.92 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  className="size-9 flex items-center justify-center rounded-lg text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)] transition-colors"
+                >
+                  <span className="size-2 rounded-full" style={{ backgroundColor: team.color }} />
+                </motion.button>
+                <RailTooltip label={team.name} hint="Team" />
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="flex-1" />
 
