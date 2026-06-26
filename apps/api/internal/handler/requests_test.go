@@ -91,3 +91,73 @@ func TestValidateRequestInput(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateApprovalInput(t *testing.T) {
+	longJustification := strings.Repeat("a", maxJustificationLen+1)
+
+	tests := []struct {
+		name              string
+		decision          string
+		justification     string
+		wantJustification string
+		wantErr           string
+	}{
+		{
+			name:              "approve with reason",
+			decision:          "approve",
+			justification:     "Budget and risk are acceptable.",
+			wantJustification: "Budget and risk are acceptable.",
+		},
+		{
+			name:              "reject with reason",
+			decision:          "reject",
+			justification:     "Out of budget this quarter.",
+			wantJustification: "Out of budget this quarter.",
+		},
+		{
+			name:              "justification is trimmed",
+			decision:          "approve",
+			justification:     "  looks good  ",
+			wantJustification: "looks good",
+		},
+		{
+			name:          "invalid decision",
+			decision:      "maybe",
+			justification: "whatever",
+			wantErr:       "decision must be approve or reject",
+		},
+		{
+			name:          "missing justification",
+			decision:      "approve",
+			justification: "",
+			wantErr:       "justification is required",
+		},
+		{
+			name:          "whitespace-only justification",
+			decision:      "reject",
+			justification: "   ",
+			wantErr:       "justification is required",
+		},
+		{
+			name:          "justification too long",
+			decision:      "approve",
+			justification: longJustification,
+			wantErr:       "justification must be at most 2000 characters",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := validateApprovalInput(tt.decision, tt.justification)
+			if gotErr != tt.wantErr {
+				t.Fatalf("errMsg = %q, want %q", gotErr, tt.wantErr)
+			}
+			if tt.wantErr != "" {
+				return
+			}
+			if got != tt.wantJustification {
+				t.Errorf("justification = %q, want %q", got, tt.wantJustification)
+			}
+		})
+	}
+}

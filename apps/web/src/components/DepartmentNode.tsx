@@ -77,11 +77,18 @@ function DepartmentNodeInner({ data, selected }: NodeProps) {
         />
       </div>
 
-      {d.status_text && (
+      {d.status === "blocked" ? (
+        <div className="flex items-center gap-1 mt-0.5">
+          <ShieldAlert size={10} className="text-[var(--color-danger)] shrink-0" />
+          <p className="text-[10px] text-[var(--color-danger)] truncate leading-tight">
+            {d.status_text || "Waiting for dependency"}
+          </p>
+        </div>
+      ) : d.status_text ? (
         <p className="text-[10px] text-[var(--color-fg-muted)] truncate leading-tight mt-0.5">
           {d.status_text}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

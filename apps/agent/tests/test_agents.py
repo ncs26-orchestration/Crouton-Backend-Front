@@ -25,13 +25,20 @@ DEPARTMENTS = [
 ]
 
 
+IT_UPSTREAM = [
+    {"key": "it_assessment", "department": "IT", "summary": "Technically feasible."},
+]
+
+
 async def test_every_department_completes_with_tasks() -> None:
     for agent_type in DEPARTMENTS:
+        upstream = IT_UPSTREAM if agent_type == "finance" else None
         decision = await run_department(
             agent_type=agent_type,
             title="Open a new office in Berlin",
             description="Expand into the EU market",
             priority="high",
+            upstream_context=upstream,
         )
         assert isinstance(decision, Decision)
         assert decision.summary
@@ -39,11 +46,23 @@ async def test_every_department_completes_with_tasks() -> None:
         assert len(decision.tasks) >= 1
         assert all(t.status == "completed" for t in decision.tasks)
         # F3 completes every node; the blocked_on case is F5.
-        assert decision.blocked_on is None
+        if agent_type != "finance":
+            assert decision.blocked_on is None
+        # Finance needs IT output to complete; otherwise it declares blocked_on (F5).
+        if agent_type == "finance":
+            assert decision.blocked_on is None, (
+                "finance should complete with IT upstream; got blocked_on"
+            )
 
 
 async def test_finance_flags_budget() -> None:
-    decision = await run_department("finance", "Procure laptops", "", "medium")
+    decision = await run_department(
+        "finance",
+        "Procure laptops",
+        "",
+        "medium",
+        upstream_context=IT_UPSTREAM,
+    )
     assert any("budget" in f.message.lower() for f in decision.flags)
 
 
@@ -51,7 +70,7 @@ async def test_playbook_matches_go_fallback() -> None:
     # Pins the Python playbook to the Go fallback (apps/api internal/agentclient
     # DefaultDecision). The two are duplicated across runtimes on purpose; these
     # literals and the matching Go test make drift fail loudly on both sides.
-    finance = await run_department("finance", "x", "", "high")
+    finance = await run_department("finance", "x", "", "high", upstream_context=IT_UPSTREAM)
     assert finance.status_text == "Finance review complete — the request is financially viable."
     assert [t.title for t in finance.tasks] == [
         "Assess budget feasibility",
@@ -85,7 +104,9 @@ def test_run_endpoint_routes_by_agent_type() -> None:
                 "description": "",
                 "priority": "high",
             },
-            "upstream_context": [],
+            "upstream_context": [
+                {"key": "it_assessment", "department": "IT", "summary": "Technically feasible."},
+            ],
             "org_context": {},
         },
     )
@@ -95,6 +116,13 @@ def test_run_endpoint_routes_by_agent_type() -> None:
     assert body["blocked_on"] is None
     assert len(body["tasks"]) >= 1
     assert body["tasks"][0]["status"] == "completed"
+
+
+async def test_finance_blocked_on_when_no_it_upstream() -> None:
+    decision = await run_department("finance", "Open a new office in Berlin", "", "high")
+    assert decision.blocked_on is not None
+    assert decision.blocked_on.on_department == "IT"
+    assert "IT security assessment" in decision.blocked_on.reason
 
 
 def test_intake_endpoint_still_returns_plan() -> None:

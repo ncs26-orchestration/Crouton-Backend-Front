@@ -69,11 +69,12 @@ var teams = []teamSpec{
 }
 
 // graphProfile describes how a request's workflow graph should look: which
-// plan-node keys are done, which are mid-flight (with a status line), and a
-// headline progress percent. Everything not listed is left pending.
+// plan-node keys are done, which are mid-flight (with a status line), which are
+// blocked (F5), and headline progress percent. Everything not listed is left pending.
 type graphProfile struct {
 	completed  []string
 	inProgress map[string]string
+	blocked    map[string]string // key → reason for the blocked dependency (F5)
 }
 
 // requestSpec is one seeded request and the shape of its workflow graph.
@@ -104,9 +105,11 @@ var requests = []requestSpec{
 		profile: graphProfile{
 			completed: []string{"intake", "planning"},
 			inProgress: map[string]string{
-				"finance_review": "Validating the 3-year budget and EU tax exposure",
-				"legal_review":   "Reviewing GmbH incorporation and German employment law",
-				"it_assessment":  "Scoping office network and device provisioning",
+				"legal_review":  "Reviewing GmbH incorporation and German employment law",
+				"it_assessment": "Scoping office network and device provisioning",
+			},
+			blocked: map[string]string{
+				"finance_review": "Need the IT security assessment and infrastructure cost estimate before the budget can be finalized.",
 			},
 		},
 	},
@@ -198,10 +201,10 @@ func main() {
 	}
 
 	log.Println("seed complete:")
-	log.Printf("  org      %s (slug %q)", demoOrgName, demoOrgSlug)
-	log.Printf("  users    %d", len(users))
-	log.Printf("  teams    %d", len(teams))
-	log.Printf("  requests %d (%d nodes, %d edges, %d tasks)", len(requests), counts.nodes, counts.edges, counts.tasks)
+	log.Printf("  org          %s (slug %q)", demoOrgName, demoOrgSlug)
+	log.Printf("  users        %d", len(users))
+	log.Printf("  teams        %d", len(teams))
+	log.Printf("  requests     %d (%d nodes, %d edges, %d tasks, %d deps, %d audit events)", len(requests), counts.nodes, counts.edges, counts.tasks, counts.deps, counts.auditEvents)
 	log.Println("  login    founder@acme.test / password  (same password for every @acme.test user)")
 }
 
@@ -232,6 +235,11 @@ func seed(ctx context.Context, pool *pgxpool.Pool) (seedCounts, error) {
 	if err != nil {
 		return seedCounts{}, fmt.Errorf("requests: %w", err)
 	}
+	auditCount, err := seedAuditEvents(ctx, pool, userIDs)
+	if err != nil {
+		return seedCounts{}, fmt.Errorf("audit events: %w", err)
+	}
+	counts.auditEvents = auditCount
 	return counts, nil
 }
 
@@ -302,9 +310,11 @@ func seedTeams(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64
 
 // seedCounts is what a seed run produced, for the summary log.
 type seedCounts struct {
-	nodes int
-	edges int
-	tasks int
+	nodes       int
+	edges       int
+	tasks       int
+	deps        int
+	auditEvents int
 }
 
 func seedRequests(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) (seedCounts, error) {
@@ -315,12 +325,14 @@ func seedRequests(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]in
 	for _, r := range requests {
 		nodes, edges := buildGraph(r, plan, now)
 		tasks := buildTasks(nodes)
-		if err := insertRequestGraph(ctx, pool, r, userIDs[r.requester], nodes, edges, tasks, now); err != nil {
+		deps := buildDeps(r, plan, nodes)
+		if err := insertRequestGraph(ctx, pool, r, userIDs[r.requester], nodes, edges, tasks, deps, now); err != nil {
 			return seedCounts{}, fmt.Errorf("request %q: %w", r.title, err)
 		}
 		counts.nodes += len(nodes)
 		counts.edges += len(edges)
 		counts.tasks += len(tasks)
+		counts.deps += len(deps)
 	}
 	return counts, nil
 }
@@ -406,6 +418,12 @@ func buildGraph(r requestSpec, plan *agentclient.Plan, now time.Time) ([]repo.Wo
 			n.StatusText = r.profile.inProgress[pn.Key]
 			st := started
 			n.StartedAt = &st
+		case r.profile.blocked[pn.Key] != "":
+			n.Status = "blocked"
+			n.ProgressPercent = 50
+			n.StatusText = "Waiting for IT: " + r.profile.blocked[pn.Key]
+			st := started
+			n.StartedAt = &st
 		}
 		nodes = append(nodes, n)
 	}
@@ -428,6 +446,40 @@ func buildGraph(r requestSpec, plan *agentclient.Plan, now time.Time) ([]repo.Wo
 	return nodes, edges
 }
 
+// buildDeps creates node_dependencies rows for blocked nodes in the seed (F5).
+// It maps the dependent node (the blocked one) to its blocking department node.
+func buildDeps(r requestSpec, plan *agentclient.Plan, nodes []repo.WorkflowNode) []repo.NodeDependency {
+	if len(r.profile.blocked) == 0 {
+		return nil
+	}
+	keyToNode := make(map[string]repo.WorkflowNode, len(nodes))
+	for _, n := range nodes {
+		keyToNode[n.Key] = n
+	}
+	var out []repo.NodeDependency
+	for blockedKey, reason := range r.profile.blocked {
+		depNode, ok := keyToNode[blockedKey]
+		if !ok {
+			continue
+		}
+		// The blocking node is assumed to be the IT assessment in the same request.
+		blockingKey := "it_assessment"
+		blockingNode, ok := keyToNode[blockingKey]
+		if !ok {
+			continue
+		}
+		out = append(out, repo.NodeDependency{
+			ID:              "nd_" + shortID(),
+			RequestID:       r.id,
+			DependentNodeID: depNode.ID,
+			BlockingNodeID:  blockingNode.ID,
+			Reason:          reason,
+			RunCount:        1,
+		})
+	}
+	return out
+}
+
 // insertRequestGraph writes a request and its full graph in one transaction so
 // a partial failure never leaves an orphaned request.
 func insertRequestGraph(
@@ -438,6 +490,7 @@ func insertRequestGraph(
 	nodes []repo.WorkflowNode,
 	edges []repo.WorkflowEdge,
 	tasks []repo.AgentTask,
+	deps []repo.NodeDependency,
 	now time.Time,
 ) error {
 	tx, err := pool.Begin(ctx)
@@ -482,9 +535,16 @@ func insertRequestGraph(
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`, t.ID, t.NodeID, t.Title, t.Status, t.Ordinal, t.StartedAt, t.CompletedAt)
 	}
+	// node_dependencies (F5) — reference workflow_nodes, queued above.
+	for _, d := range deps {
+		batch.Queue(`
+			INSERT INTO node_dependencies (id, request_id, dependent_node_id, blocking_node_id, reason, run_count)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, d.ID, d.RequestID, d.DependentNodeID, d.BlockingNodeID, d.Reason, d.RunCount)
+	}
 
 	br := tx.SendBatch(ctx, batch)
-	for range len(nodes) + len(edges) + len(tasks) {
+	for range len(nodes) + len(edges) + len(tasks) + len(deps) {
 		if _, err := br.Exec(); err != nil {
 			_ = br.Close()
 			return fmt.Errorf("insert graph: %w", err)
@@ -504,4 +564,98 @@ func shortID() string {
 		panic("crypto/rand unavailable: " + err.Error())
 	}
 	return hex.EncodeToString(b)
+}
+
+// seedAuditEvents creates believable audit events for each seeded request.
+// Completed nodes get node.started + node.completed; in_progress nodes get
+// node.started; completed requests get request.completed.
+func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64) (int, error) {
+	now := time.Now()
+	var count int
+
+	for _, r := range requests {
+		if len(r.profile.completed) == 0 && len(r.profile.inProgress) == 0 {
+			continue
+		}
+
+		var nodeIDs []struct {
+			ID     string
+			Key    string
+			Name   string
+			Status string
+		}
+		nrows, err := pool.Query(ctx, `
+			SELECT id, key, name, status FROM workflow_nodes WHERE request_id = $1 ORDER BY created_at ASC
+		`, r.id)
+		if err != nil {
+			return 0, fmt.Errorf("query nodes for %s: %w", r.id, err)
+		}
+		for nrows.Next() {
+			var n struct {
+				ID     string
+				Key    string
+				Name   string
+				Status string
+			}
+			if err := nrows.Scan(&n.ID, &n.Key, &n.Name, &n.Status); err != nil {
+				nrows.Close()
+				return 0, fmt.Errorf("scan node for %s: %w", r.id, err)
+			}
+			nodeIDs = append(nodeIDs, n)
+		}
+		nrows.Close()
+
+		submitted := now.AddDate(0, 0, -r.ageDays)
+
+		for _, n := range nodeIDs {
+			if n.Status != "completed" && n.Status != "in_progress" {
+				continue
+			}
+
+			// node.started
+			if _, err := pool.Exec(ctx, `
+				INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`, "aev_"+shortID(), r.id, &n.ID, "engine", "node.started",
+				n.Name+" started", submitted); err != nil {
+				return 0, fmt.Errorf("insert audit node.started for %s: %w", n.ID, err)
+			}
+			count++
+
+			if n.Status == "completed" {
+				completedAt := submitted.Add(4 * time.Hour)
+				if _, err := pool.Exec(ctx, `
+					INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)
+				`, "aev_"+shortID(), r.id, &n.ID, n.Name, "node.completed",
+					n.Name+" complete", completedAt); err != nil {
+					return 0, fmt.Errorf("insert audit node.completed for %s: %w", n.ID, err)
+				}
+				count++
+			}
+		}
+
+		// request status events
+		if r.status == "completed" || r.status == "in_progress" {
+			if _, err := pool.Exec(ctx, `
+				INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
+				VALUES ($1, $2, NULL, $3, $4, $5, $6)
+			`, "aev_"+shortID(), r.id, "engine", "request.created",
+				r.title+" submitted", submitted); err != nil {
+				return 0, fmt.Errorf("insert audit request.created for %s: %w", r.id, err)
+			}
+			count++
+		}
+		if r.status == "completed" {
+			if _, err := pool.Exec(ctx, `
+				INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
+				VALUES ($1, $2, NULL, $3, $4, $5, $6)
+			`, "aev_"+shortID(), r.id, "engine", "request.completed",
+				"All stages complete", now); err != nil {
+				return 0, fmt.Errorf("insert audit request.completed for %s: %w", r.id, err)
+			}
+			count++
+		}
+	}
+	return count, nil
 }

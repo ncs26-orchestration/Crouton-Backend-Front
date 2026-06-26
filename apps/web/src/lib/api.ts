@@ -1,24 +1,26 @@
 import type {
-  Attachment,
-  Chat,
-  ChatMessage,
-  CompileResponse,
-  DecisionTable,
-  Diagnostic,
-  DeployResponse,
-  DeployTarget,
-  EngineAdapter,
-  ExtractResponse,
-  ISRegistry,
-  OrgRequest,
-  Project,
-  NodeDetailResponse,
-  RequestGraph,
-  RequestPriority,
-  Workflow,
-  WorkflowDiff,
-  WorkflowVersion,
-  WorkflowVersionListItem,
+	Attachment,
+	ApprovalDecision,
+	AuditEvent,
+	Chat,
+	ChatMessage,
+	CompileResponse,
+	DecisionTable,
+	Diagnostic,
+	DeployResponse,
+	DeployTarget,
+	EngineAdapter,
+	ExtractResponse,
+	ISRegistry,
+	OrgRequest,
+	Project,
+	NodeDetailResponse,
+	RequestGraph,
+	RequestPriority,
+	Workflow,
+	WorkflowDiff,
+	WorkflowVersion,
+	WorkflowVersionListItem,
 } from "./types";
 import { authStore } from "./auth";
 
@@ -519,8 +521,28 @@ export const api = {
   getRequest: (id: string): Promise<RequestGraph> =>
     fetchJSON(`/api/requests/${encodeURIComponent(id)}`),
 
-  getNode: (requestId: string, nodeId: string): Promise<NodeDetailResponse> =>
-    fetchJSON(
-      `/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}`,
-    ),
+	getNode: (requestId: string, nodeId: string): Promise<NodeDetailResponse> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}`,
+		),
+
+	// Decide a request parked at the executive gate (F7). Approve resumes the
+	// workflow into the execution stages; reject stops it. justification is
+	// required.
+	approve: (
+		id: string,
+		payload: { decision: ApprovalDecision; justification: string },
+	): Promise<{ request: OrgRequest }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(id)}/approve`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
+
+	// --- Audit trail (F6) ---
+
+	listRequestAudit: (requestId: string): Promise<{ events: AuditEvent[] }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/audit`),
+
+	listOrgAudit: (orgId: string): Promise<{ events: AuditEvent[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/audit`),
 };
