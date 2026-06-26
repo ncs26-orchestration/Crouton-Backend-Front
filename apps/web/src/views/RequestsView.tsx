@@ -1,10 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Loader2, Plus, X } from "lucide-react";
 
 import { api } from "../lib/api";
 import { useOrg } from "../contexts/OrgContext";
 import { useToasts } from "../components/Toasts";
+import {
+  MAX_REQUEST_DESCRIPTION_LEN,
+  MAX_REQUEST_TITLE_LEN,
+  priorityBadgeClass,
+  prettyStatus,
+  statusBadgeClass,
+} from "../lib/request-format";
 import type { OrgRequest, RequestPriority, RequestStatus } from "../lib/types";
 
 const PRIORITIES: RequestPriority[] = ["low", "medium", "high", "urgent"];
@@ -16,40 +23,6 @@ const STATUSES: RequestStatus[] = [
   "rejected",
   "completed",
 ];
-
-// Badge colors follow MVP-SPEC: in_progress = brand purple, completed =
-// green, rejected = pink, everything else slate.
-function statusBadgeClass(status: RequestStatus): string {
-  switch (status) {
-    case "in_progress":
-    case "awaiting_approval":
-      return "bg-[var(--color-accent-bg)] text-[var(--color-brand)]";
-    case "completed":
-    case "approved":
-      return "bg-[#15be53]/12 text-[#15be53]";
-    case "rejected":
-      return "bg-[#ea2261]/12 text-[#ea2261]";
-    default:
-      return "bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]";
-  }
-}
-
-function priorityBadgeClass(priority: RequestPriority): string {
-  switch (priority) {
-    case "urgent":
-      return "bg-[#ea2261]/12 text-[#ea2261]";
-    case "high":
-      return "bg-[#f5a623]/15 text-[#b9770f]";
-    case "medium":
-      return "bg-[var(--color-accent-bg)] text-[var(--color-brand)]";
-    default:
-      return "bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]";
-  }
-}
-
-function prettyStatus(status: RequestStatus): string {
-  return status.replace(/_/g, " ");
-}
 
 export function RequestsView({ onOpenRequest }: { onOpenRequest: (id: string) => void }) {
   const { activeOrg } = useOrg();
@@ -255,6 +228,7 @@ function NewRequestModal({
 }) {
   const qc = useQueryClient();
   const toasts = useToasts();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<RequestPriority>("medium");
@@ -269,18 +243,52 @@ function NewRequestModal({
     onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
 
+  // Escape to close + a simple focus trap so keyboard users stay inside
+  // the dialog while it's open.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = dialogRef.current;
+      if (!root) return;
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-request-title"
         className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-stripe-elevated"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--color-fg)]">New request</h2>
+            <h2 id="new-request-title" className="text-lg font-semibold text-[var(--color-fg)]">New request</h2>
             <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">
               Describe what you need; the right departments get pulled in automatically.
             </p>
@@ -300,6 +308,7 @@ function NewRequestModal({
             <input
               autoFocus
               value={title}
+              maxLength={MAX_REQUEST_TITLE_LEN}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Open a new office in Berlin"
               className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors"
@@ -310,6 +319,7 @@ function NewRequestModal({
             <span className="text-xs font-medium text-[var(--color-fg-muted)]">Description</span>
             <textarea
               value={description}
+              maxLength={MAX_REQUEST_DESCRIPTION_LEN}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add any context the departments should know."
               rows={4}

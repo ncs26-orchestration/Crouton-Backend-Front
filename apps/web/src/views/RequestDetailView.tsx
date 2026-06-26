@@ -2,22 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Workflow } from "lucide-react";
 
 import { api } from "../lib/api";
-import type { RequestStatus } from "../lib/types";
-
-function statusBadgeClass(status: RequestStatus): string {
-  switch (status) {
-    case "in_progress":
-    case "awaiting_approval":
-      return "bg-[var(--color-accent-bg)] text-[var(--color-brand)]";
-    case "completed":
-    case "approved":
-      return "bg-[#15be53]/12 text-[#15be53]";
-    case "rejected":
-      return "bg-[#ea2261]/12 text-[#ea2261]";
-    default:
-      return "bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]";
-  }
-}
+import { prettyStatus, statusBadgeClass } from "../lib/request-format";
 
 // Request detail shell (F1). Shows the request record and a placeholder
 // where the live workflow canvas lands in F2/F3. Intentionally empty of
@@ -67,7 +52,7 @@ export function RequestDetailView({
             <span
               className={`inline-block rounded-md px-2.5 py-1 text-xs font-medium capitalize ${statusBadgeClass(detailQ.data.request.status)}`}
             >
-              {detailQ.data.request.status.replace(/_/g, " ")}
+              {prettyStatus(detailQ.data.request.status)}
             </span>
           </div>
         )}

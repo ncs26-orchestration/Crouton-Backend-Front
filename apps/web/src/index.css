@@ -63,6 +63,14 @@
   --color-accent-bg: rgba(83, 58, 253, 0.06);
   --color-accent-border: #b9b9f9;
 
+  /* Status semantics — request/node status + priority. Per MVP-SPEC:
+     completed/approved = green, in_progress = brand, blocked/rejected =
+     ruby. Priority uses amber for high. */
+  --color-success: #15be53;
+  --color-warning: #f5a623;
+  --color-warning-fg: #b9770f;
+  --color-danger: #ea2261;
+
   --color-canvas-dot: #e2e8f0;
 
   /* Shadows — blue-tinted multi-layer. Usable as CSS vars:
@@ -100,6 +108,10 @@
   --color-accent: #7c74ff;
   --color-accent-bg: rgba(124, 116, 255, 0.12);
   --color-accent-border: rgba(124, 116, 255, 0.35);
+  --color-success: #2bd96b;
+  --color-warning: #f5a623;
+  --color-warning-fg: #f5a623;
+  --color-danger: #ff4d80;
   --color-canvas-dot: #232329;
 
   /* Shadows in dark mode need pure-black layering — the blue-tinted
