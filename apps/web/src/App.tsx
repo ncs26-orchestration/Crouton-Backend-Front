@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -146,8 +146,18 @@ function Shell() {
   const [location, setLocation] = useState<Location>(loadLocation);
   const [helpOpen, setHelpOpen] = useState(false);
 
+  // Clear cached data only when the signed-in user actually changes (account
+  // switch), never on first mount. Running qc.clear() on mount races with the
+  // child views' queries: effects fire child-first, so a view's useQuery
+  // creates its query and starts fetching, then this parent effect wiped it,
+  // leaving the view stuck loading forever. Track the previous id and skip the
+  // initial run.
+  const prevUserId = useRef(user?.id);
   useEffect(() => {
-    qc.clear();
+    if (prevUserId.current !== undefined && prevUserId.current !== user?.id) {
+      qc.clear();
+    }
+    prevUserId.current = user?.id;
   }, [user?.id, qc]);
 
   useEffect(() => {

@@ -23,13 +23,13 @@ function parseSSELine(line: string): { event?: string; data?: string } | null {
  * arrive. It reconnects on error and falls back to polling if the EventSource
  * cannot connect.
  */
-export function useRequestStream(requestId: string | null) {
+export function useRequestStream(requestId: string | null, enabled = true) {
   const queryClient = useQueryClient();
   const esRef = useRef<EventSource | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!requestId) return;
+    if (!requestId || !enabled) return;
 
     const token = authStore.get();
     if (!token) return;
@@ -129,5 +129,5 @@ export function useRequestStream(requestId: string | null) {
         pollTimer.current = null;
       }
     };
-  }, [requestId, queryClient]);
+  }, [requestId, enabled, queryClient]);
 }
