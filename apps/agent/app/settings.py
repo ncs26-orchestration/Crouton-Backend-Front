@@ -21,9 +21,7 @@ class Settings(BaseSettings):
 
     # Groq / OpenAI fallbacks for the agent LLM — base URL + model configurable
     # for parity with DeepSeek (no hardcoded ids in the client).
-    groq_base_url: str = Field(
-        default="https://api.groq.com/openai/v1", alias="GROQ_BASE_URL"
-    )
+    groq_base_url: str = Field(default="https://api.groq.com/openai/v1", alias="GROQ_BASE_URL")
     groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
 
