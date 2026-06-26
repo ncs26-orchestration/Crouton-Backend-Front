@@ -181,5 +181,22 @@ curl -fsS "$API/orgs/${org_id}/audit" -H "authorization: Bearer ${token}" \
   | jq -e '(.events | length) >= 1' >/dev/null \
   || fail "org audit endpoint returned empty events"
 
+# F8: the final report endpoint compiles a structured report for the completed
+# request. It must return the request overview, per-stage details, approval
+# info, and summary.
+say "final report endpoint returns a structured report (F8)"
+curl -fsS "$API/requests/${req_id}/report" -H "authorization: Bearer ${token}" \
+  | jq -e \
+    '.request.id == "'"${req_id}"'"
+     and .request.status == "completed"
+     and (.stages | length) >= 9
+     and .approval.decision == "approve"
+     and .approval.justification != ""
+     and .summary.total_stages >= 9
+     and .summary.completed_stages >= 9
+     and .summary.total_time_human != ""
+     and (.stages[0].tasks | length) >= 1' >/dev/null \
+  || fail "final report shape"
+
 echo
 echo "SMOKE OK"

@@ -127,6 +127,11 @@ func NewServer(d Deps) *echo.Echo {
 	evh := handler.NewEventsHandler(d.Logger, d.PgPool, d.JWTSecret, eventBus)
 	e.GET("/requests/:id/events", evh.Stream)
 
+	// Final report (F8) — compiled on-the-fly from the request, nodes,
+	// tasks, and audit trail. No separate report table.
+	rpt := handler.NewReportHandler(d.Logger, d.PgPool)
+	e.GET("/requests/:id/report", rpt.GetReport, authMiddleware)
+
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup
 	// the HTTP layer uses to route /compile/:target, and the source

@@ -222,6 +222,33 @@ func (r *WorkflowRepo) DeleteTasksByNode(ctx context.Context, nodeID string) err
 	return err
 }
 
+// ListTasksByRequest returns all tasks for all nodes in a request, joined
+// through workflow_nodes. Used by the report endpoint (F8) to assemble
+// per-stage task lists without N+1 queries.
+func (r *WorkflowRepo) ListTasksByRequest(ctx context.Context, requestID string) ([]AgentTask, error) {
+	rows, err := r.pg.Query(ctx, `
+		SELECT at.id, at.node_id, at.title, at.status, at.ordinal, at.started_at, at.completed_at, at.created_at
+		FROM agent_tasks at
+		JOIN workflow_nodes wn ON wn.id = at.node_id
+		WHERE wn.request_id = $1
+		ORDER BY wn.created_at ASC, at.ordinal ASC
+	`, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]AgentTask, 0)
+	for rows.Next() {
+		var t AgentTask
+		if err := rows.Scan(&t.ID, &t.NodeID, &t.Title, &t.Status, &t.Ordinal, &t.StartedAt, &t.CompletedAt, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // ListTasksByNode returns a node's tasks in creation order.
 func (r *WorkflowRepo) ListTasksByNode(ctx context.Context, nodeID string) ([]AgentTask, error) {
 	rows, err := r.pg.Query(ctx, `

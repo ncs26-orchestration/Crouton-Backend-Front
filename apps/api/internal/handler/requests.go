@@ -563,7 +563,7 @@ func (h *RequestsHandler) ApproveRequest(c echo.Context) error {
 		return c.JSON(http.StatusConflict, map[string]string{"error": "request is not awaiting approval"})
 	}
 
-	if err := h.engine.Approve(ctx, id, orchestrator.ApprovalDecision(body.Decision), justification); err != nil {
+	if err := h.engine.Approve(ctx, id, orchestrator.ApprovalDecision(body.Decision), justification, claims.Name); err != nil {
 		if errors.Is(err, orchestrator.ErrNotAwaitingApproval) {
 			return c.JSON(http.StatusConflict, map[string]string{"error": "request is not awaiting approval"})
 		}

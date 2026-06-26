@@ -351,6 +351,71 @@ export interface NodeDetailResponse {
 // is "warn".
 export type BindingState = "ok" | "warn" | "idle" | "error";
 
+// --- Final Report (F8 — execution stage & final report) ---
+
+// A task item within a report stage.
+export interface ReportTask {
+  title: string;
+  status: string;
+}
+
+// Per-stage data in the final report.
+export interface ReportStage {
+  key: string;
+  name: string;
+  department: string;
+  status: string;
+  status_text: string;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number;
+  tasks: ReportTask[];
+}
+
+// Human approval info in the report.
+export interface ReportApproval {
+  decision: "approve" | "reject";
+  justification: string;
+  approved_by: string;
+  approved_at: string;
+}
+
+// Notable event during execution (blocked, fallback).
+export interface ReportFlag {
+  stage_key: string;
+  stage_name: string;
+  severity: "warning" | "info";
+  message: string;
+}
+
+// Aggregated report metadata.
+export interface ReportSummary {
+  total_stages: number;
+  completed_stages: number;
+  total_time_human: string;
+}
+
+// Request overview in the report.
+export interface ReportRequestOverview {
+  id: string;
+  title: string;
+  description: string;
+  priority: string;
+  requester_name: string;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+// Top-level response from GET /requests/:id/report.
+export interface FinalReport {
+  request: ReportRequestOverview;
+  summary: ReportSummary;
+  stages: ReportStage[];
+  approval: ReportApproval | null;
+  flags: ReportFlag[];
+}
+
 // --- SSE Event Types (F4 — live canvas) ---
 
 export type SSEEventType = "node_status" | "request_status" | "task" | "audit";
