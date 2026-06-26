@@ -269,6 +269,9 @@ export type RequestStatus =
 
 export type NodeStatus = "pending" | "in_progress" | "completed" | "blocked";
 
+// A human's call on the executive-approval gate (F7).
+export type ApprovalDecision = "approve" | "reject";
+
 // A business request submitted into the org. The workflow graph
 // (nodes/edges) is attached by the intake planner (F2).
 export interface OrgRequest {

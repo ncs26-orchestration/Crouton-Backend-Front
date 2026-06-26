@@ -182,7 +182,13 @@ function Shell() {
       />
 
       {section === "home" && <HomeView />}
-      {section === "my-work" && <MyWorkView />}
+      {section === "my-work" && activeOrg && (
+        <MyWorkView
+          orgId={activeOrg.id}
+          role={activeOrg.role}
+          onOpenWorkflow={navigateToWorkflow}
+        />
+      )}
 
       {section === "requests" && activeOrg && (
         <RequestsView orgId={activeOrg.id} onOpenWorkflow={navigateToWorkflow} />
