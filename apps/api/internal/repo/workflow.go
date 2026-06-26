@@ -32,6 +32,17 @@ type WorkflowEdge struct {
 	EdgeType     string
 }
 
+// AgentTask is a unit of work a department agent reported for a node.
+type AgentTask struct {
+	ID          string
+	NodeID      string
+	Title       string
+	Status      string
+	StartedAt   *time.Time
+	CompletedAt *time.Time
+	CreatedAt   time.Time
+}
+
 type WorkflowRepo struct {
 	pg *pgxpool.Pool
 }
@@ -157,4 +168,86 @@ func (r *WorkflowRepo) GetNode(ctx context.Context, nodeID string) (*WorkflowNod
 		return nil, err
 	}
 	return &n, nil
+}
+
+// UpdateNodeStatus advances a node's status, status_text, and progress. It
+// stamps started_at the first time the node leaves pending and completed_at
+// when it reaches completed. Used by the orchestration engine (F3).
+func (r *WorkflowRepo) UpdateNodeStatus(ctx context.Context, nodeID, status, statusText string, progressPercent int) error {
+	tag, err := r.pg.Exec(ctx, `
+		UPDATE workflow_nodes
+		SET status = $2,
+		    status_text = $3,
+		    progress_percent = $4,
+		    started_at = COALESCE(started_at, CASE WHEN $2 IN ('in_progress', 'completed') THEN now() END),
+		    completed_at = CASE WHEN $2 = 'completed' THEN now() ELSE completed_at END
+		WHERE id = $1
+	`, nodeID, status, statusText, progressPercent)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// InsertTasks writes a node's agent tasks in one batch.
+func (r *WorkflowRepo) InsertTasks(ctx context.Context, tasks []AgentTask) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, t := range tasks {
+		batch.Queue(`
+			INSERT INTO agent_tasks (id, node_id, title, status, started_at, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, t.ID, t.NodeID, t.Title, t.Status, t.StartedAt, t.CompletedAt)
+	}
+	br := r.pg.SendBatch(ctx, batch)
+	defer func() { _ = br.Close() }()
+	for range tasks {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ListTasksByNode returns a node's tasks in creation order.
+func (r *WorkflowRepo) ListTasksByNode(ctx context.Context, nodeID string) ([]AgentTask, error) {
+	rows, err := r.pg.Query(ctx, `
+		SELECT id, node_id, title, status, started_at, completed_at, created_at
+		FROM agent_tasks
+		WHERE node_id = $1
+		ORDER BY created_at ASC
+	`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]AgentTask, 0)
+	for rows.Next() {
+		var t AgentTask
+		if err := rows.Scan(&t.ID, &t.NodeID, &t.Title, &t.Status, &t.StartedAt, &t.CompletedAt, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// UpdateRequestProgress sets a request's status and progress. Mirrors
+// RequestRepo.UpdateStatusProgress but lives here so the engine can drive both
+// node and request transitions through one store. Kept thin on purpose.
+func (r *WorkflowRepo) UpdateRequestProgress(ctx context.Context, requestID, status string, progress int) error {
+	tag, err := r.pg.Exec(ctx, `UPDATE requests SET status = $2, progress = $3 WHERE id = $1`, requestID, status, progress)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
