@@ -72,10 +72,32 @@ curl -fsS "$API/orgs/${org_id}/requests" -H "authorization: Bearer ${token}" \
 say "request detail loads with the auto-planned workflow graph"
 curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}" \
   | jq -e --arg id "$req_id" \
-      '.request.id == $id and .request.status == "in_progress" and .request.priority == "high"
+      '.request.id == $id and .request.priority == "high"
        and (.nodes | length) >= 9 and (.edges | length) >= 9
        and ([.nodes[].key] | index("exec_approval")) != null' >/dev/null \
   || fail "request detail / workflow graph shape"
+
+# F3: the orchestration engine runs every node through its department agent
+# (deterministic with no LLM key) and drives the request to completed.
+say "engine runs the request to completion"
+detail=""
+for _ in $(seq 1 60); do
+  detail=$(curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}")
+  status=$(echo "$detail" | jq -r '.request.status')
+  [ "$status" = "completed" ] && break
+  sleep 1
+done
+echo "$detail" | jq -e \
+  '.request.status == "completed" and .request.progress == 100
+   and ([.nodes[] | select(.status != "completed")] | length) == 0
+   and ([.nodes[] | select(.status_text == "")] | length) == 0' >/dev/null \
+  || fail "request did not run to completion (every node completed with a status line)"
+
+say "a completed node carries the agent's tasks"
+node_id=$(echo "$detail" | jq -r '.nodes[0].id')
+curl -fsS "$API/requests/${req_id}/nodes/${node_id}" -H "authorization: Bearer ${token}" \
+  | jq -e '(.tasks | length) >= 1 and (.tasks[0].status == "completed") and (.node.status == "completed")' >/dev/null \
+  || fail "node detail / tasks shape"
 
 echo
 echo "SMOKE OK"
