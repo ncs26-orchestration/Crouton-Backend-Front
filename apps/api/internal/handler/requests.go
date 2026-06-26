@@ -26,6 +26,7 @@ type RequestsHandler struct {
 	pg       *pgxpool.Pool
 	requests *repo.RequestRepo
 	workflow *repo.WorkflowRepo
+	deps     *repo.DependencyRepo
 	agent    *agentclient.Client
 	engine   *orchestrator.Engine
 }
@@ -36,6 +37,7 @@ func NewRequestsHandler(logger *slog.Logger, pg *pgxpool.Pool, agent *agentclien
 		pg:       pg,
 		requests: repo.NewRequestRepo(pg),
 		workflow: repo.NewWorkflowRepo(pg),
+		deps:     repo.NewDependencyRepo(pg),
 		agent:    agent,
 		engine:   engine,
 	}
@@ -308,10 +310,27 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 		h.logger.Error("get request: list edges", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
+	deps, err := h.deps.ListUnresolvedByRequest(ctx, id)
+	if err != nil {
+		h.logger.Error("get request: list deps", slog.String("err", err.Error()))
+	}
 
 	nodeList := make([]map[string]any, 0, len(nodes))
 	for _, n := range nodes {
-		nodeList = append(nodeList, map[string]any{
+		// Include dependency info for blocked nodes (F5).
+		var blockedBy map[string]any
+		if n.Status == "blocked" {
+			for _, d := range deps {
+				if d.DependentNodeID == n.ID {
+					blockedBy = map[string]any{
+						"reason":    d.Reason,
+						"blocked_at": d.CreatedAt,
+					}
+					break
+				}
+			}
+		}
+		nodeEntry := map[string]any{
 			"id":               n.ID,
 			"key":              n.Key,
 			"name":             n.Name,
@@ -323,7 +342,11 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 			"status_text":      n.StatusText,
 			"started_at":       n.StartedAt,
 			"completed_at":     n.CompletedAt,
-		})
+		}
+		if blockedBy != nil {
+			nodeEntry["blocked_by"] = blockedBy
+		}
+		nodeList = append(nodeList, nodeEntry)
 	}
 	edgeList := make([]map[string]any, 0, len(edges))
 	for _, e := range edges {
@@ -396,20 +419,37 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		})
 	}
 
+	// F5: include dependency info for blocked nodes.
+	var blockedBy map[string]any
+	if node.Status == "blocked" {
+		deps, err := h.deps.ListUnresolvedByDependent(ctx, nodeID)
+		if err == nil && len(deps) > 0 {
+			blockedBy = map[string]any{
+				"reason":     deps[0].Reason,
+				"blocked_at": deps[0].CreatedAt,
+			}
+		}
+	}
+
+	nodeResp := map[string]any{
+		"id":               node.ID,
+		"key":              node.Key,
+		"name":             node.Name,
+		"agent_type":       node.AgentType,
+		"department":       node.Department,
+		"status":           node.Status,
+		"description":      node.Description,
+		"progress_percent": node.ProgressPercent,
+		"status_text":      node.StatusText,
+		"started_at":       node.StartedAt,
+		"completed_at":     node.CompletedAt,
+	}
+	if blockedBy != nil {
+		nodeResp["blocked_by"] = blockedBy
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"node": map[string]any{
-			"id":               node.ID,
-			"key":              node.Key,
-			"name":             node.Name,
-			"agent_type":       node.AgentType,
-			"department":       node.Department,
-			"status":           node.Status,
-			"description":      node.Description,
-			"progress_percent": node.ProgressPercent,
-			"status_text":      node.StatusText,
-			"started_at":       node.StartedAt,
-			"completed_at":     node.CompletedAt,
-		},
+		"node":     nodeResp,
 		"tasks":    taskList,
 		"activity": []any{},
 	})
