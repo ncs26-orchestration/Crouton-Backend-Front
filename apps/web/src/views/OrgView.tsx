@@ -29,19 +29,21 @@ export function OrgView() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-bg)]">
       {/* Header */}
-      <div className="px-8 pt-8 pb-4 border-b border-[var(--color-border)] shrink-0">
-        <h1 className="text-xl font-semibold text-[var(--color-fg)]">{activeOrg.name}</h1>
+      <div className="px-8 py-5 border-b border-[var(--color-border)] shrink-0">
+        <h1 className="text-xl font-medium text-[var(--color-fg)]" style={{ fontFeatureSettings: '"ss01"' }}>
+          {activeOrg.name}
+        </h1>
         <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">
           Manage your organization's teams and members
         </p>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-5">
+        <div className="flex gap-1 mt-4">
           {(["teams", "members"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
+              className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
                 tab === t
                   ? "bg-[var(--color-accent-bg)] text-[var(--color-brand)]"
                   : "text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)]"
@@ -103,12 +105,15 @@ function TeamsTab({ orgId }: { orgId: string }) {
   const members = membersQ.data ?? [];
 
   return (
-    <div className="flex flex-col gap-4 max-w-2xl">
-      {/* Create button */}
-      <div className="flex justify-end">
+    <div className="flex flex-col gap-4 w-full max-w-[900px]">
+      {/* Section header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-[var(--color-fg)]">
+          Teams <span className="text-[var(--color-fg-subtle)] tnum">{teams.length}</span>
+        </h2>
         <button
           onClick={() => setShowCreate((v) => !v)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
         >
           <Plus size={14} /> New team
         </button>
@@ -157,12 +162,23 @@ function TeamsTab({ orgId }: { orgId: string }) {
       )}
 
       {/* Empty */}
-      {!teamsQ.isLoading && teams.length === 0 && (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
+      {!teamsQ.isLoading && teams.length === 0 && !showCreate && (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] py-16 text-center">
           <div className="size-12 rounded-xl bg-[var(--color-surface-2)] flex items-center justify-center">
             <Users size={22} className="text-[var(--color-fg-muted)]" strokeWidth={1.5} />
           </div>
-          <p className="text-sm text-[var(--color-fg-muted)]">No teams yet. Create one to get started.</p>
+          <div>
+            <p className="text-sm font-medium text-[var(--color-fg)]">No teams yet</p>
+            <p className="text-xs text-[var(--color-fg-muted)] mt-1">
+              Group members into departments like Finance, Legal, or IT.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+          >
+            <Plus size={14} /> Create a team
+          </button>
         </div>
       )}
 
@@ -379,7 +395,7 @@ function MembersTab({ orgId }: { orgId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 max-w-2xl">
+    <div className="flex flex-col gap-3 w-full max-w-[900px]">
       <p className="text-xs text-[var(--color-fg-muted)]">
         {members.length} member{members.length !== 1 ? "s" : ""} in this organization
       </p>
