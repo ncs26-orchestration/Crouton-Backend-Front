@@ -67,6 +67,65 @@ func TestIntakeConnRefusedReturnsUnavailable(t *testing.T) {
 	}
 }
 
+func TestRunParsesDecision(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/agents/run" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"summary": "Assessed budget",
+			"flags": [{"severity": "info", "message": "within budget"}],
+			"tasks": [{"title": "Assess budget feasibility", "status": "completed"}],
+			"status_text": "Finance review complete.",
+			"blocked_on": null
+		}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	d, err := c.Run(context.Background(), RunRequest{
+		AgentType: "finance",
+		Request:   IntakeRequestBody{Title: "x", Priority: "high"},
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	if d.StatusText != "Finance review complete." || len(d.Tasks) != 1 || d.Tasks[0].Status != "completed" {
+		t.Errorf("decision parsed wrong: %+v", d)
+	}
+	if len(d.Flags) != 1 || d.BlockedOn != nil {
+		t.Errorf("flags/blocked_on parsed wrong: %+v", d)
+	}
+}
+
+func TestRunNon2xxReturnsUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	_, err := c.Run(context.Background(), RunRequest{AgentType: "finance", Request: IntakeRequestBody{Title: "x"}})
+	if !errors.Is(err, ErrAgentUnavailable) {
+		t.Fatalf("expected ErrAgentUnavailable, got %v", err)
+	}
+}
+
+func TestDefaultDecisionCompletesEveryStage(t *testing.T) {
+	for _, at := range []string{"intake", "finance", "legal", "it", "hr", "ops", "approval", "report", "mystery"} {
+		d := DefaultDecision(at)
+		if d.StatusText == "" || len(d.Tasks) == 0 {
+			t.Errorf("DefaultDecision(%q) is empty: %+v", at, d)
+		}
+		for _, task := range d.Tasks {
+			if task.Status != "completed" {
+				t.Errorf("DefaultDecision(%q) task not completed: %+v", at, task)
+			}
+		}
+	}
+}
+
 func TestDefaultPlanIsConnectedDAG(t *testing.T) {
 	plan := DefaultPlan()
 	if len(plan.Nodes) < 9 {
