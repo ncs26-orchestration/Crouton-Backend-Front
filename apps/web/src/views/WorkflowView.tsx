@@ -75,6 +75,10 @@ function WorkflowCanvas({
   const { data, isLoading, error } = useQuery({
     queryKey: ["request", requestId],
     queryFn: () => api.getRequest(requestId),
+    // Poll while the engine is running so node progression shows without a
+    // manual refresh. Live SSE replaces this in F4.
+    refetchInterval: (query) =>
+      query.state.data?.request.status === "in_progress" ? 1500 : false,
   });
 
   const flowResult = useMemo(() => {
@@ -216,7 +220,7 @@ function WorkflowCanvas({
       {/* Right panel — Node Detail */}
       <div className="w-72 shrink-0 border-l border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
         {selectedNode ? (
-          <NodeDetail node={selectedNode} />
+          <NodeDetail requestId={requestId} node={selectedNode} />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
             <div className="size-8 rounded-lg bg-[var(--color-surface-2)] flex items-center justify-center">
@@ -232,7 +236,7 @@ function WorkflowCanvas({
   );
 }
 
-function NodeDetail({ node }: { node: WorkflowNodeData }) {
+function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNodeData }) {
   const config = {
     pending: { icon: Clock, color: "text-[var(--color-fg-subtle)]" },
     in_progress: { icon: Loader2, color: "text-[var(--color-brand)]" },
@@ -241,6 +245,14 @@ function NodeDetail({ node }: { node: WorkflowNodeData }) {
   }[node.status] ?? { icon: Clock, color: "text-[var(--color-fg-subtle)]" };
 
   const StatusIcon = config.icon;
+
+  // Tasks load lazily per node and keep polling while the node is mid-flight.
+  const tasksQuery = useQuery({
+    queryKey: ["node", requestId, node.id],
+    queryFn: () => api.getNode(requestId, node.id),
+    refetchInterval: node.status === "in_progress" ? 1500 : false,
+  });
+  const tasks = tasksQuery.data?.tasks ?? [];
 
   return (
     <div className="flex flex-col">
@@ -280,6 +292,28 @@ function NodeDetail({ node }: { node: WorkflowNodeData }) {
           <p className="text-xs text-[var(--color-fg)] leading-relaxed">
             {node.status_text}
           </p>
+        </div>
+      )}
+
+      {tasks.length > 0 && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            Tasks
+          </h4>
+          <ul className="flex flex-col gap-1.5">
+            {tasks.map((t) => (
+              <li key={t.id} className="flex items-start gap-1.5 text-xs">
+                {t.status === "completed" ? (
+                  <CheckCircle2 size={13} className="text-[var(--color-success)] shrink-0 mt-0.5" />
+                ) : t.status === "in_progress" ? (
+                  <Loader2 size={13} className="text-[var(--color-brand)] animate-spin shrink-0 mt-0.5" />
+                ) : (
+                  <Clock size={13} className="text-[var(--color-fg-subtle)] shrink-0 mt-0.5" />
+                )}
+                <span className="text-[var(--color-fg)] leading-snug">{t.title}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
