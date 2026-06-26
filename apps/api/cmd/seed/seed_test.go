@@ -72,6 +72,25 @@ func TestSeedPopulatesAgentTasks(t *testing.T) {
 		t.Fatal("node_dependencies empty after seed")
 	}
 
+	// F10: agents and department_policies should be populated.
+	var agentCount int
+	err = pool.QueryRow(ctx, `SELECT count(*) FROM agents WHERE org_id = $1`, demoOrgID).Scan(&agentCount)
+	if err != nil {
+		t.Fatalf("count agents: %v", err)
+	}
+	if agentCount == 0 {
+		t.Fatal("agents empty after seed")
+	}
+
+	var policyCount int
+	err = pool.QueryRow(ctx, `SELECT count(*) FROM department_policies WHERE org_id = $1`, demoOrgID).Scan(&policyCount)
+	if err != nil {
+		t.Fatalf("count policies: %v", err)
+	}
+	if policyCount == 0 {
+		t.Fatal("department_policies empty after seed")
+	}
+
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE slug = $1`, demoOrgSlug)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE email LIKE '%' || $1`, emailDomain)

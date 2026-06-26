@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
 )
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9\-]*[a-z0-9]$`)
@@ -95,6 +96,40 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 	if err != nil {
 		h.logger.Error("create org: add creator as admin", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	// Seed the standard department directory (F10): one team per department, an
+	// agent per team, and the starter policies. The agent/policy content lives
+	// in internal/orgdir so this path and the demo seed share one source.
+	teamByDept := make(map[string]string, len(orgdir.Agents))
+	for _, a := range orgdir.Agents {
+		if _, ok := teamByDept[a.Department]; ok {
+			continue
+		}
+		teamID := "team_" + randomHex(8)
+		teamByDept[a.Department] = teamID
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO teams (id, org_id, name, description) VALUES ($1, $2, $3, $4)
+		`, teamID, orgID, a.Department, a.Department+" department"); err != nil {
+			h.logger.Error("create org: seed team", slog.String("name", a.Department), slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+	for _, a := range orgdir.Agents {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities) VALUES ($1, $2, $3, $4, $5, $6)
+		`, "agent_"+randomHex(8), orgID, teamByDept[a.Department], a.AgentType, a.Name, a.Capabilities); err != nil {
+			h.logger.Error("create org: seed agent", slog.String("type", a.AgentType), slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+	for _, p := range orgdir.Policies {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO department_policies (id, org_id, team_id, title, body) VALUES ($1, $2, $3, $4, $5)
+		`, "pol_"+randomHex(8), orgID, teamByDept[p.Department], p.Title, p.Body); err != nil {
+			h.logger.Error("create org: seed policy", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -797,6 +832,114 @@ func (h *OrgsHandler) RemoveTeamMember(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "member not found in team"})
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// ── Agent endpoints (F10) ──────────────────────────────────────────────────────
+
+// ListAgents handles GET /orgs/:orgId/agents.
+func (h *OrgsHandler) ListAgents(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+
+	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+
+	ctx := c.Request().Context()
+	rows, err := h.db.Query(ctx, `
+		SELECT a.id, a.org_id, a.team_id, a.agent_type, a.name, a.avatar, a.capabilities, a.created_at,
+		       COALESCE(t.name, '') AS team_name
+		FROM agents a
+		LEFT JOIN teams t ON t.id = a.team_id
+		WHERE a.org_id = $1
+		ORDER BY a.created_at ASC
+	`, orgID)
+	if err != nil {
+		h.logger.Error("list agents: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer rows.Close()
+
+	type agentItem struct {
+		ID           string    `json:"id"`
+		OrgID        string    `json:"org_id"`
+		TeamID       string    `json:"team_id"`
+		TeamName     string    `json:"team_name"`
+		AgentType    string    `json:"agent_type"`
+		Name         string    `json:"name"`
+		Avatar       string    `json:"avatar"`
+		Capabilities string    `json:"capabilities"`
+		CreatedAt    time.Time `json:"created_at"`
+	}
+	result := make([]agentItem, 0)
+	for rows.Next() {
+		var item agentItem
+		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.AgentType, &item.Name, &item.Avatar, &item.Capabilities, &item.CreatedAt, &item.TeamName); err != nil {
+			h.logger.Error("list agents: scan", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"agents": result})
+}
+
+// ── Policy endpoints (F10) ─────────────────────────────────────────────────────
+
+// ListPolicies handles GET /orgs/:orgId/policies.
+func (h *OrgsHandler) ListPolicies(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+
+	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+
+	ctx := c.Request().Context()
+	rows, err := h.db.Query(ctx, `
+		SELECT dp.id, dp.org_id, dp.team_id, dp.title, dp.body, dp.created_at,
+		       COALESCE(t.name, '') AS team_name
+		FROM department_policies dp
+		LEFT JOIN teams t ON t.id = dp.team_id
+		WHERE dp.org_id = $1
+		ORDER BY dp.created_at ASC
+	`, orgID)
+	if err != nil {
+		h.logger.Error("list policies: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer rows.Close()
+
+	type policyItem struct {
+		ID        string    `json:"id"`
+		OrgID     string    `json:"org_id"`
+		TeamID    string    `json:"team_id"`
+		TeamName  string    `json:"team_name"`
+		Title     string    `json:"title"`
+		Body      string    `json:"body"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+	result := make([]policyItem, 0)
+	for rows.Next() {
+		var item policyItem
+		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.Title, &item.Body, &item.CreatedAt, &item.TeamName); err != nil {
+			h.logger.Error("list policies: scan", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"policies": result})
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
