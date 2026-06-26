@@ -3,73 +3,132 @@
 Requests, department agents, a live workflow canvas, agent-declared dependencies, human executive
 approval, and an append-only audit trail.
 
-> This is the umbrella PRD. Per-team, step-by-step execution detail lives in `PRD-BACKEND.md`,
-> `PRD-AGENT.md`, and `PRD-FRONTEND.md`. The status tracker below is the single source of truth for
-> what is built vs not.
+> **We track work by FEATURE, not by layer.** Every feature is a vertical slice that carries its own
+> DB, backend, agent, frontend, and linking. A feature is **done only when the whole slice works
+> end-to-end** — not when "the backend part" is finished. The per-layer step detail and shared
+> contracts live in `PRD-BACKEND.md`, `PRD-AGENT.md`, `PRD-FRONTEND.md` and are referenced by task
+> id (BE-/AG-/FE-) from each feature below; those files are reference, this file is the plan.
 
-## Status tracker
+## Feature tracker
 
-Legend: ✅ done · 🟡 in progress · ⬜ not started
+Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/migrations · **BE** Go API/engine ·
+**AG** Python agent · **FE** React · **Link** the wiring that makes the layers talk.
 
-### Platform & groundwork
+| # | Feature (vertical slice) | DB | BE | AG | FE | Link | Overall |
+|---|---|----|----|----|----|----|----|
+| F0 | App shell & navigation | – | – | – | ⬜ | – | ⬜ |
+| F1 | Submit & track a request | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
+| F2 | Auto-planned workflow graph | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| F3 | Agents do the work (status progression) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| F4 | Live canvas (real-time SSE) | – | ⬜ | – | ⬜ | ⬜ | ⬜ |
+| F5 | Cross-department dependencies | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| F6 | Traceability / audit trail | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
+| F7 | Human executive approval | – | ⬜ | – | ⬜ | ⬜ | ⬜ |
+| F8 | Execution stage & final report | – | ⬜ | 🟡 | ⬜ | ⬜ | ⬜ |
+| F9 | Roster, Policies & Integrations views | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
+| F10 | Seeding & demo data | ⬜ | ⬜ | – | – | – | ⬜ |
 
-| Item | Status | Notes |
-|---|---|---|
-| Auth, organizations, teams, members | ✅ | Pre-existing foundation; reused as-is |
-| Docker Compose smooth boot (auto-migrate, healthchecks, ordering) | ✅ | `compose.yaml` + `compose.override.yaml` |
-| CI pipeline (lint · typecheck · test · race · migrations up/rollback · e2e smoke) | ✅ | `.github/workflows/ci.yml`, `e2e.yml` |
-| Rebrand `aup` → `aios` | ✅ | Codename/infra/schema/storage keys |
-| Vendored engineering + design skills | ✅ | `.agents/skills/{frontend,backend,agent}` |
-| Slice PRDs authored (backend / agent / frontend) | ✅ | `.agents/PRD-*.md` |
+Groundwork already done (not features, but the platform features sit on): auth/orgs/teams/members
+foundation ✅ · Docker Compose smooth boot ✅ · CI (lint/test/race/migrations/e2e) ✅ · rebrand
+`aup`→`aios` ✅ · vendored skills ✅ · these PRDs ✅.
 
-### Backend slice (Go API + orchestration) — see `PRD-BACKEND.md`
+**Rule:** a layer cell goes ✅ only when its part is merged AND wired to the others; the **Overall**
+column goes ✅ only when every non-`–` cell is ✅ and the feature's done-check passes. Update the row
+in the same PR that lands the work.
 
-| ID | Feature | Status |
-|---|---|---|
-| BE-1 | Schema & migrations (requests, workflow_nodes/edges, agent_tasks, node_dependencies, audit_events, agents, department_policies) | ⬜ |
-| BE-2 | Repositories (pgx) | ⬜ |
-| BE-3 | Agent service client (typed Intake/Run) | ⬜ |
-| BE-4 | Request intake + plan persistence | ⬜ |
-| BE-5 | Orchestration worker (state machine) | ⬜ |
-| BE-6 | Agent-declared cross-dependencies + re-run on unblock | ⬜ |
-| BE-7 | Executive approval gate (human) | ⬜ |
-| BE-8 | SSE streaming | ⬜ |
-| BE-9 | Read endpoints for the tabs | ⬜ |
-| BE-10 | Seeding (departments, agents, policies, demo org) | ⬜ |
+---
 
-### Agent slice (Python, Pydantic AI) — see `PRD-AGENT.md`
+## Features (vertical slices)
 
-| ID | Feature | Status |
-|---|---|---|
-| AG-1 | Dependency + package scaffold (pydantic-ai) | ⬜ |
-| AG-2 | Output models (Plan, Decision) | ⬜ |
-| AG-3 | Injected context (deps) | ⬜ |
-| AG-4 | Tools incl. `raise_dependency` | ⬜ |
-| AG-5 | Model selection + FunctionModel offline fallback | ⬜ |
-| AG-6 | Intake planner agent | ⬜ |
-| AG-7 | Department agent factory | ⬜ |
-| AG-8 | FastAPI surface (/agents/intake, /agents/run) | ⬜ |
-| AG-9 | Tests (TestModel/FunctionModel) | ⬜ |
+Each feature lists what each layer must do, the wiring between them, the slice-PRD task ids that hold
+the step detail, and a single end-to-end **done-check**. Ordered by dependency; F0→F3 are the spine,
+the rest layer on.
 
-### Frontend slice (React) — see `PRD-FRONTEND.md`
+### F0 — App shell & navigation
+*Enabler. No data; makes every later UI reachable.*
+- **FE:** `ShellSection` = `home | my-work | requests | workflows | agents | reports | policies | integrations | teams`; refactor `App.tsx` location state to `{section, requestId, nodeId}`; route each section to a real or stub view; keep existing working views. (FE-1)
+- **Link:** none.
+- **Done-check:** every nav item renders without a type error; `pnpm --filter web build` passes; deep state survives reload. *(This is the half-done edit that broke `make up`; finishing it is F0.)*
 
-| ID | Feature | Status |
-|---|---|---|
-| FE-1 | Shell nav + routing refactor | ⬜ |
-| FE-2 | API client, types, SSE client | ⬜ |
-| FE-3 | Requests tab + New Request | ⬜ |
-| FE-4 | Workflows canvas: 3-panel shell | ⬜ |
-| FE-5 | Department node + auto-layout | ⬜ |
-| FE-6 | Live SSE wiring | ⬜ |
-| FE-7 | My Work + approval | ⬜ |
-| FE-8 | Home dashboard | ⬜ |
-| FE-9 | Agents roster | ⬜ |
-| FE-10 | Reports | ⬜ |
-| FE-11 | Policies + Integrations | ⬜ |
-| FE-12 | Design pass | ⬜ |
+### F1 — Submit & track a request
+*The spine: a request exists and is visible.*
+- **DB:** `requests`. (BE-1)
+- **BE:** create/list/get request endpoints. (BE-2, BE-4 minus planning)
+- **FE:** Requests tab + New Request modal + request detail shell; Home lists requests. (FE-3, part of FE-8)
+- **Link:** web → api (`lib/api.ts` + types). (FE-2)
+- **Done-check:** submit "Open a new office in Berlin" (High) → it appears in the Requests list and opens its (still empty) detail.
 
-**Update this table as features land.** When you finish a feature, flip its row to ✅ (or 🟡 while in
-progress) in the same PR that implements it.
+### F2 — Auto-planned workflow graph
+*Intake turns a request into a department workflow you can see.*
+- **DB:** `workflow_nodes`, `workflow_edges`. (BE-1)
+- **AG:** pydantic-ai scaffold + `Plan` model + intake agent `/agents/intake`. (AG-1, AG-2, AG-6, AG-8)
+- **BE:** agent client; create handler calls intake, persists graph; `GET /requests/:id` returns the graph. (BE-3, BE-4)
+- **FE:** Workflows 3-panel shell + `DepartmentNode` + `request-to-flow` mapper + auto-layout. (FE-4, FE-5)
+- **Link:** api → agent (intake), web → api (graph).
+- **Done-check:** submitting a request renders ~9–10 department stages with parallel review branches on the canvas.
+
+### F3 — Agents do the work (status progression)
+*Department agents reason and stages advance.*
+- **DB:** `agent_tasks` + node status. (BE-1)
+- **AG:** department agent factory + tools (registry/policy/calcs) + `Decision` model + `/agents/run` + FunctionModel fallback. (AG-2, AG-3, AG-4, AG-5, AG-7, AG-8)
+- **BE:** orchestration worker — eligibility, run each node, persist tasks + status + status_text. (BE-5)
+- **FE:** node-detail panel (agent, tasks, progress, latest status); status colors. (FE-4)
+- **Link:** api ↔ agent (run per node).
+- **Done-check:** with no LLM key, a request runs intake→…→report; every node ends `completed` with real tasks and plain-language status.
+
+### F4 — Live canvas (real-time)
+*You watch it happen.*
+- **BE:** in-process SSE bus + `GET /requests/:id/events`. (BE-8)
+- **FE:** `useRequestStream` hook patches the query cache; canvas + panels update live; poll fallback. (FE-2, FE-6)
+- **Link:** browser ⇇ SSE ⇇ engine.
+- **Done-check:** node status changes appear on the canvas with no manual refresh; `curl -N …/events` streams events.
+
+### F5 — Cross-department dependencies *(the differentiator)*
+*An agent declares it's blocked; the system gates and auto-unblocks.*
+- **DB:** `node_dependencies`. (BE-1)
+- **AG:** `raise_dependency(on_department, reason)` tool surfacing `Decision.blocked_on`. (AG-4)
+- **BE:** gate on unresolved deps, mark `blocked` with the agent's reason, re-run on unblock (capped). (BE-6)
+- **FE:** blocked node shows "waiting for [department]"; live unblock animation. (FE-6)
+- **Link:** agent declares → engine records/gates → SSE → canvas.
+- **Done-check:** Finance enters `blocked` with the agent's own reason while IT runs; when IT completes, Finance auto-unblocks and completes — visible live.
+
+### F6 — Traceability / audit trail
+*Every change is explainable.*
+- **DB:** `audit_events` (append-only). (BE-1)
+- **BE:** append on every transition; org-wide and per-request audit read endpoints. (BE-9)
+- **FE:** node Activity tab + Reports tab audit browser with filters. (FE-4, FE-10)
+- **Link:** engine writes → api reads → FE renders.
+- **Done-check:** a completed run's audit shows actor/action/reason/timestamp for every transition, browsable and filterable; the F5 block reason is the agent's own text.
+
+### F7 — Human executive approval
+*A person makes the call, with a written reason.*
+- **BE:** approval node pauses the request at `awaiting_approval`; `POST /requests/:id/approve {decision, justification}` resumes/stops. (BE-7)
+- **FE:** My Work pending-approval queue + Approve/Reject with a required justification. (FE-7)
+- **Link:** FE approve → api resume → engine continues → SSE.
+- **Done-check:** the workflow halts at approval and appears in My Work; approving with a justification resumes execution; rejecting stops the request; both are audited with the text.
+
+### F8 — Execution stage & final report
+*Post-approval work runs and a report is produced.*
+- **BE:** HR/Ops/Implementation stages run after approval; generate a final report on completion. (BE-5 cont.)
+- **AG:** execution-stage agents reuse the F3 factory. 🟡 *partially covered by F3's agent work.*
+- **FE:** report display on the Review & Report node / Reports tab. (FE-10)
+- **Link:** engine → report → FE.
+- **Done-check:** after approval, execution stages complete and a final report (request, approvals, flags, time taken) is generated and viewable.
+
+### F9 — Roster, Policies & Integrations views
+*The supporting tabs show real data.*
+- **DB:** `department_policies` (seeded). (BE-1)
+- **BE:** agents roster + policies read endpoints. (BE-9)
+- **FE:** Agents roster grouped by team with live status; Policies read-only browser; Integrations display-only cards. (FE-9, FE-11)
+- **Link:** web → api.
+- **Done-check:** Agents shows seeded agents with status that goes busy while they own an in-progress node; Policies shows the policies agents consult; Integrations renders cleanly.
+
+### F10 — Seeding & demo data
+*Usable from a cold start; demo-ready.*
+- **DB:** `department_policies`. (BE-1)
+- **BE:** on org creation seed departments(teams)+agents+policies+approver; demo-seed path: one org + approver login + a completed sample request + audit history. (BE-10)
+- **Link:** runs inside org-create + a boot/seed path.
+- **Done-check:** a fresh org has departments/agents/policies; with the demo seed, Home/Reports/Agents are populated before any new request runs.
 
 ---
 
@@ -128,59 +187,60 @@ The whole thing is **live, clickable, and traceable**: a workflow canvas updates
 
 **Product framing.** Full pivot to the AI Organization OS. The existing workflow-authoring code stays in the repo but is off this feature's path (rebrand already complete: codename `aios`). Reuse the existing auth, organizations, teams, and members foundation, the React Flow canvas plumbing, and the agent service's provider configuration.
 
+**Work is organized as vertical feature slices** (above): each feature owns its DB, backend, agent, frontend, and linking, and is done only end-to-end. The per-layer files (`PRD-BACKEND.md`, `PRD-AGENT.md`, `PRD-FRONTEND.md`) remain as the contract + step reference, addressed by task id.
+
 **Orchestrator placement.** Go owns the durable system of record and deterministic orchestration; the Python service does reasoning only. The web app talks only to Go.
 
 **Data model (Go / Postgres).** New entities: `requests`, `workflow_nodes`, `workflow_edges`, `agent_tasks`, `node_dependencies`, `audit_events`, `agents`, `department_policies`. A request belongs to an organization; departments reuse the existing `teams` table; one agent is seeded per department and linked to its team. Node status: `pending | in_progress | completed | blocked`. Request status: `submitted | in_progress | awaiting_approval | approved | rejected | completed`. `audit_events` is append-only.
 
-**Deep module: Orchestration engine (Go).** A request runs on a background worker. Public interface stays small: start a request, and submit an approval decision. Internally it computes node eligibility (all predecessor edges originate from completed nodes AND the node has no unresolved dependencies), advances statuses, writes audit events, and publishes events to the bus. The executive-approval node enters `in_progress`, sets the request to `awaiting_approval`, and parks until a human decision arrives. Per-stage pacing is configurable so progression is watchable. If the agent service errors, a deterministic fallback decision is used so a run never stalls.
+**Deep module: Orchestration engine (Go).** A request runs on a background worker. Public interface stays small: start a request, and submit an approval decision. Internally it computes node eligibility (all predecessor edges originate from completed nodes AND the node has no unresolved dependencies), advances statuses, writes audit events, and publishes events to the bus. The executive-approval node parks the request at `awaiting_approval` until a human decides. Per-stage pacing is configurable. If the agent service errors, a deterministic fallback decision is used so a run never stalls.
 
-**Agent-declared cross-dependencies (the differentiator).** Dependencies are NOT hardcoded by the planner. When the engine runs a department agent and the returned decision carries a `blocked_on` declaration (produced by the agent's `raise_dependency` tool), the engine marks the node `blocked`, records a `node_dependencies` row with the agent's own reason, and writes audit + event. When the blocking node completes, the engine resolves the dependency and re-invokes the blocked agent with the blocker's output added to its upstream context (capped re-runs to prevent loops); the second pass typically completes.
+**Agent-declared cross-dependencies (the differentiator).** Dependencies are NOT hardcoded by the planner. When the engine runs a department agent and the returned decision carries a `blocked_on` declaration (produced by the agent's `raise_dependency` tool), the engine marks the node `blocked`, records a `node_dependencies` row with the agent's own reason, and writes audit + event. When the blocking node completes, the engine resolves the dependency and re-invokes the blocked agent with the blocker's output added to its upstream context (capped re-runs to prevent loops).
 
 **Deep module: Agent service client (Go).** Typed `Intake(request, org_context) -> Plan` and `Run(agent_type, request, upstream_context, org_context) -> Decision` over the Python service. Go injects an org-context snapshot (information systems + policies) and upstream summaries so agent tools read injected data rather than calling back into Go. A typed "agent unavailable" error triggers the fallback path.
 
 **Deep module: SSE event bus (Go).** In-process publish/subscribe with channel fan-out keyed by request id. The engine publishes; the SSE endpoint subscribes and streams to the browser, unsubscribing on client disconnect.
 
-**UI-facing API (Go).** Create/list requests under an org; get a request's full graph (request + nodes + edges + agents); get node detail (node + tasks + activity); approve a request (decision + justification); an SSE stream per request authenticated via a token query parameter because EventSource cannot set headers; list agents, audit (org-wide and per-request), and policies.
+**UI-facing API (Go).** Create/list requests under an org; get a request's full graph; get node detail; approve a request; an SSE stream per request authenticated via a token query parameter; list agents, audit (org-wide and per-request), and policies.
 
 **SSE event contract.** Event types `node_status`, `request_status`, `task`, and `audit`, each a JSON object carrying the request id, the changed entity, and a timestamp. The frontend patches its query cache from these.
 
-**Agent layer (Python, Pydantic AI).** Retire the raw HTTP + manual JSON parsing for this flow. Each department agent and the intake planner are Pydantic AI agents with typed output models (`Plan`, `Decision`), tool-calling, dependency injection for org/upstream context, and automatic validation + retries. Tools include reading the information-system registry, fetching the department policy, domain calculations (e.g. budget assessment for Finance, compliance lookup for Legal), and `raise_dependency(on_department, reason)` which surfaces on `Decision.blocked_on`. The intake planner chooses stages from a fixed department catalog and falls back to a default template if validation fails.
+**Agent layer (Python, Pydantic AI).** Retire the raw HTTP + manual JSON parsing for this flow. Each department agent and the intake planner are Pydantic AI agents with typed output models (`Plan`, `Decision`), tool-calling, dependency injection for org/upstream context, and automatic validation + retries. Tools: read the information-system registry, fetch the department policy, domain calculations (e.g. budget assessment for Finance, compliance lookup for Legal), and `raise_dependency(on_department, reason)` surfacing on `Decision.blocked_on`. The intake planner chooses stages from a fixed department catalog and falls back to a default template if validation fails.
 
 **Offline fallback.** When no provider key is set, model selection returns a Pydantic AI `FunctionModel` that emits deterministic `Plan`/`Decision` output (including a Finance `blocked_on` case), so the full flow runs with no network.
 
-**Deep module: request-to-flow mapper (TS).** A pure function transforming the request graph (nodes + edges) into React Flow nodes and edges with an auto-layout derived from stage order and edges (parallel branches side by side, merge points). No side effects.
+**Deep module: request-to-flow mapper (TS).** A pure function transforming the request graph into React Flow nodes and edges with an auto-layout derived from stage order and edges. No side effects.
 
-**Frontend.** Expand the shell navigation to Home, My Work, Requests, Workflows, Agents, Reports, Policies, Integrations, Teams. The Workflows view is a three-panel layout: left request overview (progress, ETA, participating agents with live status), center canvas, right node detail (Overview / Tasks / Activity). A `useRequestStream` hook subscribes to the SSE endpoint and patches the cache, with an interval-poll fallback. Policies is a read-only browser of the seeded policies agents consult; Integrations is display-only.
+**Frontend.** Shell navigation: Home, My Work, Requests, Workflows, Agents, Reports, Policies, Integrations, Teams. The Workflows view is a three-panel layout: left request overview, center canvas, right node detail (Overview / Tasks / Activity). `useRequestStream` subscribes to SSE and patches the cache, with an interval-poll fallback. Policies is a read-only browser; Integrations is display-only.
 
-**Seeding.** On organization creation, seed the standard department teams, one agent per team, and starter department policies, and mark the creator as approver. A demo-seed path additionally creates one organization with an approver login and a completed sample request plus audit history.
+**Seeding.** On organization creation, seed the standard department teams, one agent per team, starter department policies, and mark the creator as approver. A demo-seed path additionally creates one organization with an approver login and a completed sample request plus audit history.
 
 ## Testing Decisions
 
-A good test asserts **external behavior through a module's public interface**, not its internals — given inputs and observable outputs/effects, never private state or call order. Tests must be deterministic: no live LLM calls, no real time-of-day dependence, no flaky network.
+A good test asserts **external behavior through a module's public interface**, not its internals. Tests must be deterministic: no live LLM calls, no real time-of-day dependence, no flaky network.
 
-Modules to test (all four agreed):
+Deep modules to test (test the slice's logic, not its glue):
 
-1. **Orchestration engine (Go)** — the highest-value target. Drive it through its public interface with an in-memory repo and a fake agent client, and assert observable outcomes: a no-dependency request advances every node to completed; a request where the Finance agent returns `blocked_on: IT` marks Finance `blocked` with the agent's reason, then completes Finance after IT completes (dependency resolved); the executive-approval node parks the request at `awaiting_approval` until an approval decision arrives, and approve vs reject produce the right terminal status; every transition writes a corresponding audit event. Re-run capping is asserted so a pathological agent cannot loop forever.
-2. **Department agents + raise_dependency (Python)** — run each agent against Pydantic AI `TestModel`/`FunctionModel` and assert the typed `Decision` shape, that the Finance agent given a context lacking IT output returns a `blocked_on` for IT (and that the `raise_dependency` tool fired), and that re-running with IT's summary returns a completed decision. The intake planner returns a valid `Plan` over the fixed catalog, and an invalid model output still yields the default template.
-3. **Agent client + SSE bus (Go)** — the client parses `Plan`/`Decision` from a stub HTTP server and maps a timeout to the typed unavailable error; the bus delivers published events to all current subscribers for a request id and stops delivering after unsubscribe.
-4. **request-to-flow mapper (TS)** — a pure unit test with vitest: a known request graph maps to the expected React Flow node/edge set with correct statuses and a layout that places parallel branches at the same rank and connects merge points.
+1. **Orchestration engine (Go)** [F3/F5/F7] — drive it through its public interface with an in-memory repo and a fake agent client: a no-dependency request advances every node to completed; a `blocked_on: IT` decision blocks Finance with the agent's reason, then completes it after IT (dependency resolved); the approval node parks at `awaiting_approval` and approve/reject produce the right terminal status; every transition writes an audit event; re-run capping holds.
+2. **Department agents + raise_dependency (Python)** [F3/F5] — via Pydantic AI `TestModel`/`FunctionModel`: typed `Decision` shape; Finance lacking IT output returns `blocked_on: IT` and the tool fired; re-run with IT's summary completes; intake returns a valid `Plan`, and invalid model output still yields the default template.
+3. **Agent client + SSE bus (Go)** [F2/F4] — client parses `Plan`/`Decision` from a stub server and maps a timeout to the typed unavailable error; the bus delivers to current subscribers and stops after unsubscribe.
+4. **request-to-flow mapper (TS)** [F2] — pure vitest unit test: a known request graph maps to the expected React Flow node/edge set with correct statuses and a layout placing parallel branches at the same rank.
 
-Prior art: Go table-driven tests already exist for the compiler and handler packages and should be the pattern for the engine and client. Python testing uses pytest (a smoke test already exists); department-agent tests follow the Pydantic AI test-model approach. The web app has vitest wired (currently no tests); the mapper is the first real unit test.
+Prior art: Go table-driven tests exist in the compiler/handler packages; Python uses pytest (a smoke test exists); the web app has vitest wired (the mapper is the first real unit test).
 
 ## Out of Scope
 
-- Implementing real external integrations (SAP, LexisNexis, Workday, Slack, etc.). The Integrations tab is display-only, matching the product's stated non-goal.
-- A Policies authoring UI. Policies are seeded and read-only for this feature; agents consult them.
-- Multi-workflow history depth, request pagination at scale, and notification backends beyond what the canvas and audit feed show.
-- OAuth/SSO and fine-grained RBAC beyond the existing JWT + org roles, and approver-role gating.
+- Real external integrations (SAP, LexisNexis, Workday, Slack, etc.). The Integrations tab is display-only.
+- A Policies authoring UI. Policies are seeded and read-only; agents consult them.
+- Multi-workflow history depth, request pagination at scale, and notification backends beyond the canvas and audit feed.
+- OAuth/SSO and fine-grained RBAC beyond the existing JWT + org roles.
 - Mobile-responsive layouts; the canvas is desktop-first.
 - Removing or rewriting the dormant authoring-tool code; it stays in the repo, off this path.
-- Multi-replica orchestration (the event bus is in-process for now; a shared broker is a later concern).
+- Multi-replica orchestration (the event bus is in-process for now).
 
 ## Further Notes
 
-- Execution order is the slice order in the three detailed PRDs in `.agents/` (`PRD-BACKEND.md`, `PRD-AGENT.md`, `PRD-FRONTEND.md`), which break this feature into numbered, step-by-step tasks per team and define the shared contracts. This file is the umbrella; those are the execution detail.
-- The demo golden path is the acceptance bar: Home → Requests → submit "Open a new office in Berlin" (High) → live Workflows canvas → Finance shows "waiting for IT" → IT completes, Finance unblocks → My Work approval with justification → execution → Reports with the completed report and full audit trail.
-- CI already enforces lint/typecheck/test/race across all three apps, a migration up/rollback/re-apply check, and a docker-compose e2e smoke; new modules should extend these (engine + agent unit tests, the TS mapper test, and an extended e2e that drives a request to the approval gate).
+- The demo golden path is the acceptance bar and it walks through the features in order: Home (F1) → submit (F1) → live Workflows canvas (F2/F3/F4) → Finance "waiting for IT" → unblock (F5) → My Work approval (F7) → execution + report (F8) → Reports/audit (F6). Seed (F10) makes it non-empty.
+- CI enforces lint/typecheck/test/race across all three apps, a migration up/rollback/re-apply check, and a docker-compose e2e smoke; each feature should extend these (its unit tests, and the e2e driving the request further along the path).
 - Reliability bar: with all LLM keys unset, the entire flow must still complete via the `FunctionModel` / deterministic-fallback paths.
-- A copy of this PRD was also published as GitHub issue #4; this file is the canonical, version-controlled source and carries the live status tracker.
+- A copy of an earlier slice-organized PRD was published as GitHub issue #4; this file (feature-organized, with the live tracker) is the canonical source.
