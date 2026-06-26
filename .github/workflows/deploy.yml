@@ -70,12 +70,12 @@ jobs:
       - name: Copy compose file to VM
         run: |
           gcloud compute scp compose.deploy.yaml "${VM}:/opt/aios/compose.deploy.yaml" \
-            --project "${PROJECT}" --zone "${ZONE}" --tunnel-through-iap=false --quiet
+            --project "${PROJECT}" --zone "${ZONE}" --quiet
 
       - name: Pull and restart on the VM
         run: |
           gcloud compute ssh "${VM}" --project "${PROJECT}" --zone "${ZONE}" \
-            --tunnel-through-iap=false --quiet --command "\
+            --quiet --command "\
             set -e; cd /opt/aios; \
             sudo env REGISTRY='${REGISTRY}' TAG='${GITHUB_SHA}' docker compose -f compose.deploy.yaml pull; \
             sudo env REGISTRY='${REGISTRY}' TAG='${GITHUB_SHA}' docker compose -f compose.deploy.yaml up -d --remove-orphans --wait --wait-timeout 600; \
