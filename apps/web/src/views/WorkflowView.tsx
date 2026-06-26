@@ -1,21 +1,335 @@
-import { Workflow } from "lucide-react";
+import { useMemo, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  type NodeTypes,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Bot,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  ShieldAlert,
+} from "lucide-react";
 
-export function WorkflowView() {
-  return (
-    <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)]">
-      <div className="border-b border-[var(--color-border)] px-8 py-5">
-        <h1 className="text-xl font-semibold text-[var(--color-fg)]">Workflows</h1>
-        <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">Workflow canvas will appear here</p>
+import { api } from "../lib/api";
+import { requestToFlow } from "../lib/request-to-flow";
+import { DepartmentNode } from "../components/DepartmentNode";
+import type { NodeStatus, WorkflowNodeData, RequestStatus } from "../lib/types";
+
+const nodeTypes: NodeTypes = {
+  department: DepartmentNode,
+};
+
+const STATUS_DOT: Record<NodeStatus, string> = {
+  completed: "bg-[#15be53]",
+  in_progress: "bg-[var(--color-brand)]",
+  pending: "bg-[var(--color-fg-subtle)]",
+  blocked: "bg-[#ea2261]",
+};
+
+function statusLabel(s: string): string {
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const REQUEST_STATUS_COLOR: Record<RequestStatus, string> = {
+  submitted: "text-[var(--color-fg-muted)]",
+  in_progress: "text-[var(--color-brand)]",
+  awaiting_approval: "text-[#f59e0b]",
+  approved: "text-[#15be53]",
+  rejected: "text-[#ea2261]",
+  completed: "text-[#15be53]",
+};
+
+interface Props {
+  requestId: string | null;
+  selectedNodeId: string | null;
+  onSelectNode: (nodeId: string | null) => void;
+  onBack: () => void;
+}
+
+export function WorkflowView({ requestId, selectedNodeId, onSelectNode, onBack }: Props) {
+  if (!requestId) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+        <h2
+          className="text-lg font-medium text-[var(--color-fg)]"
+          style={{ fontFeatureSettings: '"ss01"' }}
+        >
+          No request selected
+        </h2>
+        <p className="text-sm text-[var(--color-fg-muted)] max-w-[45ch]">
+          Open a request from the Requests tab to see its workflow graph.
+        </p>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-sm text-[var(--color-brand)] hover:underline mt-2"
+        >
+          <ArrowLeft size={14} />
+          Go to Requests
+        </button>
       </div>
-      <div className="flex-1 flex flex-col items-center justify-center gap-4">
-        <div className="size-14 rounded-2xl bg-[var(--color-accent-bg)] border border-[var(--color-accent-border)] flex items-center justify-center">
-          <Workflow size={24} className="text-[var(--color-brand)]" strokeWidth={1.5} />
+    );
+  }
+
+  return <WorkflowCanvas requestId={requestId} selectedNodeId={selectedNodeId} onSelectNode={onSelectNode} onBack={onBack} />;
+}
+
+function WorkflowCanvas({
+  requestId,
+  selectedNodeId,
+  onSelectNode,
+  onBack,
+}: {
+  requestId: string;
+  selectedNodeId: string | null;
+  onSelectNode: (nodeId: string | null) => void;
+  onBack: () => void;
+}) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["request", requestId],
+    queryFn: () => api.getRequest(requestId),
+  });
+
+  const flowResult = useMemo(() => {
+    if (!data) return { nodes: [], edges: [] };
+    return requestToFlow(data.nodes, data.edges);
+  }, [data]);
+
+  const selectedNode = useMemo(() => {
+    if (!selectedNodeId || !data) return null;
+    return data.nodes.find((n) => n.id === selectedNodeId) ?? null;
+  }, [selectedNodeId, data]);
+
+  const onNodeClick = useCallback(
+    (_event: React.MouseEvent, node: { id: string }) => {
+      onSelectNode(node.id === selectedNodeId ? null : node.id);
+    },
+    [onSelectNode, selectedNodeId],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="size-6 rounded-full border-2 border-[var(--color-brand)] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="flex-1 flex items-center justify-center gap-2 text-sm text-[#ea2261]">
+        <AlertCircle size={16} />
+        Failed to load request
+      </div>
+    );
+  }
+
+  const req = data.request;
+
+  return (
+    <div className="flex-1 flex overflow-hidden">
+      {/* Left panel — Request Overview */}
+      <div className="w-64 shrink-0 border-r border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
+        <div className="px-4 py-3 border-b border-[var(--color-border)]">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] mb-2 transition-colors"
+          >
+            <ArrowLeft size={12} />
+            All Requests
+          </button>
+          <h2
+            className="text-sm font-medium text-[var(--color-fg)] leading-tight"
+            style={{ fontFeatureSettings: '"ss01"' }}
+          >
+            {req.title}
+          </h2>
+          <p className="text-[10px] text-[var(--color-fg-subtle)] mt-0.5 font-mono">{req.id}</p>
         </div>
-        <div className="text-center">
-          <p className="text-sm font-medium text-[var(--color-fg)]">No workflow open</p>
-          <p className="text-xs text-[var(--color-fg-muted)] mt-1">Open a request to see its workflow graph</p>
+
+        <div className="px-4 py-3 flex flex-col gap-2.5 text-xs">
+          <InfoRow label="Requester" value={req.requester} />
+          <InfoRow label="Priority" value={statusLabel(req.priority)} />
+          <InfoRow label="Status">
+            <span className={`font-medium ${REQUEST_STATUS_COLOR[req.status] ?? ""}`}>
+              {statusLabel(req.status)}
+            </span>
+          </InfoRow>
+
+          {/* Progress bar */}
+          <div>
+            <div className="flex justify-between mb-1">
+              <span className="text-[var(--color-fg-muted)]">Progress</span>
+              <span className="text-[var(--color-fg)] font-medium">{req.progress}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[var(--color-surface-3)] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-[var(--color-brand)] transition-all duration-500"
+                style={{ width: `${req.progress}%` }}
+              />
+            </div>
+          </div>
         </div>
+
+        {/* Participating agents */}
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h3 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            Participating Agents
+          </h3>
+          <div className="flex flex-col gap-1.5">
+            {data.nodes.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => onSelectNode(n.id)}
+                className={`flex items-center gap-2 px-2 py-1 rounded text-left transition-colors ${
+                  selectedNodeId === n.id
+                    ? "bg-[var(--color-accent-bg)]"
+                    : "hover:bg-[var(--color-surface-2)]"
+                }`}
+              >
+                <span className={`size-1.5 rounded-full shrink-0 ${STATUS_DOT[n.status]}`} />
+                <span className="text-xs text-[var(--color-fg)] truncate">{n.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Center — Canvas */}
+      <div className="flex-1 relative bg-[var(--color-surface-2)]">
+        <ReactFlow
+          nodes={flowResult.nodes}
+          edges={flowResult.edges}
+          nodeTypes={nodeTypes}
+          onNodeClick={onNodeClick}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+          proOptions={{ hideAttribution: true }}
+          minZoom={0.3}
+          maxZoom={2}
+        >
+          <Background gap={16} size={1} color="var(--color-border)" />
+          <Controls
+            showInteractive={false}
+            className="!bg-[var(--color-surface)] !border-[var(--color-border)] !rounded-md !shadow-stripe"
+          />
+        </ReactFlow>
+
+        {/* Legend */}
+        <div className="absolute bottom-4 left-4 flex items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-1.5 text-[10px] text-[var(--color-fg-muted)]"
+          style={{ boxShadow: "0 2px 5px rgba(50,50,93,0.1), 0 1px 2px rgba(0,0,0,0.08)" }}
+        >
+          <LegendItem color="#94a3b8" label="Pending" />
+          <LegendItem color="#533afd" label="In Progress" />
+          <LegendItem color="#15be53" label="Completed" />
+          <LegendItem color="#ea2261" label="Blocked" />
+        </div>
+      </div>
+
+      {/* Right panel — Node Detail */}
+      <div className="w-72 shrink-0 border-l border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
+        {selectedNode ? (
+          <NodeDetail node={selectedNode} />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
+            <div className="size-8 rounded-lg bg-[var(--color-surface-2)] flex items-center justify-center">
+              <Bot size={16} className="text-[var(--color-fg-subtle)]" />
+            </div>
+            <p className="text-xs text-[var(--color-fg-muted)]">
+              Click a node on the canvas to see its details
+            </p>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function NodeDetail({ node }: { node: WorkflowNodeData }) {
+  const config = {
+    pending: { icon: Clock, color: "text-[var(--color-fg-subtle)]" },
+    in_progress: { icon: Loader2, color: "text-[var(--color-brand)]" },
+    completed: { icon: CheckCircle2, color: "text-[#15be53]" },
+    blocked: { icon: ShieldAlert, color: "text-[#ea2261]" },
+  }[node.status] ?? { icon: Clock, color: "text-[var(--color-fg-subtle)]" };
+
+  const StatusIcon = config.icon;
+
+  return (
+    <div className="flex flex-col">
+      <div className="px-4 py-3 border-b border-[var(--color-border)]">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Bot size={12} className="text-[var(--color-fg-muted)]" />
+          <span className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)]">
+            {node.department}
+          </span>
+        </div>
+        <h3
+          className="text-sm font-medium text-[var(--color-fg)]"
+          style={{ fontFeatureSettings: '"ss01"' }}
+        >
+          {node.name}
+        </h3>
+      </div>
+
+      <div className="px-4 py-3 flex flex-col gap-2.5 text-xs">
+        <InfoRow label="Status">
+          <span className={`flex items-center gap-1 font-medium ${config.color}`}>
+            <StatusIcon size={12} className={node.status === "in_progress" ? "animate-spin" : ""} />
+            {statusLabel(node.status)}
+          </span>
+        </InfoRow>
+        <InfoRow label="Agent Type" value={node.agent_type} />
+        <InfoRow label="Progress" value={`${node.progress_percent}%`} />
+        {node.started_at && <InfoRow label="Started" value={new Date(node.started_at).toLocaleString()} />}
+        {node.completed_at && <InfoRow label="Completed" value={new Date(node.completed_at).toLocaleString()} />}
+      </div>
+
+      {node.status_text && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-1.5">
+            Latest Status
+          </h4>
+          <p className="text-xs text-[var(--color-fg)] leading-relaxed">
+            {node.status_text}
+          </p>
+        </div>
+      )}
+
+      {node.description && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-1.5">
+            Description
+          </h4>
+          <p className="text-xs text-[var(--color-fg-muted)] leading-relaxed">
+            {node.description}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoRow({ label, value, children }: { label: string; value?: string; children?: React.ReactNode }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-[var(--color-fg-muted)]">{label}</span>
+      {children ?? <span className="text-[var(--color-fg)] font-medium">{value}</span>}
+    </div>
+  );
+}
+
+function LegendItem({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className="size-2 rounded-full" style={{ backgroundColor: color }} />
+      {label}
+    </span>
   );
 }
