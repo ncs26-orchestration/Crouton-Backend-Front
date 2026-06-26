@@ -35,6 +35,31 @@ services:
       start_period: 30s
     networks: [aup]
 
+  # One-shot migration runner. Reuses the api dev image (which bundles
+  # dbmate) to apply all pending migrations before the api boots, so a
+  # fresh `docker compose up` lands on a fully migrated schema with no
+  # manual `make migrate-up` step. `--wait` blocks until Postgres
+  # accepts connections; the healthcheck gate already covers that, but
+  # it makes the service robust if run on its own.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    # --no-dump-schema: the alpine build has no pg_dump, and the post-up
+    # schema dump would otherwise fail the one-shot and block the api.
+    command: ["dbmate", "--migrations-dir", "/app/migrations", "--no-dump-schema", "--wait", "up"]
+    working_dir: /app
+    volumes:
+      - ./apps/api:/app
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/app?sslmode=disable}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [aup]
+
   api:
     build:
       target: dev
@@ -48,6 +73,19 @@ services:
       - "8080:8080"
     environment:
       APP_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
 
   agent:
     build:
@@ -71,12 +109,29 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       APP_ENV: development
+      DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/app?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       AGENT_EXTRACTOR_PROVIDER: ${AGENT_EXTRACTOR_PROVIDER:-ollama}
       AGENT_EXTRACTOR_MODEL: ${AGENT_EXTRACTOR_MODEL:-qwen2.5:7b}
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # python:slim ships no curl/wget, so probe the health endpoint with
+    # the interpreter that's already on PATH.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)" || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
 
   web:
     image: node:24-alpine
@@ -99,8 +154,10 @@ services:
       API_URL: http://api:8080
       AGENT_URL: http://agent:8000
     depends_on:
-      - api
-      - agent
+      api:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
 
 volumes:
   go_mod_cache:
