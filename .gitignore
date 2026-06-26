@@ -38,6 +38,10 @@ apps/agent/.mypy_cache/
 .claude/*
 !.claude/commands/
 
+# Feature worktrees — /build-feature works in an isolated git worktree here
+# so the primary checkout stays on its own branch. Never committed.
+.worktrees/
+
 # Web build output, generated route tree, and compiled JS artifacts (never commit)
 apps/web/.output/
 apps/web/src/routeTree.gen.ts
