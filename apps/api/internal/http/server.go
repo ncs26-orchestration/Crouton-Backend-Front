@@ -80,6 +80,10 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
 	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
 
+	// Me — current user's work items (requests they created or need to act on).
+	mh := handler.NewMeHandler(d.Logger, d.PgPool)
+	e.GET("/me/work", mh.GetMyWork, authMiddleware)
+
 	// Requests — submission, listing, detail with the workflow graph, and
 	// node detail. The intake planner turns a request into a department
 	// workflow; the orchestration engine then runs each node through its
