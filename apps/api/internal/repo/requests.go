@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -106,7 +107,22 @@ func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([
 // UpdateStatusProgress moves a request's status and progress forward.
 // The orchestration engine (BE-5) drives this as nodes complete.
 func (r *RequestRepo) UpdateStatusProgress(ctx context.Context, id, status string, progress int) error {
-	tag, err := r.pg.Exec(ctx, `
+	return updateStatusProgress(ctx, r.pg, id, status, progress)
+}
+
+// UpdateStatusProgressTx is UpdateStatusProgress scoped to a transaction,
+// so a status change can be committed atomically with related writes.
+func (r *RequestRepo) UpdateStatusProgressTx(ctx context.Context, tx pgx.Tx, id, status string, progress int) error {
+	return updateStatusProgress(ctx, tx, id, status, progress)
+}
+
+// querier is the subset of the pgx API shared by *pgxpool.Pool and pgx.Tx.
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+func updateStatusProgress(ctx context.Context, q querier, id, status string, progress int) error {
+	tag, err := q.Exec(ctx, `
 		UPDATE requests
 		SET status = $2, progress = $3
 		WHERE id = $1

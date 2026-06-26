@@ -178,16 +178,16 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 			Status:     "pending",
 		})
 	}
-	if err := h.workflow.InsertNodes(ctx, nodes); err != nil {
-		h.logger.Error("create request: insert nodes", slog.String("err", err.Error()))
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	}
 
 	edges := make([]repo.WorkflowEdge, 0, len(plan.Edges))
 	for _, pe := range plan.Edges {
 		srcID, ok1 := keyToNodeID[pe.From]
 		tgtID, ok2 := keyToNodeID[pe.To]
 		if !ok1 || !ok2 {
+			// The planner referenced a stage key with no node. Skip the
+			// edge but log it — a dangling key means a malformed plan.
+			h.logger.Warn("create request: dropping edge with unknown node key",
+				slog.String("request_id", reqID), slog.String("from", pe.From), slog.String("to", pe.To))
 			continue
 		}
 		edges = append(edges, repo.WorkflowEdge{
@@ -198,14 +198,26 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 			EdgeType:     pe.EdgeType,
 		})
 	}
-	if err := h.workflow.InsertEdges(ctx, edges); err != nil {
-		h.logger.Error("create request: insert edges", slog.String("err", err.Error()))
+
+	// Persist the graph and advance the request in one transaction so the
+	// request never ends up with a half-written graph.
+	tx, err := h.pg.Begin(ctx)
+	if err != nil {
+		h.logger.Error("create request: begin tx", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
+	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// The request now has a plan; advance it to in_progress.
-	if err := h.requests.UpdateStatusProgress(ctx, reqID, "in_progress", 0); err != nil {
+	if err := h.workflow.InsertGraphTx(ctx, tx, nodes, edges); err != nil {
+		h.logger.Error("create request: insert graph", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if err := h.requests.UpdateStatusProgressTx(ctx, tx, reqID, "in_progress", 0); err != nil {
 		h.logger.Error("create request: set in_progress", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		h.logger.Error("create request: commit", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	saved.Status = "in_progress"

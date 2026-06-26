@@ -40,6 +40,35 @@ func NewWorkflowRepo(pg *pgxpool.Pool) *WorkflowRepo {
 	return &WorkflowRepo{pg: pg}
 }
 
+// InsertGraphTx inserts all nodes then all edges inside the given
+// transaction in one round trip via a batch. Nodes are queued before
+// edges so the edge foreign keys resolve. Use this so the workflow graph
+// is written all-or-nothing.
+func (r *WorkflowRepo) InsertGraphTx(ctx context.Context, tx pgx.Tx, nodes []WorkflowNode, edges []WorkflowEdge) error {
+	batch := &pgx.Batch{}
+	for _, n := range nodes {
+		batch.Queue(`
+			INSERT INTO workflow_nodes (id, request_id, key, name, agent_type, department, status, description)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description)
+	}
+	for _, e := range edges {
+		batch.Queue(`
+			INSERT INTO workflow_edges (id, request_id, source_node_id, target_node_id, edge_type)
+			VALUES ($1, $2, $3, $4, $5)
+		`, e.ID, e.RequestID, e.SourceNodeID, e.TargetNodeID, e.EdgeType)
+	}
+
+	br := tx.SendBatch(ctx, batch)
+	defer func() { _ = br.Close() }()
+	for range len(nodes) + len(edges) {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *WorkflowRepo) InsertNodes(ctx context.Context, nodes []WorkflowNode) error {
 	for _, n := range nodes {
 		_, err := r.pg.Exec(ctx, `
