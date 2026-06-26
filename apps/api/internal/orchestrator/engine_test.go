@@ -92,7 +92,6 @@ func (s *fakeStore) UpdateRequestProgress(_ context.Context, _ string, status st
 	return nil
 }
 
-
 func (s *fakeStore) InsertDependency(_ context.Context, dep repo.NodeDependency) error {
 	s.deps = append(s.deps, fakeDep{dependentNodeID: dep.DependentNodeID, blockingNodeID: dep.BlockingNodeID})
 	return nil

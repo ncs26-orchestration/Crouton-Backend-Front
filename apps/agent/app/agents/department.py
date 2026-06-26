@@ -59,7 +59,11 @@ def _planning(title: str, **kwargs: Any) -> Decision:
     )
 
 
-def _finance(title: str, upstream_context: list[dict[str, Any]] | None = None, **kwargs: Any) -> Decision:
+def _finance(
+    title: str,
+    upstream_context: list[dict[str, Any]] | None = None,
+    **kwargs: Any,
+) -> Decision:
     """Finance review. If IT assessment is not yet available, declare a
     cross-department dependency (F5) so the engine marks this node blocked
     until IT completes."""
@@ -75,7 +79,12 @@ def _finance(title: str, upstream_context: list[dict[str, Any]] | None = None, *
                         "Project the return on investment",
                         "Confirm funding availability",
                     ],
-                    flags=[Flag(severity="info", message="Spend is within the approved quarterly budget.")],
+                    flags=[
+                        Flag(
+                            severity="info",
+                            message="Spend is within the approved quarterly budget.",
+                        ),
+                    ],
                 )
     return _decision(
         summary="Financial impact analysis in progress. Waiting for data from IT assessment.",
@@ -88,7 +97,10 @@ def _finance(title: str, upstream_context: list[dict[str, Any]] | None = None, *
         ],
         blocked_on=DependencyDecl(
             on_department="IT",
-            reason="Need the IT security assessment and infrastructure cost estimate before the budget can be finalized.",
+            reason=(
+                "Need the IT security assessment and infrastructure cost"
+                " estimate before the budget can be finalized."
+            ),
         ),
     )
 

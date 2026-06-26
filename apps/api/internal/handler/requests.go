@@ -323,7 +323,7 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 			for _, d := range deps {
 				if d.DependentNodeID == n.ID {
 					blockedBy = map[string]any{
-						"reason":    d.Reason,
+						"reason":     d.Reason,
 						"blocked_at": d.CreatedAt,
 					}
 					break
