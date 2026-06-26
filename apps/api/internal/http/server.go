@@ -108,7 +108,7 @@ func NewServer(d Deps) *echo.Echo {
 	// SSE events endpoint — authenticates via ?token= so EventSource can
 	// connect (it cannot set custom headers). The auth middleware is not
 	// used here; the handler reads the token from the query parameter.
-	evh := handler.NewEventsHandler(d.Logger, d.JWTSecret, eventBus)
+	evh := handler.NewEventsHandler(d.Logger, d.PgPool, d.JWTSecret, eventBus)
 	e.GET("/requests/:id/events", evh.Stream)
 
 	// Engine-adapter registry. Each adapter implements the
