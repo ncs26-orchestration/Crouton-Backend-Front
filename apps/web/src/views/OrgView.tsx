@@ -105,7 +105,7 @@ function TeamsTab({ orgId }: { orgId: string }) {
   const members = membersQ.data ?? [];
 
   return (
-    <div className="flex flex-col gap-4 w-full max-w-[900px]">
+    <div className="flex flex-col gap-4 w-full">
       {/* Section header */}
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-[var(--color-fg)]">
@@ -395,7 +395,7 @@ function MembersTab({ orgId }: { orgId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 w-full max-w-[900px]">
+    <div className="flex flex-col gap-3 w-full">
       <p className="text-xs text-[var(--color-fg-muted)]">
         {members.length} member{members.length !== 1 ? "s" : ""} in this organization
       </p>
