@@ -40,6 +40,7 @@ apps/agent/.mypy_cache/
 # Web build output, generated route tree, and compiled JS artifacts (never commit)
 apps/web/.output/
 apps/web/src/routeTree.gen.ts
+apps/web/src/*.js
 apps/web/src/**/*.js
 apps/web/src/**/*.js.map
 apps/web/src/**/*.d.ts.map
