@@ -19,31 +19,12 @@ import {
 
 import { api } from "../lib/api";
 import { requestToFlow } from "../lib/request-to-flow";
+import { nodeStatusColorClass, prettyLabel, requestStatusTextClass } from "../lib/request-format";
 import { DepartmentNode } from "../components/DepartmentNode";
-import type { NodeStatus, WorkflowNodeData, RequestStatus } from "../lib/types";
+import type { WorkflowNodeData } from "../lib/types";
 
 const nodeTypes: NodeTypes = {
   department: DepartmentNode,
-};
-
-const STATUS_DOT: Record<NodeStatus, string> = {
-  completed: "bg-[#15be53]",
-  in_progress: "bg-[var(--color-brand)]",
-  pending: "bg-[var(--color-fg-subtle)]",
-  blocked: "bg-[#ea2261]",
-};
-
-function statusLabel(s: string): string {
-  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-const REQUEST_STATUS_COLOR: Record<RequestStatus, string> = {
-  submitted: "text-[var(--color-fg-muted)]",
-  in_progress: "text-[var(--color-brand)]",
-  awaiting_approval: "text-[#f59e0b]",
-  approved: "text-[#15be53]",
-  rejected: "text-[#ea2261]",
-  completed: "text-[#15be53]",
 };
 
 interface Props {
@@ -123,7 +104,7 @@ function WorkflowCanvas({
 
   if (error || !data) {
     return (
-      <div className="flex-1 flex items-center justify-center gap-2 text-sm text-[#ea2261]">
+      <div className="flex-1 flex items-center justify-center gap-2 text-sm text-[var(--color-danger)]">
         <AlertCircle size={16} />
         Failed to load request
       </div>
@@ -155,10 +136,10 @@ function WorkflowCanvas({
 
         <div className="px-4 py-3 flex flex-col gap-2.5 text-xs">
           <InfoRow label="Requester" value={req.requester_name} />
-          <InfoRow label="Priority" value={statusLabel(req.priority)} />
+          <InfoRow label="Priority" value={prettyLabel(req.priority)} />
           <InfoRow label="Status">
-            <span className={`font-medium ${REQUEST_STATUS_COLOR[req.status] ?? ""}`}>
-              {statusLabel(req.status)}
+            <span className={`font-medium ${requestStatusTextClass(req.status)}`}>
+              {prettyLabel(req.status)}
             </span>
           </InfoRow>
 
@@ -193,7 +174,7 @@ function WorkflowCanvas({
                     : "hover:bg-[var(--color-surface-2)]"
                 }`}
               >
-                <span className={`size-1.5 rounded-full shrink-0 ${STATUS_DOT[n.status]}`} />
+                <span className={`size-1.5 rounded-full shrink-0 ${nodeStatusColorClass(n.status)}`} />
                 <span className="text-xs text-[var(--color-fg)] truncate">{n.name}</span>
               </button>
             ))}
@@ -225,10 +206,10 @@ function WorkflowCanvas({
         <div className="absolute bottom-4 left-4 flex items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-1.5 text-[10px] text-[var(--color-fg-muted)]"
           style={{ boxShadow: "0 2px 5px rgba(50,50,93,0.1), 0 1px 2px rgba(0,0,0,0.08)" }}
         >
-          <LegendItem color="#94a3b8" label="Pending" />
-          <LegendItem color="#533afd" label="In Progress" />
-          <LegendItem color="#15be53" label="Completed" />
-          <LegendItem color="#ea2261" label="Blocked" />
+          <LegendItem color="var(--color-fg-subtle)" label="Pending" />
+          <LegendItem color="var(--color-brand)" label="In Progress" />
+          <LegendItem color="var(--color-success)" label="Completed" />
+          <LegendItem color="var(--color-danger)" label="Blocked" />
         </div>
       </div>
 
@@ -255,8 +236,8 @@ function NodeDetail({ node }: { node: WorkflowNodeData }) {
   const config = {
     pending: { icon: Clock, color: "text-[var(--color-fg-subtle)]" },
     in_progress: { icon: Loader2, color: "text-[var(--color-brand)]" },
-    completed: { icon: CheckCircle2, color: "text-[#15be53]" },
-    blocked: { icon: ShieldAlert, color: "text-[#ea2261]" },
+    completed: { icon: CheckCircle2, color: "text-[var(--color-success)]" },
+    blocked: { icon: ShieldAlert, color: "text-[var(--color-danger)]" },
   }[node.status] ?? { icon: Clock, color: "text-[var(--color-fg-subtle)]" };
 
   const StatusIcon = config.icon;
@@ -282,7 +263,7 @@ function NodeDetail({ node }: { node: WorkflowNodeData }) {
         <InfoRow label="Status">
           <span className={`flex items-center gap-1 font-medium ${config.color}`}>
             <StatusIcon size={12} className={node.status === "in_progress" ? "animate-spin" : ""} />
-            {statusLabel(node.status)}
+            {prettyLabel(node.status)}
           </span>
         </InfoRow>
         <InfoRow label="Agent Type" value={node.agent_type} />

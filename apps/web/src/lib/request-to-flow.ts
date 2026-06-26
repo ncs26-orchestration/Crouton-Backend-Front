@@ -8,19 +8,13 @@
  */
 
 import type { Node, Edge } from "@xyflow/react";
-import type { WorkflowNodeData, WorkflowEdgeData, NodeStatus } from "./types";
+import type { WorkflowNodeData, WorkflowEdgeData } from "./types";
+import { nodeStatusToken } from "./request-format";
 
 export const NODE_WIDTH = 220;
 export const NODE_HEIGHT = 72;
 const X_GAP = 80;
 const Y_GAP = 40;
-
-const STATUS_COLORS: Record<NodeStatus, string> = {
-  completed: "#15be53",
-  in_progress: "#533afd",
-  pending: "#94a3b8",
-  blocked: "#ea2261",
-};
 
 export interface FlowResult {
   nodes: Node[];
@@ -65,6 +59,16 @@ export function requestToFlow(
     queue = next;
   }
 
+  // Cycle guard: nodes inside a cycle never reach in-degree 0, so the BFS
+  // above never ranks them. Drop them into one trailing rank instead of
+  // letting them all stack at the origin. The default plan is a DAG, so
+  // this only triggers on a malformed plan.
+  const ranked = new Set(ranks.flat());
+  const unranked = workflowNodes.filter((n) => !ranked.has(n.id)).map((n) => n.id);
+  if (unranked.length > 0) {
+    ranks.push(unranked);
+  }
+
   // Position nodes. Each rank is a column; nodes in the same rank
   // are stacked vertically, centered around the middle.
   const nodeById = new Map(workflowNodes.map((n) => [n.id, n]));
@@ -99,7 +103,7 @@ export function requestToFlow(
 
   const flowEdges: Edge[] = workflowEdges.map((e) => {
     const sourceNode = nodeById.get(e.source_node_id);
-    const color = sourceNode ? STATUS_COLORS[sourceNode.status] : "#94a3b8";
+    const color = sourceNode ? nodeStatusToken(sourceNode.status) : "var(--color-fg-subtle)";
     return {
       id: e.id,
       source: e.source_node_id,

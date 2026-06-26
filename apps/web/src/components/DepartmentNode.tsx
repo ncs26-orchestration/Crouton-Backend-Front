@@ -12,20 +12,20 @@ const STATUS_CONFIG: Record<NodeStatus, { bg: string; border: string; icon: type
     label: "Pending",
   },
   in_progress: {
-    bg: "bg-[var(--color-brand-50)]",
+    bg: "bg-[var(--color-brand)]/10",
     border: "border-[var(--color-brand)]",
     icon: Loader2,
     label: "In Progress",
   },
   completed: {
-    bg: "bg-[#f0fdf4]",
-    border: "border-[#15be53]",
+    bg: "bg-[var(--color-success)]/10",
+    border: "border-[var(--color-success)]",
     icon: CheckCircle2,
     label: "Completed",
   },
   blocked: {
-    bg: "bg-[#fef2f2]",
-    border: "border-[#ea2261]",
+    bg: "bg-[var(--color-danger)]/10",
+    border: "border-[var(--color-danger)]",
     icon: ShieldAlert,
     label: "Blocked",
   },
@@ -69,9 +69,9 @@ function DepartmentNodeInner({ data, selected }: NodeProps) {
             d.status === "in_progress"
               ? "text-[var(--color-brand)] animate-spin"
               : d.status === "completed"
-                ? "text-[#15be53]"
+                ? "text-[var(--color-success)]"
                 : d.status === "blocked"
-                  ? "text-[#ea2261]"
+                  ? "text-[var(--color-danger)]"
                   : "text-[var(--color-fg-subtle)]"
           }`}
         />

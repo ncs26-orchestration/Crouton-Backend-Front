@@ -1,29 +1,27 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FileText, Plus, AlertCircle } from "lucide-react";
+import { AlertCircle, FileText, Loader2, Plus, X } from "lucide-react";
 
 import { api } from "../lib/api";
+import { useToasts } from "../components/Toasts";
+import {
+  MAX_REQUEST_DESCRIPTION_LEN,
+  MAX_REQUEST_TITLE_LEN,
+  prettyLabel,
+  priorityTextClass,
+  statusBadgeClass,
+} from "../lib/request-format";
 import type { OrgRequest, RequestPriority, RequestStatus } from "../lib/types";
 
-const STATUS_COLORS: Record<RequestStatus, string> = {
-  submitted: "bg-[var(--color-fg-subtle)]",
-  in_progress: "bg-[var(--color-brand)]",
-  awaiting_approval: "bg-[#f59e0b]",
-  approved: "bg-[#15be53]",
-  rejected: "bg-[#ea2261]",
-  completed: "bg-[#15be53]",
-};
-
-const PRIORITY_LABELS: Record<RequestPriority, { label: string; cls: string }> = {
-  low: { label: "Low", cls: "text-[var(--color-fg-subtle)]" },
-  medium: { label: "Medium", cls: "text-[var(--color-fg-muted)]" },
-  high: { label: "High", cls: "text-[#f59e0b]" },
-  urgent: { label: "Urgent", cls: "text-[#ea2261]" },
-};
-
-function statusLabel(s: RequestStatus): string {
-  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
+const PRIORITIES: RequestPriority[] = ["low", "medium", "high", "urgent"];
+const STATUSES: RequestStatus[] = [
+  "submitted",
+  "in_progress",
+  "awaiting_approval",
+  "approved",
+  "rejected",
+  "completed",
+];
 
 interface Props {
   orgId: string;
@@ -33,13 +31,24 @@ interface Props {
 export function RequestsView({ orgId, onOpenWorkflow }: Props) {
   const qc = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<RequestStatus | "all">("all");
+  const [priorityFilter, setPriorityFilter] = useState<RequestPriority | "all">("all");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["requests", orgId],
     queryFn: () => api.listRequests(orgId),
   });
 
-  const requests = data?.requests ?? [];
+  const requests = useMemo(() => data?.requests ?? [], [data]);
+  const filtered = useMemo(
+    () =>
+      requests.filter(
+        (r) =>
+          (statusFilter === "all" || r.status === statusFilter) &&
+          (priorityFilter === "all" || r.priority === priorityFilter),
+      ),
+    [requests, statusFilter, priorityFilter],
+  );
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -66,6 +75,22 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
         </button>
       </div>
 
+      {/* Filters */}
+      <div className="shrink-0 px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3">
+        <FilterSelect
+          label="Status"
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v as RequestStatus | "all")}
+          options={STATUSES}
+        />
+        <FilterSelect
+          label="Priority"
+          value={priorityFilter}
+          onChange={(v) => setPriorityFilter(v as RequestPriority | "all")}
+          options={PRIORITIES}
+        />
+      </div>
+
       {/* Table */}
       <div className="flex-1 overflow-auto">
         {isLoading && (
@@ -75,28 +100,32 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
         )}
 
         {error && (
-          <div className="flex items-center justify-center h-40 gap-2 text-sm text-[#ea2261]">
+          <div className="flex items-center justify-center h-40 gap-2 text-sm text-[var(--color-danger)]">
             <AlertCircle size={16} />
             Failed to load requests
           </div>
         )}
 
-        {!isLoading && !error && requests.length === 0 && (
+        {!isLoading && !error && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center h-60 gap-3 text-center">
             <div className="size-10 rounded-lg bg-[var(--color-surface-2)] flex items-center justify-center">
               <FileText size={20} className="text-[var(--color-fg-subtle)]" />
             </div>
-            <p className="text-sm text-[var(--color-fg-muted)]">No requests yet</p>
-            <button
-              onClick={() => setModalOpen(true)}
-              className="text-sm text-[var(--color-brand)] hover:underline"
-            >
-              Submit your first request
-            </button>
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              {requests.length === 0 ? "No requests yet" : "No requests match these filters"}
+            </p>
+            {requests.length === 0 && (
+              <button
+                onClick={() => setModalOpen(true)}
+                className="text-sm text-[var(--color-brand)] hover:underline"
+              >
+                Submit your first request
+              </button>
+            )}
           </div>
         )}
 
-        {requests.length > 0 && (
+        {filtered.length > 0 && (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-[var(--color-fg-muted)] border-b border-[var(--color-border)]">
@@ -108,7 +137,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
               </tr>
             </thead>
             <tbody>
-              {requests.map((r) => (
+              {filtered.map((r) => (
                 <RequestRow key={r.id} request={r} onClick={() => onOpenWorkflow(r.id)} />
               ))}
             </tbody>
@@ -131,8 +160,37 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
   );
 }
 
+function FilterSelect<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T | "all";
+  onChange: (v: string) => void;
+  options: readonly T[];
+}) {
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
+      {label}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+      >
+        <option value="all">All</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {prettyLabel(o)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function RequestRow({ request: r, onClick }: { request: OrgRequest; onClick: () => void }) {
-  const pri = PRIORITY_LABELS[r.priority] ?? PRIORITY_LABELS.medium;
   return (
     <tr
       onClick={onClick}
@@ -145,12 +203,13 @@ function RequestRow({ request: r, onClick }: { request: OrgRequest; onClick: () 
       </td>
       <td className="px-4 py-3 text-[var(--color-fg-muted)]">{r.requester_name}</td>
       <td className="px-4 py-3">
-        <span className={`text-xs font-medium ${pri.cls}`}>{pri.label}</span>
+        <span className={`text-xs font-medium capitalize ${priorityTextClass(r.priority)}`}>
+          {r.priority}
+        </span>
       </td>
       <td className="px-4 py-3">
-        <span className="inline-flex items-center gap-1.5">
-          <span className={`size-1.5 rounded-full ${STATUS_COLORS[r.status] ?? ""}`} />
-          <span className="text-xs text-[var(--color-fg-muted)]">{statusLabel(r.status)}</span>
+        <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${statusBadgeClass(r.status)}`}>
+          {prettyLabel(r.status)}
         </span>
       </td>
       <td className="px-4 py-3 text-right text-[var(--color-fg-muted)]">{r.progress}%</td>
@@ -167,33 +226,88 @@ function NewRequestModal({
   onClose: () => void;
   onCreated: (requestId: string) => void;
 }) {
+  const qc = useQueryClient();
+  const toasts = useToasts();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<RequestPriority>("medium");
 
   const mutation = useMutation({
     mutationFn: () =>
-      api.createRequest(orgId, { title, description, priority }),
-    onSuccess: (data) => onCreated(data.request.id),
+      api.createRequest(orgId, { title: title.trim(), description: description.trim(), priority }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["requests", orgId] });
+      onCreated(data.request.id);
+    },
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
+
+  // Escape to close + a simple focus trap so keyboard users stay inside
+  // the dialog while it's open.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = dialogRef.current;
+      if (!root) return;
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)]">
-        <h2
-          className="text-base font-medium text-[var(--color-fg)] mb-4"
-          style={{ fontFeatureSettings: '"ss01"' }}
-        >
-          New Request
-        </h2>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-request-title"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)]"
+      >
+        <div className="flex items-start justify-between mb-4">
+          <h2
+            id="new-request-title"
+            className="text-base font-medium text-[var(--color-fg)]"
+            style={{ fontFeatureSettings: '"ss01"' }}
+          >
+            New Request
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
         <div className="flex flex-col gap-3">
           <div>
             <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Title</label>
             <input
+              autoFocus
               type="text"
               value={title}
+              maxLength={MAX_REQUEST_TITLE_LEN}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Open a new office in Berlin"
               className="w-full px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-transparent"
@@ -204,6 +318,7 @@ function NewRequestModal({
             <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Description</label>
             <textarea
               value={description}
+              maxLength={MAX_REQUEST_DESCRIPTION_LEN}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               placeholder="Describe the request..."
@@ -226,12 +341,6 @@ function NewRequestModal({
           </div>
         </div>
 
-        {mutation.error && (
-          <p className="text-xs text-[#ea2261] mt-2">
-            {mutation.error instanceof Error ? mutation.error.message : "Failed to create request"}
-          </p>
-        )}
-
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
@@ -242,9 +351,10 @@ function NewRequestModal({
           <button
             onClick={() => mutation.mutate()}
             disabled={!title.trim() || mutation.isPending}
-            className="px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
+            {mutation.isPending && <Loader2 size={13} className="animate-spin" />}
             {mutation.isPending ? "Creating..." : "Submit Request"}
           </button>
         </div>
