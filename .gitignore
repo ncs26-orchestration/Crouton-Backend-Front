@@ -34,8 +34,9 @@ apps/agent/.mypy_cache/
 
 *.pdf
 
-# Local agent / assistant state
-.claude/
+# Local agent / assistant state — ignore .claude EXCEPT shared slash commands
+.claude/*
+!.claude/commands/
 
 # Web build output, generated route tree, and compiled JS artifacts (never commit)
 apps/web/.output/
