@@ -95,7 +95,10 @@ async def call_model(state: "ChatState") -> dict[str, list[BaseMessage]]:
             return {
                 "messages": [
                     AIMessage(
-                        content="(Ollama not running - set GROQ_API_KEY or GOOGLE_API_KEY or ANTHROPIC_API_KEY in .env)"
+                        content=(
+                            "(Ollama not running - set GROQ_API_KEY or"
+                            " GOOGLE_API_KEY or ANTHROPIC_API_KEY in .env)"
+                        )
                     )
                 ]
             }

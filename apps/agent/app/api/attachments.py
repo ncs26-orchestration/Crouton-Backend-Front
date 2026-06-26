@@ -22,7 +22,7 @@ import os
 import tempfile
 from typing import Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.settings import settings
@@ -157,7 +157,7 @@ def _ocr_image(data: bytes) -> str:
 
 @router.post("/extract-text", response_model=ExtractTextResponse)
 async def extract_text(
-    file: UploadFile = File(...),
+    file: UploadFile,
     # Optional overrides — the Go side can pass an authoritative kind
     # when it recognizes the filename better than sniffing does.
     kind_hint: str | None = Form(default=None),

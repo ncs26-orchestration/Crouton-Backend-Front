@@ -7,6 +7,7 @@ import (
 	"github.com/Noussour/aup/apps/api/internal/engine/camunda7"
 	"github.com/Noussour/aup/apps/api/internal/engine/elsa3"
 	"github.com/Noussour/aup/apps/api/internal/handler"
+	authmw "github.com/Noussour/aup/apps/api/internal/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -14,10 +15,11 @@ import (
 )
 
 type Deps struct {
-	Logger   *slog.Logger
-	PgPool   *pgxpool.Pool
-	Redis    *redis.Client
-	AgentURL string
+	Logger    *slog.Logger
+	PgPool    *pgxpool.Pool
+	Redis     *redis.Client
+	AgentURL  string
+	JWTSecret string
 }
 
 func NewServer(d Deps) *echo.Echo {
@@ -36,6 +38,38 @@ func NewServer(d Deps) *echo.Echo {
 	h := handler.New(d.Logger, d.PgPool, d.Redis)
 	e.GET("/healthz", h.Health)
 	e.GET("/readyz", h.Ready)
+
+	// Auth — no middleware required.
+	ah := handler.NewAuthHandler(d.Logger, d.PgPool, d.JWTSecret)
+	e.POST("/auth/register", ah.Register)
+	e.POST("/auth/login", ah.Login)
+	e.GET("/users/lookup", ah.LookupUser)
+
+	// Orgs, teams and members — all routes require a valid JWT.
+	authMiddleware := authmw.NewAuthMiddleware(d.JWTSecret)
+	oh := handler.NewOrgsHandler(d.Logger, d.PgPool)
+
+	// POST /orgs is authenticated but open to any registered user.
+	e.POST("/orgs", oh.CreateOrg, authMiddleware)
+
+	orgGroup := e.Group("/orgs", authMiddleware)
+	orgGroup.GET("", oh.ListOrgs)
+	orgGroup.GET("/:orgId", oh.GetOrg)
+	orgGroup.DELETE("/:orgId", oh.DeleteOrg)
+
+	orgGroup.POST("/:orgId/teams", oh.CreateTeam)
+	orgGroup.GET("/:orgId/teams", oh.ListTeams)
+	orgGroup.GET("/:orgId/teams/:teamId", oh.GetTeam)
+	orgGroup.PATCH("/:orgId/teams/:teamId", oh.UpdateTeam)
+	orgGroup.DELETE("/:orgId/teams/:teamId", oh.DeleteTeam)
+
+	orgGroup.POST("/:orgId/members", oh.AddOrgMember)
+	orgGroup.GET("/:orgId/members", oh.ListOrgMembers)
+	orgGroup.PATCH("/:orgId/members/:userId", oh.UpdateOrgMemberRole)
+	orgGroup.DELETE("/:orgId/members/:userId", oh.RemoveOrgMember)
+
+	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
+	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
 
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup
@@ -102,8 +136,8 @@ func NewServer(d Deps) *echo.Echo {
 		d.Logger.Error("init projects handler", slog.String("err", err.Error()))
 		panic(err)
 	}
-	e.POST("/projects", ph.CreateProject)
-	e.GET("/projects", ph.ListProjects)
+	orgGroup.POST("/:orgId/projects", ph.CreateProject)
+	orgGroup.GET("/:orgId/projects", ph.ListProjects)
 	e.GET("/projects/:id", ph.GetProject)
 	e.PATCH("/projects/:id", ph.UpdateProject)
 	e.DELETE("/projects/:id", ph.ArchiveProject)

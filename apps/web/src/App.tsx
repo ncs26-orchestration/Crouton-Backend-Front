@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { HelpOverlay } from "./components/HelpOverlay";
 import { OrgSettingsModal } from "./components/OrgSettingsModal";
@@ -12,18 +13,23 @@ import type { Chat } from "./lib/types";
 import { ChatView } from "./views/ChatView";
 import { ProjectsHomeView } from "./views/ProjectsHomeView";
 import { SettingsView } from "./views/SettingsView";
+import { LoginView } from "./views/LoginView";
+import { RegisterView } from "./views/RegisterView";
+import { InboxView } from "./views/InboxView";
+import { OrgView } from "./views/OrgView";
+import { OrgSetupView } from "./views/OrgSetupView";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { OrgProvider } from "./contexts/OrgContext";
 
-// App shell — keeps the operator's three persistent surfaces
-// always reachable from the left icon rail:
+// App shell — keeps the operator's persistent surfaces always reachable
+// from the left icon rail.
 //
-//   Home     — projects grid or the current chat, depending on
-//              whether a chat is selected.
-//   Settings — deploy-target connectors (per project) + theme.
-//   Help     — the existing keyboard-shortcut overlay.
-//
-// Navigation state is just three things: which section, which
-// project is scoped, which chat (if any) is open. All persisted in
-// localStorage so refreshes land back in the same place.
+//   Home      — projects grid or the current chat
+//   Inbox     — tasks assigned to you
+//   Workflows — workflow builder (alias for home for now)
+//   Agents    — AI agents configured for the org
+//   Settings  — deploy-target connectors + theme
+//   Help      — keyboard-shortcut overlay
 
 const STORAGE_KEY = "aup.lastLocation";
 
@@ -41,8 +47,9 @@ function loadLocation(): Location {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return { section: "home", projectId: null, chatId: null };
     const parsed = JSON.parse(raw);
+    const validSections: ShellSection[] = ["home", "inbox", "workflows", "agents", "settings", "help"];
     return {
-      section: parsed.section === "settings" || parsed.section === "help" ? parsed.section : "home",
+      section: validSections.includes(parsed.section) ? parsed.section : "home",
       projectId: typeof parsed.projectId === "string" ? parsed.projectId : null,
       chatId: typeof parsed.chatId === "string" ? parsed.chatId : null,
     };
@@ -61,17 +68,94 @@ export function App() {
     <ThemeProvider>
       <ToastProvider>
         <ReactFlowProvider>
-          <Shell />
+          <AuthProvider>
+            <AppRoot />
+          </AuthProvider>
         </ReactFlowProvider>
       </ToastProvider>
     </ThemeProvider>
   );
 }
 
+// Decides whether to show auth pages, org setup, or the main shell.
+//
+// Flow:
+//   1. No token → login / register
+//   2. Token present, orgs loading → full-screen spinner
+//   3. Token + no orgs → OrgSetupView (one-time after registration)
+//   4. Token + org exists → Shell (wrapped in OrgProvider)
+function AppRoot() {
+  const { user, logout } = useAuth();
+  const [authPage, setAuthPage] = useState<"login" | "register">("login");
+  const [orgs, setOrgs] = useState<null | Array<{ id: string; name: string; slug: string; role: string }>>(null);
+
+  useEffect(() => {
+    if (!user) { setOrgs(null); return; }
+    setOrgs(null);
+    api.listOrgs()
+      .then((r) => setOrgs(r.orgs))
+      .catch((err: unknown) => {
+        // 401/403 means the token is invalid — log out instead of looping
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("401") || msg.includes("403") || msg.includes("Unauthorized")) {
+          logout();
+        } else {
+          // Network error or other — assume no orgs so user can create one
+          setOrgs([]);
+        }
+      });
+  }, [user, logout]);
+
+  // Derive state from the orgs array
+  const orgState = orgs === null ? "loading" : orgs.length === 0 ? "none" : "has";
+
+  if (!user) {
+    if (authPage === "register") {
+      return <RegisterView onGoLogin={() => setAuthPage("login")} />;
+    }
+    return <LoginView onGoRegister={() => setAuthPage("register")} />;
+  }
+
+  if (orgState === "loading") {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[var(--color-bg)]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-8 rounded-full border-2 border-[var(--color-brand)] border-t-transparent animate-spin" />
+          <p className="text-sm text-[var(--color-fg-muted)]">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (orgState === "none") {
+    return (
+      <OrgSetupView
+        onDone={(org) => setOrgs([org])}
+      />
+    );
+  }
+
+  const firstOrg = orgs![0]!;
+  return (
+    <OrgProvider initial={firstOrg}>
+      <Shell />
+    </OrgProvider>
+  );
+}
+
 function Shell() {
+  const { logout, user } = useAuth();
+  const qc = useQueryClient();
   const [location, setLocation] = useState<Location>(loadLocation);
   const [helpOpen, setHelpOpen] = useState(false);
   const [orgModalProject, setOrgModalProject] = useState<{ id: string; name: string } | null>(null);
+
+  // Clear the query cache whenever the logged-in user changes so a
+  // newly-registered (or switched) account never sees stale data from
+  // the previous session.
+  useEffect(() => {
+    qc.clear();
+  }, [user?.id, qc]);
 
   useEffect(() => {
     saveLocation(location);
@@ -102,15 +186,19 @@ function Shell() {
     }
   };
 
+  // "workflows" maps to home for now
+  const effectiveSection = location.section === "workflows" ? "home" : location.section;
+
   return (
     <div className="h-screen w-screen overflow-hidden flex bg-[var(--color-bg)] text-[var(--color-fg)]">
       <ShellRail
         active={location.section}
         onSelect={setSection}
         onBrandClick={backToProjects}
+        onUserClick={() => { qc.clear(); logout(); }}
       />
 
-      {location.section === "home" && (
+      {(effectiveSection === "home") && (
         <>
           <ProjectTree
             selectedProjectId={location.projectId}
@@ -128,7 +216,11 @@ function Shell() {
         </>
       )}
 
-      {location.section === "settings" && (
+      {effectiveSection === "inbox" && <InboxView />}
+
+      {effectiveSection === "agents" && <OrgView />}
+
+      {effectiveSection === "settings" && (
         <SettingsView scopedProjectId={location.projectId} />
       )}
 

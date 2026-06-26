@@ -18,6 +18,7 @@ import { api } from "../lib/api";
 import type { Chat, Project } from "../lib/types";
 import { useToasts } from "./Toasts";
 import { DeleteChatModal, DeleteProjectModal, EditProjectModal } from "./ProjectModals";
+import { useOrg } from "../contexts/OrgContext";
 
 // ProjectTree renders two modes depending on whether a project is
 // scoped:
@@ -70,18 +71,20 @@ export function ProjectTree({
 function AllProjects({ onOpenProject }: { onOpenProject: (id: string) => void }) {
   const toasts = useToasts();
   const qc = useQueryClient();
+  const { activeOrg } = useOrg();
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => api.listProjects().then((r) => r.projects),
+    queryKey: ["projects", activeOrg?.id],
+    queryFn: () => api.listProjects(activeOrg!.id).then((r) => r.projects),
+    enabled: !!activeOrg,
   });
   const [showForm, setShowForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [filter, setFilter] = useState("");
 
   const createProject = useMutation({
-    mutationFn: (name: string) => api.createProject({ name }),
+    mutationFn: (name: string) => api.createProject(activeOrg!.id, { name }),
     onSuccess: (p) => {
-      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["projects", activeOrg?.id] });
       setShowForm(false);
       setNewName("");
       onOpenProject(p.id);

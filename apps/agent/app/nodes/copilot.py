@@ -31,7 +31,7 @@ _SCHEMA_PATH = Path(__file__).resolve().parent.parent / "data" / "workflow_ir.sc
 
 
 def _load_schema() -> dict[str, Any]:
-    with open(_SCHEMA_PATH, "r", encoding="utf-8") as f:
+    with open(_SCHEMA_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
