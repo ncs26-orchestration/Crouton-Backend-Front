@@ -48,7 +48,7 @@ interface Props {
 // localStorage key for thread-panel collapsed state. Per-chat keys
 // would be noisy; one shared preference matches operator
 // expectations ("I like the thread on or off by default").
-const THREAD_COLLAPSED_KEY = "aup.chatThreadCollapsed";
+const THREAD_COLLAPSED_KEY = "aios.chatThreadCollapsed";
 
 type Status = "empty" | "drafting" | "ready" | "approved" | "compiling" | "compiled" | "deploying" | "deployed" | "error";
 

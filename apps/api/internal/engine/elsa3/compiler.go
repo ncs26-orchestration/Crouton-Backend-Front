@@ -1,4 +1,4 @@
-// Package elsa3 compiles an AUP ExecutableIR into an Elsa 3
+// Package elsa3 compiles an AIOS ExecutableIR into an Elsa 3
 // WorkflowDefinition JSON document. The target is importable into
 // Elsa Studio and (when a live Elsa server exists) round-trips
 // through /elsa/api/workflow-definitions.
@@ -176,7 +176,7 @@ func serviceTaskActivity(t ir.Task) map[string]any {
 	url := ""
 	method := "POST"
 	if t.Binding != nil && t.Binding.SystemRef != "" && t.Binding.Capability != "" {
-		url = fmt.Sprintf("https://aup.dev/connectors/%s/%s", t.Binding.SystemRef, t.Binding.Capability)
+		url = fmt.Sprintf("https://aios.dev/connectors/%s/%s", t.Binding.SystemRef, t.Binding.Capability)
 	}
 	return map[string]any{
 		"id":     t.ID,

@@ -1,10 +1,10 @@
 ---
-- name: Deploy AUP stack to GCP VM
+- name: Deploy AIOS stack to GCP VM
   hosts: app
   become: true
 
   vars:
-    app_dir: /opt/aup
+    app_dir: /opt/aios
     ssh_user: "{{ ansible_user }}"
 
   tasks:

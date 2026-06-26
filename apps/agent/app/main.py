@@ -15,7 +15,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="aup-agent", version="0.0.0", lifespan=lifespan)
+    app = FastAPI(title="aios-agent", version="0.0.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

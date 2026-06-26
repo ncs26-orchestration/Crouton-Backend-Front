@@ -19,7 +19,7 @@ import (
 
 // DeploymentsHandler proxies the subset of Camunda 7 REST that the
 // Runs view needs: deployed process definitions + live instance counts.
-// AUP never mutates the engine through these endpoints; strictly reads.
+// AIOS never mutates the engine through these endpoints; strictly reads.
 type DeploymentsHandler struct {
 	logger  *slog.Logger
 	engines *repo.EngineRepo

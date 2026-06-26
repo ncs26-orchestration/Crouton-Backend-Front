@@ -4,14 +4,14 @@ Owner: Backend team · Stack: Go 1.25, Echo, pgx, JWT · Skills: `.agents/skills
 
 ## Context
 
-Pivot from the dormant "AUP" authoring tool to the **AI Organization OS**: a user submits a business
+Pivot from the dormant legacy workflow-authoring tool to the **AI Organization OS**: a user submits a business
 request, an Intake agent plans a department workflow, department agents execute in parallel with
 **agent-declared cross-dependencies**, a human approves at the Executive gate, and every transition
 is logged to an append-only audit trail and streamed live to the UI.
 
 Backend owns the durable system of record and the deterministic orchestration. This PRD also defines
 the **shared contracts** the Frontend (`PRD-FRONTEND.md`) and Agent (`PRD-AGENT.md`) teams build
-against. Out of scope: AUP `extract`/`compile`/`copilot`/`deploy` handlers stay registered, untouched.
+against. Out of scope: the legacy `extract`/`compile`/`copilot`/`deploy` handlers stay registered, untouched.
 
 Build order is the feature order below (each feature depends on the ones above it).
 

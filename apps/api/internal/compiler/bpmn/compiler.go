@@ -387,7 +387,7 @@ func buildDefinitions(wf *ir.Workflow, processKey string, p Profile) definitions
 		XmlnsDc:         "http://www.omg.org/spec/DD/20100524/DC",
 		XmlnsDi:         "http://www.omg.org/spec/DD/20100524/DI",
 		XmlnsXsi:        "http://www.w3.org/2001/XMLSchema-instance",
-		TargetNamespace: "http://aup.dev/bpmn",
+		TargetNamespace: "http://aios.dev/bpmn",
 		ID:              "defs-" + processKey,
 		Process:         proc,
 		Diagram:         buildDiagram(wf, processKey),

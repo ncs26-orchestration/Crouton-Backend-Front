@@ -159,7 +159,7 @@ func (r *EngineRepo) ListEngineConnections(ctx context.Context, tenantID string)
 // supported write path to projected_* tables — no partial/incremental
 // sync in v0.1. The whole-snapshot semantics keep things predictable:
 // deleting a user in the engine results in that user disappearing from
-// AUP on the next sync, no stale rows.
+// AIOS on the next sync, no stale rows.
 func (r *EngineRepo) ReplaceProjection(
 	ctx context.Context,
 	ecID int64,
@@ -226,7 +226,7 @@ func (r *EngineRepo) ReplaceProjection(
 	return tx.Commit(ctx)
 }
 
-// ReadTenantProjection returns everything AUP knows about a tenant's
+// ReadTenantProjection returns everything AIOS knows about a tenant's
 // IS — projected entities across all engine connections plus declared
 // systems. Shaped for direct conversion into ir.ISRegistry at the
 // service layer.

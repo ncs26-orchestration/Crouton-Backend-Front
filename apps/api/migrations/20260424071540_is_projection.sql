@@ -1,18 +1,18 @@
 -- migrate:up
 
 -- The IS Registry projection. Everything below is read-only from
--- AUP's perspective: rows are written only by the discovery adapter
+-- AIOS's perspective: rows are written only by the discovery adapter
 -- (apps/api/internal/engine/*) when syncing from an external source of
 -- truth. The UI and public API never insert into these tables.
 --
 -- Layout principles:
 --   * Everything is tenant-scoped.
---   * Projected entities carry both a stable AUP-side surrogate id
+--   * Projected entities carry both a stable AIOS-side surrogate id
 --     (BIGSERIAL) and the external (engine-side) id that was pulled.
 --   * `(engine_connection_id, external_id)` is the uniqueness guarantee
 --     that makes re-sync idempotent.
 --   * `declared_systems` and `declared_capabilities` describe systems
---     AUP cannot auto-discover (OpenBee, Odoo, M365...): they are
+--     AIOS cannot auto-discover (OpenBee, Odoo, M365...): they are
 --     tenant-declared capability catalogs. No identities live here.
 
 CREATE TABLE IF NOT EXISTS tenants (

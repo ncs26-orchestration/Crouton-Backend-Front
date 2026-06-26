@@ -10,7 +10,7 @@ import (
 )
 
 // Project is a client-company workspace. All chats + deploy targets
-// hang off one. The operator (single organization using AUP) may
+// hang off one. The operator (single organization using AIOS) may
 // have many projects, one per client engagement.
 type Project struct {
 	ID          string

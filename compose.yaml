@@ -1,4 +1,4 @@
-name: aup
+name: aios
 
 services:
   postgres:
@@ -16,7 +16,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks: [aup]
+    networks: [aios]
 
   redis:
     image: redis:8-alpine
@@ -30,11 +30,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks: [aup]
+    networks: [aios]
 
   # Camunda 7 Run distribution — ships with the invoice demo data, so
   # users (demo/john/mary/peter) and groups (sales/accounting/management
-  # /camunda-admin) exist the moment the container is healthy. AUP never
+  # /camunda-admin) exist the moment the container is healthy. AIOS never
   # writes identities into Camunda; it only reads them read-only via
   # /engine-rest and references those ids in compiled BPMN.
   camunda7:
@@ -47,7 +47,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
-    networks: [aup]
+    networks: [aios]
 
   api:
     build:
@@ -65,7 +65,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    networks: [aup]
+    networks: [aios]
 
   agent:
     build:
@@ -84,7 +84,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    networks: [aup]
+    networks: [aios]
 
   web:
     build:
@@ -95,12 +95,12 @@ services:
     depends_on:
       - api
       - agent
-    networks: [aup]
+    networks: [aios]
 
 volumes:
   pg_data:
   redis_data:
 
 networks:
-  aup:
+  aios:
     driver: bridge

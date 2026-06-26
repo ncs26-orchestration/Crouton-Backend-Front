@@ -1,22 +1,22 @@
-# @repo/ir — AUP Workflow IR v0.1
+# @repo/ir — AIOS Workflow IR v0.1
 
 Canonical, engine-agnostic JSON representation of a business workflow,
-plus the schemas AUP binds against.
+plus the schemas AIOS binds against.
 
 ## Contents
 
 | File | Purpose |
 |---|---|
 | `schema.json` | Workflow IR v0.1 JSON Schema (Draft 2020-12). Every IR produced by extraction or edited in the UI validates against this. |
-| `is-registry.schema.json` | IS Registry v0.1 JSON Schema. Describes what AUP caches per tenant: projected users/groups/forms from the engine, and declared systems with capability catalogs. |
+| `is-registry.schema.json` | IS Registry v0.1 JSON Schema. Describes what AIOS caches per tenant: projected users/groups/forms from the engine, and declared systems with capability catalogs. |
 | `engine-profiles/camunda7.json` | Capability profile for Camunda 7. Read by the BPMN compiler to pick the right XML shape (namespaces, JUEL vs FEEL, external-task topics, embedded formData). |
 | `examples/` | Three example IRs used by golden tests and the demo. |
 
 ## Identity invariant
 
-The IR is the only place in AUP that owns workflow structure. Identities
+The IR is the only place in AIOS that owns workflow structure. Identities
 — users, groups, deployed forms — belong to the engine and the client's
-IdP. AUP projects them read-only into the IS Registry and the IR only
+IdP. AIOS projects them read-only into the IS Registry and the IR only
 **references** them. If a binding's `assignee_user_id`, `candidate_group_id`,
 `system_ref`, `capability`, or `form_key` does not resolve against a
 supplied IS Registry, the workflow is invalid.

@@ -96,7 +96,7 @@ func (a *Adapter) Discover(ctx context.Context, endpoint, authUser, authSecret s
 // maps the response to engine.DeploymentResult. The first entry of
 // DeployedProcessDefinitions is the "primary" process definition —
 // Camunda returns a single map entry for a single-process deployment,
-// which is the only shape AUP produces in v0.1.
+// which is the only shape AIOS produces in v0.1.
 func (a *Adapter) Deploy(ctx context.Context, endpoint, authUser, authSecret, deploymentName string, artifact []byte) (engine.DeploymentResult, error) {
 	c := New(endpoint, authUser, authSecret)
 	fileName := deploymentName + ".bpmn"

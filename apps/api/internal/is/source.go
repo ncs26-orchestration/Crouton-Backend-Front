@@ -1,10 +1,10 @@
-// Package is defines the Enterprise Adapter contract — AUP's
+// Package is defines the Enterprise Adapter contract — AIOS's
 // mechanism for projecting identity, organizational structure, and
 // document metadata out of existing enterprise systems (LDAP,
 // Active Directory, SCIM, an OIDC IdP, an ECM like OpenBee, …).
 //
 // This package is a peer to internal/engine/. Engines ship workflow
-// execution; enterprise sources ship the IS data AUP grounds its
+// execution; enterprise sources ship the IS data AIOS grounds its
 // extractions in. They share the same shape of output
 // (engine.Projection) so the caching layer doesn't care who
 // produced a row.

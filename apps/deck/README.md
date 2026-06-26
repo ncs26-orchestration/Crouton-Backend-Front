@@ -1,4 +1,4 @@
-# apps/deck — AUP jury deck
+# apps/deck — AIOS jury deck
 
 A Slidev project for the hackathon jury presentation.
 

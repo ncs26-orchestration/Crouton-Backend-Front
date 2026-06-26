@@ -31,7 +31,7 @@ import { OrgProvider } from "./contexts/OrgContext";
 //   Settings  — deploy-target connectors + theme
 //   Help      — keyboard-shortcut overlay
 
-const STORAGE_KEY = "aup.lastLocation";
+const STORAGE_KEY = "aios.lastLocation";
 
 interface Location {
   section: ShellSection;

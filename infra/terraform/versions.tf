@@ -11,6 +11,6 @@ terraform {
   # Uncomment to store state in GCS (recommended before sharing with team):
   # backend "gcs" {
   #   bucket = "YOUR_GCS_BUCKET"
-  #   prefix = "aup/terraform"
+  #   prefix = "aios/terraform"
   # }
 }

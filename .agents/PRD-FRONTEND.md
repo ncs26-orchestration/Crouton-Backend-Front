@@ -4,7 +4,7 @@ Owner: Frontend team · Stack: React 19, Vite, React Flow, TanStack Query, Tailw
 
 ## Context
 
-Pivot the web app from the AUP authoring UI to the **AI Organization OS** dashboard in `../mvp.png`:
+Pivot the web app from the legacy authoring UI to the **AI Organization OS** dashboard in `../mvp.png`:
 a left nav, a user-submitted request, and a live clickable workflow graph of department stages with a
 Request Overview panel and a Node Detail panel. Match `../DESIGN.md` (Stripe-inspired: navy `#061b31`,
 purple `#533afd`). Consume the REST + SSE contract in `PRD-BACKEND.md`; the agent layer is invisible

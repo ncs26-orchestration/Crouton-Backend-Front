@@ -7,7 +7,7 @@ provider "google" {
 # ── Static external IP ───────────────────────────────────────────────────────
 
 resource "google_compute_address" "app_ip" {
-  name   = "aup-ip"
+  name   = "aios-ip"
   region = var.region
 }
 
@@ -15,8 +15,8 @@ resource "google_compute_address" "app_ip" {
 # Allows inbound traffic on the ports the stack exposes.
 # All services run on a single VM so one rule covers everything.
 
-resource "google_compute_firewall" "aup_inbound" {
-  name    = "aup-inbound"
+resource "google_compute_firewall" "aios_inbound" {
+  name    = "aios-inbound"
   network = "default"
 
   allow {
@@ -31,16 +31,16 @@ resource "google_compute_firewall" "aup_inbound" {
   }
 
   source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["aup"]
+  target_tags   = ["aios"]
 }
 
 # ── VM ───────────────────────────────────────────────────────────────────────
 
 resource "google_compute_instance" "app" {
-  name         = "aup-vm"
+  name         = "aios-vm"
   machine_type = var.machine_type
   zone         = var.zone
-  tags         = ["aup"]
+  tags         = ["aios"]
 
   boot_disk {
     initialize_params {

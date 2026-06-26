@@ -1,6 +1,6 @@
 // Package camunda7 is a minimal REST client for Camunda 7's engine-rest
-// API. AUP uses it read-only to project identity (users, groups,
-// memberships) and existing deployments; AUP never writes to the engine
+// API. AIOS uses it read-only to project identity (users, groups,
+// memberships) and existing deployments; AIOS never writes to the engine
 // through this client.
 package camunda7
 
@@ -34,7 +34,7 @@ func New(endpoint, username, password string) *Client {
 	}
 }
 
-// User mirrors Camunda's UserProfileDto. Only the fields AUP cares
+// User mirrors Camunda's UserProfileDto. Only the fields AIOS cares
 // about are decoded.
 type User struct {
 	ID        string `json:"id"`
@@ -140,7 +140,7 @@ type Deployment struct {
 	Source string `json:"source,omitempty"`
 }
 
-// DeploymentResource mirrors DeploymentResourceDto. AUP looks at the
+// DeploymentResource mirrors DeploymentResourceDto. AIOS looks at the
 // name to identify deployed forms (resources ending in .form).
 type DeploymentResource struct {
 	ID           string `json:"id"`

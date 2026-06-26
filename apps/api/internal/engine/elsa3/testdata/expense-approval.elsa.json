@@ -32,7 +32,7 @@
         "url": {
           "expression": {
             "type": "Literal",
-            "value": "https://aup.dev/connectors/openbee/document.archive"
+            "value": "https://aios.dev/connectors/openbee/document.archive"
           },
           "typeName": "String"
         }
@@ -51,7 +51,7 @@
         "url": {
           "expression": {
             "type": "Literal",
-            "value": "https://aup.dev/connectors/m365/user.notify.email"
+            "value": "https://aios.dev/connectors/m365/user.notify.email"
           },
           "typeName": "String"
         }

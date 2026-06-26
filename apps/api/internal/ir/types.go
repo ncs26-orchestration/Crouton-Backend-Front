@@ -1,11 +1,11 @@
-// Package ir defines the in-memory shape of the AUP Workflow IR (v0.1)
+// Package ir defines the in-memory shape of the AIOS Workflow IR (v0.1)
 // and the IS Registry it references. Types mirror
 // packages/ir/schema.json and packages/ir/is-registry.schema.json.
 package ir
 
 // Workflow is the canonical, engine-agnostic description of a business
 // process. It is the sole source of truth for workflow structure in
-// AUP; every compiler target (BPMN, Elsa, n8n, DMN) emits a derived
+// AIOS; every compiler target (BPMN, Elsa, n8n, DMN) emits a derived
 // artifact from an instance of this type.
 type Workflow struct {
 	Version  string    `json:"version"`
@@ -110,7 +110,7 @@ type FormField struct {
 	Options  []string `json:"options,omitempty"`
 }
 
-// ISRegistry is the per-tenant projection AUP caches read-only. Users
+// ISRegistry is the per-tenant projection AIOS caches read-only. Users
 // and groups come from the engine's identity service (or an external
 // IdP). Systems are declared by the tenant and expose capability
 // catalogs. Identities are never created here — this type is a cache,

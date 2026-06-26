@@ -11,7 +11,7 @@ import (
 // Adapter is the engine.Adapter for Elsa 3. Compile + Deploy are
 // wired; Discover returns ErrNotSupported because Elsa's identity
 // plane is pluggable (OIDC/JWT etc.) and a generic discovery pass
-// would mismatch most deployments. The AUP operator tool grounds in
+// would mismatch most deployments. The AIOS operator tool grounds in
 // chat context, not the engine's identity store, so skipping it
 // doesn't hurt the user flow.
 type Adapter struct{}

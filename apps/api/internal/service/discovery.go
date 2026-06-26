@@ -1,5 +1,5 @@
 // Package service wires engine-client + repo into the discovery flow.
-// Nothing in this package writes to an engine — AUP's stance is
+// Nothing in this package writes to an engine — AIOS's stance is
 // "read-only against the engine, authoritative only over its own
 // owned entities".
 package service
@@ -27,11 +27,11 @@ func NewDiscovery(engines *repo.EngineRepo) *Discovery {
 
 // Sync runs a full discovery cycle for one engine connection. It
 // returns the freshly-written projection so the caller (HTTP handler)
-// can confirm what landed in AUP's cache.
+// can confirm what landed in AIOS's cache.
 //
 // This is the only writer against projected_* tables. Every call
 // replaces the entire projection for that engine connection: the
-// snapshot semantics are simple and keep AUP's view tightly aligned
+// snapshot semantics are simple and keep AIOS's view tightly aligned
 // with the engine's current state.
 func (d *Discovery) Sync(ctx context.Context, ec *repo.EngineConnection) (int /*users*/, int /*groups*/, int /*forms*/, error) {
 	switch ec.Kind {
@@ -75,7 +75,7 @@ func (d *Discovery) syncCamunda7(ctx context.Context, ec *repo.EngineConnection)
 
 	// Forms: scan deployments, keep resources that look like forms.
 	// Camunda's built-in concept of a form is either (a) an embedded
-	// BPMN formKey, which AUP emits directly from the IR and does not
+	// BPMN formKey, which AIOS emits directly from the IR and does not
 	// need to project back, or (b) a deployed .form file. For v0.1 we
 	// pick up (b) only; (a) is derived from IR at compile time.
 	deployments, err := cli.ListDeployments(ctx)

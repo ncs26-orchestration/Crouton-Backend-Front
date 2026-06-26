@@ -1,4 +1,4 @@
-const KEY = "aup.token";
+const KEY = "aios.token";
 
 export const authStore = {
   get: () => localStorage.getItem(KEY),

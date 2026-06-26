@@ -37,7 +37,7 @@ class InterviewState(TypedDict, total=False):
 # --- prompt ----------------------------------------------------------
 
 _INSTRUCTIONS = """\
-You are AUP's onboarding interviewer. Your job is to build a factual
+You are AIOS's onboarding interviewer. Your job is to build a factual
 **Organisation Overview** for a client company through a structured
 chat. The integrator (operator) is talking to you on behalf of a
 client; their messages, attached documents, and prior answers are

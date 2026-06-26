@@ -9,7 +9,7 @@ interface ThemeContextValue {
 }
 
 const Ctx = createContext<ThemeContextValue | null>(null);
-const STORAGE_KEY = "aup-theme";
+const STORAGE_KEY = "aios-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {

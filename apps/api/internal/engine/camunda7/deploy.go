@@ -12,7 +12,7 @@ import (
 )
 
 // DeploymentResult is what Camunda's REST returns on a successful
-// deployment — the subset AUP cares about.
+// deployment — the subset AIOS cares about.
 type DeploymentResult struct {
 	ID                         string                               `json:"id"`
 	Name                       string                               `json:"name"`
@@ -37,8 +37,8 @@ func (c *Client) Deploy(ctx context.Context, deploymentName, fileName string, xm
 
 	for _, f := range [][2]string{
 		{"deployment-name", deploymentName},
-		{"tenant-id", "aup"},
-		{"deployment-source", "aup"},
+		{"tenant-id", "aios"},
+		{"deployment-source", "aios"},
 		{"enable-duplicate-filtering", "true"},
 	} {
 		if err := mw.WriteField(f[0], f[1]); err != nil {

@@ -76,7 +76,7 @@ type Projection struct {
 }
 
 // DeploymentResult is returned by Deploy. The IDs come from the
-// engine's response — AUP records them in its Deployment table.
+// engine's response — AIOS records them in its Deployment table.
 type DeploymentResult struct {
 	DeploymentID        string `json:"deployment_id"`
 	ProcessDefinitionID string `json:"process_definition_id,omitempty"`

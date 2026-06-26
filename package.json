@@ -1,5 +1,5 @@
 {
-  "name": "aup",
+  "name": "aios",
   "private": true,
   "version": "0.0.0",
   "description": "Polyglot monorepo: React 19 web, Go (Echo) API, FastAPI + LangGraph agent",

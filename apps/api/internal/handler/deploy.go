@@ -25,7 +25,7 @@ import (
 // connection, pushes it via the engine's own REST API, and returns
 // references the UI can link to (Cockpit / Tasklist URLs).
 //
-// AUP writes exactly one thing back to the engine: the BPMN artifact.
+// AIOS writes exactly one thing back to the engine: the BPMN artifact.
 // Identities, task routing, running-state: all owned by Camunda.
 type DeployHandler struct {
 	logger    *slog.Logger

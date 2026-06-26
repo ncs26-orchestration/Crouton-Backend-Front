@@ -1,4 +1,4 @@
-# AUP jury deck — outline
+# AIOS jury deck — outline
 
 3 minutes live + 2 minutes Q&A. Mirrors VISION.md §9 demo script.
 Pass this file to `/slidev:generate` once the plugin is installed.

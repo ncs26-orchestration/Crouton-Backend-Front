@@ -94,7 +94,7 @@ func (h *CopilotHandler) proxyWithIS(c echo.Context, path string) error {
 	regBytes, _ := json.Marshal(reg)
 
 	// Re-serialize with is_registry merged in — avoids the agent
-	// needing to know about AUP's tenant model.
+	// needing to know about AIOS's tenant model.
 	var envelope map[string]any
 	_ = json.Unmarshal(body, &envelope)
 	if envelope == nil {

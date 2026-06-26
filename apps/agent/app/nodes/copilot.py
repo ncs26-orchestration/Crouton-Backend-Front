@@ -179,7 +179,7 @@ def _strip_code_fences(s: str) -> str:
 
 
 _ASK_INSTRUCTIONS = """\
-You are AUP's Copilot. Answer the user's question about the workflow
+You are AIOS's Copilot. Answer the user's question about the workflow
 they just generated. The WORKFLOW and INFORMATION SYSTEM sections
 below are the only facts you are allowed to cite — do not invent
 users, systems, or tasks that aren't listed.
@@ -255,7 +255,7 @@ async def copilot_ask(
 
 
 _CLARIFY_INSTRUCTIONS = """\
-You are AUP's Copilot. The user flagged an element in the workflow
+You are AIOS's Copilot. The user flagged an element in the workflow
 as low-confidence. Propose 2–4 alternative interpretations as
 JSON-Patch operations (RFC 6902) that would resolve the ambiguity.
 

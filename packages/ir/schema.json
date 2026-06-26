@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aup.dev/schemas/workflow-ir/0.1",
-  "title": "AUP Workflow IR",
+  "$id": "https://aios.dev/schemas/workflow-ir/0.1",
+  "title": "AIOS Workflow IR",
   "description": "Canonical, engine-agnostic representation of a business workflow. Every reference (assignee_user_id, candidate_group_id, system_ref, capability, form_ref) must resolve against a provided IS Registry.",
   "type": "object",
   "required": ["version", "metadata", "actors", "tasks", "events", "flows"],

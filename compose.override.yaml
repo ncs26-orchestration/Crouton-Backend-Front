@@ -33,7 +33,7 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
-    networks: [aup]
+    networks: [aios]
 
   # One-shot migration runner. Reuses the api dev image (which bundles
   # dbmate) to apply all pending migrations before the api boots, so a
@@ -58,7 +58,7 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
-    networks: [aup]
+    networks: [aios]
 
   api:
     build:

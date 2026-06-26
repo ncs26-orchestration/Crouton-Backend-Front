@@ -12,7 +12,7 @@ import (
 // adapter already knows how to pull users, groups, and
 // memberships — we just wrap it to satisfy the Source interface.
 //
-// When a tenant registers a Camunda engine today, AUP gets both
+// When a tenant registers a Camunda engine today, AIOS gets both
 // "where to deploy" and "where identities live" in one connection.
 // Future sources (LDAP, SCIM) decouple those.
 type Camunda7Source struct {

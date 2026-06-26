@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aup.dev/schemas/is-registry/0.1",
-  "title": "AUP IS Registry",
-  "description": "A per-tenant projection of the information systems AUP can reference. Two classes: projected (pulled read-only from an engine or IdP) and declared (capability catalogs for systems AUP cannot auto-discover). AUP never owns identities in this document — it is a cache + catalog.",
+  "$id": "https://aios.dev/schemas/is-registry/0.1",
+  "title": "AIOS IS Registry",
+  "description": "A per-tenant projection of the information systems AIOS can reference. Two classes: projected (pulled read-only from an engine or IdP) and declared (capability catalogs for systems AIOS cannot auto-discover). AIOS never owns identities in this document — it is a cache + catalog.",
   "type": "object",
   "required": ["tenant_id", "users", "groups", "systems"],
   "additionalProperties": false,

@@ -44,7 +44,7 @@ class ExtractionState(TypedDict, total=False):
 # --- prompting --------------------------------------------------------
 
 _INSTRUCTIONS = """\
-You are the extractor for AUP — a workflow authoring tool that sits
+You are the extractor for AIOS — a workflow authoring tool that sits
 above real workflow engines. Turn the business-process description
 below into a single Workflow IR that MATCHES THE JSON SCHEMA EXACTLY
 and RESPECTS THE INFORMATION SYSTEM below.
