@@ -51,7 +51,7 @@ curl -fsS "$API/orgs" -H "authorization: Bearer ${token}" \
   | jq -e --arg slug "$slug" '[.. | .slug? // empty] | index($slug) != null' >/dev/null \
   || fail "new org not found in list"
 
-# --- F1: submit & track a request ---
+# --- F1/F2: submit a request and get an auto-planned workflow graph ---
 
 say "submit a request (Open a new office in Berlin, High)"
 req_id=$(curl -fsS -X POST "$API/orgs/${org_id}/requests" \
@@ -66,12 +66,16 @@ curl -fsS "$API/orgs/${org_id}/requests" -H "authorization: Bearer ${token}" \
   | jq -e --arg id "$req_id" '.requests | map(.id) | index($id) != null' >/dev/null \
   || fail "new request not found in list"
 
-say "request detail loads with the (still empty) graph"
+# The intake planner runs on create (deterministic default plan when no LLM
+# key is set), so the request moves to in_progress and carries a department
+# workflow graph of ~10 stages with parallel review branches.
+say "request detail loads with the auto-planned workflow graph"
 curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}" \
   | jq -e --arg id "$req_id" \
-      '.request.id == $id and .request.status == "submitted" and .request.priority == "high"
-       and (.nodes | length) == 0 and (.edges | length) == 0 and (.agents | length) == 0' >/dev/null \
-  || fail "request detail shape"
+      '.request.id == $id and .request.status == "in_progress" and .request.priority == "high"
+       and (.nodes | length) >= 9 and (.edges | length) >= 9
+       and ([.nodes[].key] | index("exec_approval")) != null' >/dev/null \
+  || fail "request detail / workflow graph shape"
 
 echo
 echo "SMOKE OK"
