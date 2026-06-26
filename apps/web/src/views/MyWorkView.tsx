@@ -72,7 +72,7 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
         )}
 
         {!isLoading && !error && (
-          <div className="flex flex-col gap-8 w-full max-w-[1500px]">
+          <div className="flex flex-col gap-8 w-full">
             {/* Summary */}
             <div className="grid grid-cols-3 gap-3">
               <SummaryStat label="Pending approvals" value={pending.length} tone="brand" />

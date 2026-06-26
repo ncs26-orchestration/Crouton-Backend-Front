@@ -1,50 +1,45 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Keyboard, X } from "lucide-react";
+import {
+  HelpCircle,
+  X,
+  Home,
+  Inbox,
+  FileText,
+  Workflow,
+  Bot,
+  BarChart3,
+  ScrollText,
+  Link2,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
-// HelpOverlay — triggered by the `?` key. A calm modal card listing
-// every keyboard shortcut in the app, grouped by surface. Pure
-// static content; no state beyond open/close.
+// HelpOverlay — a short guide to the app. Most of the old keyboard-shortcut
+// list referred to a different product; this is an honest walkthrough of the
+// sections plus the handful of interactions that exist.
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
-const SHORTCUTS: { group: string; items: [keys: string[], description: string][] }[] = [
-  {
-    group: "Global",
-    items: [
-      [["⌘", "K"], "Open the command palette"],
-      [["⌘", "/"], "Toggle Copilot sidebar"],
-      [["?"], "Show this help"],
-      [["Esc"], "Close any modal"],
-    ],
-  },
-  {
-    group: "Workflow",
-    items: [
-      [["⌘", "↵"], "Extract workflow from composer text"],
-      [["⌘", "⇧", "C"], "Compile the current workflow"],
-      [["⌘", "⇧", "D"], "Deploy to the selected engine"],
-    ],
-  },
-  {
-    group: "Navigation",
-    items: [
-      [["⌘", "1"], "Workspace"],
-      [["⌘", "2"], "Runs"],
-      [["⌘", "3"], "Settings"],
-    ],
-  },
-  {
-    group: "Canvas",
-    items: [
-      [["Drag"], "Move a node"],
-      [["Scroll"], "Zoom in / out"],
-      [["Click"], "Select a task (opens Inspector)"],
-      [["Esc"], "Deselect"],
-    ],
-  },
+const SECTIONS: { icon: LucideIcon; label: string; desc: string }[] = [
+  { icon: Home, label: "Home", desc: "Org dashboard: stats, recent requests, live activity." },
+  { icon: Inbox, label: "My Work", desc: "Your approvals, work in flight, and recent decisions." },
+  { icon: FileText, label: "Requests", desc: "Submit a new request and track every one in the org." },
+  { icon: Workflow, label: "Workflows", desc: "The live canvas. Click a node for its tasks and activity." },
+  { icon: Bot, label: "Agents", desc: "The department agents and what they're working on." },
+  { icon: BarChart3, label: "Reports", desc: "Completed reports (printable) and the full audit trail." },
+  { icon: ScrollText, label: "Policies", desc: "The rules each department agent checks against." },
+  { icon: Link2, label: "Integrations", desc: "The systems and data sources agents draw on." },
+  { icon: Users, label: "Teams", desc: "Departments and their members." },
+];
+
+const TIPS: string[] = [
+  "Click any node on the workflow canvas to open its details, tasks, and activity.",
+  "Open a completed report from Reports to read and print or export it as PDF.",
+  "Collapse the sidebar with the toggle at the top to give the canvas more room.",
+  "Press Esc to close any dialog.",
 ];
 
 export function HelpOverlay({ open, onClose }: Props) {
@@ -65,56 +60,61 @@ export function HelpOverlay({ open, onClose }: Props) {
             exit={{ y: 6, opacity: 0 }}
             transition={{ type: "spring", stiffness: 360, damping: 30 }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="w-full max-w-[560px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-deep overflow-hidden"
+            className="w-full max-w-[640px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-deep overflow-hidden"
           >
-            <header className="px-4 h-12 border-b border-[var(--color-border)] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="size-6 rounded-md bg-[var(--color-accent-bg)] flex items-center justify-center">
-                  <Keyboard size={12} className="text-[var(--color-brand)]" />
+            <header className="px-5 h-14 border-b border-[var(--color-border)] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="size-7 rounded-md bg-[var(--color-accent-bg)] flex items-center justify-center">
+                  <HelpCircle size={15} className="text-[var(--color-brand)]" />
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-fg-subtle)]" style={{ fontWeight: 500 }}>
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-fg-subtle)] font-medium">
                     Help
                   </div>
-                  <div className="text-[13px] text-[var(--color-fg)]" style={{ fontWeight: 400 }}>
-                    Keyboard shortcuts
-                  </div>
+                  <div className="text-sm text-[var(--color-fg)]">Getting around</div>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+                className="size-7 flex items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)]"
                 aria-label="close help"
               >
-                <X size={14} />
+                <X size={15} />
               </button>
             </header>
-            <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-5 nice-scroll max-h-[70vh] overflow-y-auto">
-              {SHORTCUTS.map((s) => (
-                <section key={s.group}>
-                  <h3 className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-fg-subtle)] mb-2" style={{ fontWeight: 500 }}>
-                    {s.group}
-                  </h3>
-                  <ul className="space-y-1.5">
-                    {s.items.map(([keys, desc], i) => (
-                      <li key={i} className="flex items-center justify-between gap-3 text-[12px]">
-                        <span className="text-[var(--color-fg-muted)]">{desc}</span>
-                        <span className="flex items-center gap-0.5 shrink-0">
-                          {keys.map((k, j) => (
-                            <kbd
-                              key={j}
-                              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 font-mono text-[10px] border border-[var(--color-border)] rounded-[4px] bg-[var(--color-surface-2)] text-[var(--color-fg)]"
-                              style={{ fontWeight: 500 }}
-                            >
-                              {k}
-                            </kbd>
-                          ))}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
+
+            <div className="p-5 max-h-[72vh] overflow-y-auto nice-scroll">
+              <h3 className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-fg-subtle)] font-medium mb-2.5">
+                The sections
+              </h3>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 mb-5">
+                {SECTIONS.map((s) => {
+                  const Icon = s.icon;
+                  return (
+                    <li key={s.label} className="flex gap-2.5">
+                      <span className="size-7 shrink-0 rounded-md bg-[var(--color-surface-2)] flex items-center justify-center">
+                        <Icon size={14} className="text-[var(--color-brand)]" strokeWidth={1.75} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-[var(--color-fg)]">{s.label}</p>
+                        <p className="text-xs text-[var(--color-fg-muted)] leading-snug">{s.desc}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <h3 className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-fg-subtle)] font-medium mb-2.5">
+                Tips
+              </h3>
+              <ul className="flex flex-col gap-2">
+                {TIPS.map((t) => (
+                  <li key={t} className="flex items-start gap-2 text-xs text-[var(--color-fg-muted)] leading-snug">
+                    <span className="mt-1.5 size-1 rounded-full bg-[var(--color-brand)] shrink-0" />
+                    {t}
+                  </li>
+                ))}
+              </ul>
             </div>
           </motion.div>
         </motion.div>

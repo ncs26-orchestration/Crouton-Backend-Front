@@ -98,7 +98,7 @@ export function PoliciesView() {
         </p>
       </div>
 
-      <div className="px-8 py-6 w-full max-w-[1500px]">
+      <div className="px-8 py-6 w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {DEPARTMENTS.map((d) => (
             <DepartmentCard key={d.department} dept={d} />
