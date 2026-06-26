@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { requestToFlow, NODE_WIDTH } from "./request-to-flow";
+import { requestToFlow, NODE_WIDTH, X_GAP } from "./request-to-flow";
 import { nodeStatusToken } from "./request-format";
 import type { NodeStatus, WorkflowEdgeData, WorkflowNodeData } from "./types";
 
@@ -37,8 +37,8 @@ describe("requestToFlow", () => {
     );
     const posOf = (id: string) => nodes.find((n) => n.id === id)!.position;
     expect(posOf("a").x).toBe(0);
-    expect(posOf("b").x).toBe(NODE_WIDTH + 80);
-    expect(posOf("c").x).toBe(2 * (NODE_WIDTH + 80));
+    expect(posOf("b").x).toBe(NODE_WIDTH + X_GAP);
+    expect(posOf("c").x).toBe(2 * (NODE_WIDTH + X_GAP));
   });
 
   it("places parallel branches in the same column at different rows", () => {

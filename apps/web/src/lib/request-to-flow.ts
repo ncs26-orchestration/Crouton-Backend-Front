@@ -16,8 +16,8 @@ export const NODE_HEIGHT = 76;
 // Tighter horizontal gap keeps the (inherently wide) pipeline compact so
 // fitView can show it at a larger, more readable zoom. A roomier vertical gap
 // gives the parallel branches clear separation.
-const X_GAP = 56;
-const Y_GAP = 48;
+export const X_GAP = 56;
+export const Y_GAP = 48;
 
 export interface FlowResult {
   nodes: Node[];
