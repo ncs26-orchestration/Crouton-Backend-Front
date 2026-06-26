@@ -1,0 +1,92 @@
+name: deploy
+
+# Auto-deploy to prod on every push to main: build + push the app images to
+# Artifact Registry, then tell the VM to pull and restart. Auth is via Workload
+# Identity Federation (no long-lived keys).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Never run two prod deploys at once; let an in-flight one finish.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # required for Workload Identity Federation
+
+env:
+  PROJECT: ncs26-solution
+  REGION: europe-west1
+  REGISTRY: europe-west1-docker.pkg.dev/ncs26-solution/solution
+  ZONE: europe-west1-b
+  VM: ncs26-vm
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/968561482613/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: gh-deployer@ncs26-solution.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev -q
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push images
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_SHA}"
+          build() {
+            local svc="$1" dockerfile="$2" target="$3"
+            echo "::group::build $svc"
+            docker buildx build \
+              --file "$dockerfile" --target "$target" \
+              --tag "${REGISTRY}/${svc}:${TAG}" \
+              --tag "${REGISTRY}/${svc}:latest" \
+              --cache-from "type=gha,scope=${svc}" \
+              --cache-to "type=gha,mode=max,scope=${svc}" \
+              --push .
+            echo "::endgroup::"
+          }
+          build api   apps/api/Dockerfile   runtime
+          build agent apps/agent/Dockerfile runtime
+          build web   apps/web/Dockerfile   runtime
+          build migrate apps/api/Dockerfile migrate
+
+      - name: Copy compose file to VM
+        run: |
+          gcloud compute scp compose.deploy.yaml "${VM}:/opt/aios/compose.deploy.yaml" \
+            --project "${PROJECT}" --zone "${ZONE}" --tunnel-through-iap=false --quiet
+
+      - name: Pull and restart on the VM
+        run: |
+          gcloud compute ssh "${VM}" --project "${PROJECT}" --zone "${ZONE}" \
+            --tunnel-through-iap=false --quiet --command "\
+            set -e; cd /opt/aios; \
+            sudo env REGISTRY='${REGISTRY}' TAG='${GITHUB_SHA}' docker compose -f compose.deploy.yaml pull; \
+            sudo env REGISTRY='${REGISTRY}' TAG='${GITHUB_SHA}' docker compose -f compose.deploy.yaml up -d --remove-orphans --wait --wait-timeout 600; \
+            sudo docker compose -f compose.deploy.yaml ps"
+
+      - name: Smoke test
+        run: |
+          set -e
+          IP=35.241.240.210
+          for path in / /api/healthz /agent/healthz; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://${IP}${path}")
+            echo "GET ${path} -> ${code}"
+            [ "$code" = "200" ] || { echo "smoke test failed on ${path}"; exit 1; }
+          done
