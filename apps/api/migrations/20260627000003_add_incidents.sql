@@ -1,3 +1,5 @@
+-- migrate:up
+
 -- Allow the technician role (code already uses it but the CHECK was too narrow).
 ALTER TABLE team_members DROP CONSTRAINT IF EXISTS team_members_role_check;
 ALTER TABLE team_members ADD CONSTRAINT team_members_role_check
@@ -34,3 +36,10 @@ CREATE TABLE IF NOT EXISTS incident_messages (
 CREATE INDEX IF NOT EXISTS idx_incidents_machine ON incidents(machine_id);
 CREATE INDEX IF NOT EXISTS idx_incidents_org ON incidents(org_id);
 CREATE INDEX IF NOT EXISTS idx_incident_messages_incident ON incident_messages(incident_id);
+
+-- migrate:down
+
+ALTER TABLE team_members DROP CONSTRAINT IF EXISTS team_members_role_check;
+ALTER TABLE team_members ADD CONSTRAINT team_members_role_check CHECK (role IN ('lead', 'member'));
+DROP TABLE IF EXISTS incident_messages;
+DROP TABLE IF EXISTS incidents;
