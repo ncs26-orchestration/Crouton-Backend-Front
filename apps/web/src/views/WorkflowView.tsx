@@ -197,10 +197,12 @@ function WorkflowCanvas({
           nodeTypes={nodeTypes}
           onNodeClick={onNodeClick}
           fitView
-          fitViewOptions={{ padding: 0.2 }}
+          fitViewOptions={{ padding: 0.16, maxZoom: 1.15 }}
           proOptions={{ hideAttribution: true }}
           minZoom={0.3}
           maxZoom={2}
+          nodesDraggable={false}
+          nodesConnectable={false}
         >
           <Background gap={16} size={1} color="var(--color-border)" />
           <Controls

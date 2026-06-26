@@ -13,10 +13,12 @@ const STORAGE_KEY = "aios-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "dark";
+    if (typeof window === "undefined") return "light";
     const saved = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
     if (saved === "light" || saved === "dark") return saved;
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    // Default to the Stripe-inspired light system (matches DESIGN.md and the
+    // reference mockup). Dark stays available via the rail toggle.
+    return "light";
   });
 
   useEffect(() => {
