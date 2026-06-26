@@ -78,7 +78,7 @@ export function HomeView({ orgId, onOpenWorkflow, onNavigate }: Props) {
         </button>
       </div>
 
-      <div className="px-8 py-6 flex flex-col gap-6 w-full max-w-[1100px]">
+      <div className="px-8 py-6 flex flex-col gap-6 w-full">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatTile icon={FileText} label="Total requests" value={stats.total} tone="neutral" />
           <StatTile icon={Loader2} label="In progress" value={stats.active} tone="brand" />

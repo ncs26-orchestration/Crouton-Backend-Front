@@ -34,6 +34,10 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
     () => requests.filter((r) => r.status === "awaiting_approval"),
     [requests],
   );
+  const active = useMemo(
+    () => requests.filter((r) => r.status === "submitted" || r.status === "in_progress"),
+    [requests],
+  );
   const decided = useMemo(
     () => requests.filter((r) => DECIDED_STATUSES.has(r.status)).slice(0, 6),
     [requests],
@@ -49,7 +53,7 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
           My Work
         </h1>
         <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
-          Requests waiting on an executive decision
+          Approvals, work in flight, and recent decisions
         </p>
       </div>
 
@@ -68,7 +72,14 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
         )}
 
         {!isLoading && !error && (
-          <div className="flex flex-col gap-8 max-w-3xl">
+          <div className="flex flex-col gap-8 w-full">
+            {/* Summary */}
+            <div className="grid grid-cols-3 gap-3">
+              <SummaryStat label="Pending approvals" value={pending.length} tone="brand" />
+              <SummaryStat label="In progress" value={active.length} tone="neutral" />
+              <SummaryStat label="Recently decided" value={decided.length} tone="success" />
+            </div>
+
             <section className="flex flex-col gap-3">
               <SectionHeader
                 icon={<ShieldCheck size={14} className="text-[var(--color-brand)]" />}
@@ -79,17 +90,58 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
               {pending.length === 0 ? (
                 <EmptyState />
               ) : (
-                pending.map((r) => (
-                  <PendingCard
-                    key={r.id}
-                    request={r}
-                    isApprover={isApprover}
-                    onOpen={() => onOpenWorkflow(r.id)}
-                    onDecide={() => setDeciding(r)}
-                  />
-                ))
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {pending.map((r) => (
+                    <PendingCard
+                      key={r.id}
+                      request={r}
+                      isApprover={isApprover}
+                      onOpen={() => onOpenWorkflow(r.id)}
+                      onDecide={() => setDeciding(r)}
+                    />
+                  ))}
+                </div>
               )}
             </section>
+
+            {active.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <SectionHeader
+                  icon={<Loader2 size={14} className="text-[var(--color-fg-subtle)]" />}
+                  title="In progress"
+                  count={active.length}
+                />
+                <div className="rounded-lg border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
+                  {active.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => onOpenWorkflow(r.id)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--color-surface-2)] transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-[var(--color-fg)] truncate" style={{ fontFeatureSettings: '"ss01"' }}>
+                          {r.title}
+                        </p>
+                        <p className="text-xs text-[var(--color-fg-muted)] mt-0.5 truncate">
+                          {r.requester_name} ·{" "}
+                          <span className={`capitalize ${priorityTextClass(r.priority)}`}>{r.priority}</span>
+                        </p>
+                      </div>
+                      <div className="hidden sm:block w-28 shrink-0">
+                        <div className="h-1.5 rounded-full bg-[var(--color-surface-3)] overflow-hidden">
+                          <div className="h-full rounded-full bg-[var(--color-brand)]" style={{ width: `${r.progress}%` }} />
+                        </div>
+                      </div>
+                      <span className="tnum text-xs text-[var(--color-fg-muted)] w-9 text-right">{r.progress}%</span>
+                      <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${statusBadgeClass(r.status)}`}>
+                        {prettyLabel(r.status)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {decided.length > 0 && (
               <section className="flex flex-col gap-3">
@@ -129,6 +181,29 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
       {deciding && (
         <ApprovalModal orgId={orgId} request={deciding} onClose={() => setDeciding(null)} />
       )}
+    </div>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "brand" | "neutral" | "success";
+}) {
+  const toneClass =
+    tone === "brand"
+      ? "text-[var(--color-brand)]"
+      : tone === "success"
+        ? "text-[var(--color-success)]"
+        : "text-[var(--color-fg)]";
+  return (
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-stripe-ambient">
+      <p className="text-[11px] uppercase tracking-wide text-[var(--color-fg-muted)]">{label}</p>
+      <p className={`mt-1 text-2xl font-light tnum ${toneClass}`}>{value}</p>
     </div>
   );
 }

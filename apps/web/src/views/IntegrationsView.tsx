@@ -84,8 +84,8 @@ export function IntegrationsView() {
         </p>
       </div>
 
-      <div className="px-8 py-6 w-full max-w-[1100px]">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="px-8 py-6 w-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
           {INTEGRATIONS.map((it) => (
             <IntegrationCard key={it.name} integration={it} />
           ))}

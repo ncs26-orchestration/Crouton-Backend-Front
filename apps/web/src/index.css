@@ -328,6 +328,31 @@ body {
   animation: indeterminate-kf 1.4s ease-in-out infinite;
 }
 
+/* --- Print --- when a report is open, print only that report. The
+ * printable container is marked data-print-root; everything else is
+ * hidden so the output is a clean one-page document. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  [data-print-root],
+  [data-print-root] * {
+    visibility: visible;
+  }
+  [data-print-root] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  [data-print-hide] {
+    display: none !important;
+  }
+}
+
 /* --- Canvas dotted background (uses current token) --- */
 .canvas-dots {
   background-image: radial-gradient(var(--color-canvas-dot) 1px, transparent 1px);
