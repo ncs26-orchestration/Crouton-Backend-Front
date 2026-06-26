@@ -10,9 +10,18 @@ aligned with the MVP goal.
 |---|---|
 | `CONTEXT.md` | Project identity, what's built, what's next, key decisions. Start here. |
 | `MVP-SPEC.md` | Exact specification of what the MVP demo must look like and do. |
+| `PRD-BACKEND.md` | **PRD** for the Go team: schema, HTTP + SSE contract, orchestration engine, seeding. Owns the shared contract. |
+| `PRD-AGENT.md` | **PRD** for the Agent team: the Pydantic AI agent layer, tools, agent-declared dependencies. |
+| `PRD-FRONTEND.md` | **PRD** for the Frontend team: shell nav, the 3-panel live canvas, SSE client, design. |
 | `BACKEND-GUIDE.md` | Go API patterns, database schema, handler conventions. |
 | `FRONTEND-GUIDE.md` | React patterns, component structure, design system rules. |
 | `AGENT-GUIDE.md` | Python agent service patterns, department agent logic. |
+| `skills/` | Vendored engineering + design skills (frontend / backend / agent). Read the relevant `SKILL.md` before working. See `skills/README.md`. |
+
+## Work split (PRDs)
+
+Three teams build in parallel against one contract. `PRD-BACKEND.md` defines the HTTP + SSE + agent
+contracts; `PRD-FRONTEND.md` and `PRD-AGENT.md` consume them, so the teams don't block each other.
 
 ## How to Use
 
