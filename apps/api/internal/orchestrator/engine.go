@@ -297,10 +297,18 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 		if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", statusText, 100); err != nil {
 			return fmt.Errorf("complete approval node: %w", err)
 		}
-		// Keep the current progress; the resumed run loop recomputes it as the
-		// execution stages complete.
 		if err := e.store.UpdateRequestProgress(ctx, requestID, "in_progress", req.Progress); err != nil {
 			return fmt.Errorf("resume request: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID:        "aev_" + shortID(),
+			RequestID: requestID,
+			NodeID:    &gate.ID,
+			Actor:     "executive",
+			Action:    "approval.granted",
+			Reason:    justification,
+		}); err != nil {
+			e.log.Warn("failed to audit approval.granted", slog.String("request_id", requestID), slog.String("err", err.Error()))
 		}
 		e.publishNodeEvent(requestID, "completed", gate.ID, gate.Key, 100, statusText, time.Now())
 		e.publishRequestEvent(requestID, "in_progress", req.Progress)
@@ -314,6 +322,16 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 		}
 		if err := e.store.UpdateRequestProgress(ctx, requestID, "rejected", req.Progress); err != nil {
 			return fmt.Errorf("reject request: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID:        "aev_" + shortID(),
+			RequestID: requestID,
+			NodeID:    &gate.ID,
+			Actor:     "executive",
+			Action:    "approval.rejected",
+			Reason:    justification,
+		}); err != nil {
+			e.log.Warn("failed to audit approval.rejected", slog.String("request_id", requestID), slog.String("err", err.Error()))
 		}
 		e.publishNodeEvent(requestID, "completed", gate.ID, gate.Key, 100, statusText, time.Now())
 		e.publishRequestEvent(requestID, "rejected", req.Progress)
