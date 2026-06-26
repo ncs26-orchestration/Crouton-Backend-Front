@@ -35,10 +35,10 @@ describe("requestToFlow", () => {
       [node("a"), node("b"), node("c")],
       [edge("e1", "a", "b"), edge("e2", "b", "c")],
     );
-    const byId = Object.fromEntries(nodes.map((n) => [n.id, n.position]));
-    expect(byId.a.x).toBe(0);
-    expect(byId.b.x).toBe(NODE_WIDTH + 80);
-    expect(byId.c.x).toBe(2 * (NODE_WIDTH + 80));
+    const posOf = (id: string) => nodes.find((n) => n.id === id)!.position;
+    expect(posOf("a").x).toBe(0);
+    expect(posOf("b").x).toBe(NODE_WIDTH + 80);
+    expect(posOf("c").x).toBe(2 * (NODE_WIDTH + 80));
   });
 
   it("places parallel branches in the same column at different rows", () => {
@@ -58,12 +58,12 @@ describe("requestToFlow", () => {
       [node("a", "completed"), node("b")],
       [edge("e1", "a", "b")],
     );
-    expect((edges[0].style as { stroke: string }).stroke).toBe(nodeStatusToken("completed"));
+    expect((edges[0]!.style as { stroke: string }).stroke).toBe(nodeStatusToken("completed"));
     const { edges: e2 } = requestToFlow(
       [node("a", "in_progress"), node("b")],
       [edge("e1", "a", "b")],
     );
-    expect(e2[0].animated).toBe(true);
+    expect(e2[0]!.animated).toBe(true);
   });
 
   it("does not stack cyclic nodes at the origin", () => {
