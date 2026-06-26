@@ -90,13 +90,13 @@ function TeamsTab({ orgId }: { orgId: string }) {
       setNewName("");
       setNewDesc("");
     },
-    onError: (e: Error) => toasts.error(e.message),
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
 
   const deleteMut = useMutation({
     mutationFn: (teamId: string) => api.deleteTeam(orgId, teamId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["teams", orgId] }),
-    onError: (e: Error) => toasts.error(e.message),
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
 
   const teams   = teamsQ.data   ?? [];
@@ -224,7 +224,7 @@ function TeamCard({ team, orgId, orgMembers, expanded, onToggle, onDelete, delet
   const removeMut = useMutation({
     mutationFn: (userId: number) => api.removeTeamMember(orgId, team.id, userId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["team-members", orgId, team.id] }),
-    onError: (e: Error) => toasts.error(e.message),
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
 
   const teamMembers: TeamMember[] = teamMembersQ.data ?? [];
@@ -358,14 +358,14 @@ function MembersTab({ orgId }: { orgId: string }) {
   const removeMut = useMutation({
     mutationFn: (userId: number) => api.removeOrgMember(orgId, userId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["org-members", orgId] }),
-    onError: (e: Error) => toasts.error(e.message),
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
 
   const roleMut = useMutation({
     mutationFn: ({ userId, role }: { userId: number; role: string }) =>
       api.updateOrgMemberRole(orgId, userId, role),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["org-members", orgId] }),
-    onError: (e: Error) => toasts.error(e.message),
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
 
   const members = membersQ.data ?? [];
