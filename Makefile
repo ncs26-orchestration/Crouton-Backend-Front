@@ -36,8 +36,8 @@ migrate-new: ## Create a new migration: make migrate-new name=create_orders
 	@test -n "$(name)" || (echo "usage: make migrate-new name=<snake_case_name>" && exit 1)
 	@set -a && . ./.env > /dev/null 2>&1 && set +a && docker compose exec -e DATABASE_URL="$$DATABASE_URL" api dbmate --migrations-dir /app/migrations new $(name)
 
-seed: ## Seed the database (placeholder)
-	@echo "TODO: wire a seed script into apps/api"
+seed: ## Seed the DB with demo data (Acme Corp: teams, members, requests, workflows)
+	docker compose exec api go run ./cmd/seed
 
 fmt: ## Format everything
 	docker compose exec api gofmt -w .
