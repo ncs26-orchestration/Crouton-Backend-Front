@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -122,6 +123,40 @@ func TestDefaultDecisionCompletesEveryStage(t *testing.T) {
 			if task.Status != "completed" {
 				t.Errorf("DefaultDecision(%q) task not completed: %+v", at, task)
 			}
+		}
+	}
+}
+
+// TestDefaultDecisionMatchesPythonPlaybook pins the Go fallback content to the
+// Python department playbook (apps/agent/app/agents/department.py). The two are
+// intentionally duplicated across runtimes; these literals (and the matching
+// assertions in the agent's tests/test_agents.py) make any drift fail loudly,
+// so an edit to one side is a conscious decision to update both.
+func TestDefaultDecisionMatchesPythonPlaybook(t *testing.T) {
+	cases := map[string]struct {
+		statusText string
+		tasks      []string
+	}{
+		"finance": {
+			"Finance review complete — the request is financially viable.",
+			[]string{"Assess budget feasibility", "Estimate the financial impact", "Project the return on investment", "Confirm funding availability"},
+		},
+		"legal": {
+			"Legal review complete — no blocking issues, one item to track.",
+			[]string{"Review regulatory compliance", "Check contract requirements", "Flag legal risks"},
+		},
+	}
+	for at, want := range cases {
+		d := DefaultDecision(at)
+		if d.StatusText != want.statusText {
+			t.Errorf("%s status_text = %q, want %q", at, d.StatusText, want.statusText)
+		}
+		got := make([]string, len(d.Tasks))
+		for i, task := range d.Tasks {
+			got[i] = task.Title
+		}
+		if strings.Join(got, "|") != strings.Join(want.tasks, "|") {
+			t.Errorf("%s tasks = %v, want %v", at, got, want.tasks)
 		}
 	}
 }

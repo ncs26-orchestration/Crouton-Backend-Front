@@ -47,6 +47,27 @@ async def test_finance_flags_budget() -> None:
     assert any("budget" in f.message.lower() for f in decision.flags)
 
 
+async def test_playbook_matches_go_fallback() -> None:
+    # Pins the Python playbook to the Go fallback (apps/api internal/agentclient
+    # DefaultDecision). The two are duplicated across runtimes on purpose; these
+    # literals and the matching Go test make drift fail loudly on both sides.
+    finance = await run_department("finance", "x", "", "high")
+    assert finance.status_text == "Finance review complete — the request is financially viable."
+    assert [t.title for t in finance.tasks] == [
+        "Assess budget feasibility",
+        "Estimate the financial impact",
+        "Project the return on investment",
+        "Confirm funding availability",
+    ]
+    legal = await run_department("legal", "x", "", "high")
+    assert legal.status_text == "Legal review complete — no blocking issues, one item to track."
+    assert [t.title for t in legal.tasks] == [
+        "Review regulatory compliance",
+        "Check contract requirements",
+        "Flag legal risks",
+    ]
+
+
 async def test_unknown_agent_type_still_completes() -> None:
     decision = await run_department("mystery", "Do a thing", "", "low")
     assert decision.tasks
