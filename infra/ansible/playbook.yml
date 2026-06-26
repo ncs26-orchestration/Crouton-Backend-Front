@@ -6,6 +6,7 @@
   vars:
     app_dir: /opt/aios
     ssh_user: "{{ ansible_user }}"
+    registry_host: europe-west1-docker.pkg.dev
 
   tasks:
 
@@ -92,22 +93,28 @@
         mode: "0600"
 
     # ── Stack ─────────────────────────────────────────────────────────────────
+    # Images are built and pushed to Artifact Registry by CI; the VM only pulls
+    # and runs them (compose.deploy.yaml). GitHub Actions does the same on every
+    # push to main — this play is the manual/initial path and uses :latest.
 
-    # Builds every image, runs the one-shot `migrate` service to completion
-    # (api waits on it via depends_on), then brings the stack up. --wait blocks
-    # until services are healthy / the migrate job has exited 0, so a failed
-    # build or migration fails the deploy instead of leaving a half-up stack.
-    - name: Build, migrate, and start the stack
+    - name: Configure Docker auth for Artifact Registry
+      shell: gcloud auth configure-docker {{ registry_host }} -q
+      changed_when: false
+
+    # Pulls the latest images, runs the one-shot `migrate` to completion (api
+    # waits on it), then brings the stack up. --wait blocks until services are
+    # healthy / migrate has exited 0, so a bad image fails the deploy instead of
+    # leaving a half-up stack.
+    - name: Pull images and start the stack
       shell: >
-        docker compose
-        -f compose.yaml
-        -f compose.prod.yaml
-        up -d --build --remove-orphans --wait --wait-timeout 600
+        docker compose -f compose.deploy.yaml pull &&
+        docker compose -f compose.deploy.yaml
+        up -d --remove-orphans --wait --wait-timeout 600
       args:
         chdir: "{{ app_dir }}"
 
     - name: Show running services
-      shell: docker compose -f compose.yaml -f compose.prod.yaml ps
+      shell: docker compose -f compose.deploy.yaml ps
       args:
         chdir: "{{ app_dir }}"
       register: compose_ps
