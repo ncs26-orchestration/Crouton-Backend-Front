@@ -77,6 +77,13 @@ curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}" \
        and ([.nodes[].key] | index("exec_approval")) != null' >/dev/null \
   || fail "request detail / workflow graph shape"
 
+# F4: start a background SSE listener BEFORE the engine runs so we capture
+# live events. We kill it after the request completes.
+say "SSE events endpoint: starting background listener"
+sse_out=$(mktemp)
+curl -fsS -N --max-time 10 "$API/requests/${req_id}/events?token=${token}" >"$sse_out" 2>/dev/null &
+sse_pid=$!
+
 # F3: the orchestration engine runs every node through its department agent
 # (deterministic with no LLM key) and drives the request to completed.
 say "engine runs the request to completion"
@@ -93,19 +100,19 @@ echo "$detail" | jq -e \
    and ([.nodes[] | select(.status_text == "")] | length) == 0' >/dev/null \
   || fail "request did not run to completion (every node completed with a status line)"
 
+# Stop the SSE listener and check it received events.
+kill "$sse_pid" 2>/dev/null || true
+wait "$sse_pid" 2>/dev/null || true
+events=$(grep -c "^event: " "$sse_out" || true)
+rm "$sse_out"
+say "SSE events captured: $events"
+[ "$events" -ge 1 ] || fail "SSE endpoint: expected at least 1 event, got $events"
+
 say "a completed node carries the agent's tasks"
 node_id=$(echo "$detail" | jq -r '.nodes[0].id')
 curl -fsS "$API/requests/${req_id}/nodes/${node_id}" -H "authorization: Bearer ${token}" \
   | jq -e '(.tasks | length) >= 1 and (.tasks[0].status == "completed") and (.node.status == "completed")' >/dev/null \
   || fail "node detail / tasks shape"
-
-# F4: live SSE streams events while the request is known to the system.
-# We read a fixed window so curl doesn't hang; we expect at least one
-# event line from the SSE stream.
-say "SSE events endpoint streams data for the request"
-events=$(curl -fsS -N --max-time 3 "$API/requests/${req_id}/events?token=${token}" 2>/dev/null \
-  | grep -c "^event: " || true)
-[ "$events" -ge 1 ] || fail "SSE endpoint: expected at least 1 event, got $events"
 
 echo
 echo "SMOKE OK"
