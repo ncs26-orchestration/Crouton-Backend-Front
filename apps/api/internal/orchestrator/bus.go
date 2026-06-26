@@ -9,19 +9,19 @@ import (
 // event shapes (node_status, request_status, task, audit). Unused fields
 // are omitted from JSON serialization.
 type Event struct {
-	Type          string    `json:"type"`
-	RequestID     string    `json:"request_id"`
-	NodeID        string    `json:"node_id,omitempty"`
-	Key           string    `json:"key,omitempty"`
-	Status        string    `json:"status,omitempty"`
-	Progress      int       `json:"progress_percent,omitempty"`
-	StatusText    string    `json:"status_text,omitempty"`
-	TaskID        string    `json:"task_id,omitempty"`
-	Title         string    `json:"title,omitempty"`
-	Actor         string    `json:"actor,omitempty"`
-	Action        string    `json:"action,omitempty"`
-	Reason        string    `json:"reason,omitempty"`
-	At            time.Time `json:"at"`
+	Type       string    `json:"type"`
+	RequestID  string    `json:"request_id"`
+	NodeID     string    `json:"node_id,omitempty"`
+	Key        string    `json:"key,omitempty"`
+	Status     string    `json:"status,omitempty"`
+	Progress   int       `json:"progress_percent,omitempty"`
+	StatusText string    `json:"status_text,omitempty"`
+	TaskID     string    `json:"task_id,omitempty"`
+	Title      string    `json:"title,omitempty"`
+	Actor      string    `json:"actor,omitempty"`
+	Action     string    `json:"action,omitempty"`
+	Reason     string    `json:"reason,omitempty"`
+	At         time.Time `json:"at"`
 }
 
 // Bus is an in-process publish/subscribe message bus keyed by request id.
