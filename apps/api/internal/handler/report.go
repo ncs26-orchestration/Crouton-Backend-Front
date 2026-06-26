@@ -36,15 +36,15 @@ func NewReportHandler(logger *slog.Logger, pg *pgxpool.Pool) *ReportHandler {
 
 // reportStage holds the per-node data for the final report.
 type reportStage struct {
-	Key             string            `json:"key"`
-	Name            string            `json:"name"`
-	Department      string            `json:"department"`
-	Status          string            `json:"status"`
-	StatusText      string            `json:"status_text"`
-	StartedAt       *time.Time        `json:"started_at"`
-	CompletedAt     *time.Time        `json:"completed_at"`
-	DurationSeconds int64             `json:"duration_seconds"`
-	Tasks           []reportTaskItem  `json:"tasks"`
+	Key             string           `json:"key"`
+	Name            string           `json:"name"`
+	Department      string           `json:"department"`
+	Status          string           `json:"status"`
+	StatusText      string           `json:"status_text"`
+	StartedAt       *time.Time       `json:"started_at"`
+	CompletedAt     *time.Time       `json:"completed_at"`
+	DurationSeconds int64            `json:"duration_seconds"`
+	Tasks           []reportTaskItem `json:"tasks"`
 }
 
 type reportTaskItem struct {
