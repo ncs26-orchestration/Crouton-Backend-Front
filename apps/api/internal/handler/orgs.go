@@ -131,6 +131,27 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
 	}
+	// Seed a Maintenance team so technicians have a team to belong to.
+	// Existing orgs are backfilled by the migration; new orgs get it here.
+	maintID := fmt.Sprintf("team_%s", randomHex(8))
+	_, err = tx.Exec(ctx,
+		`INSERT INTO teams (id, org_id, name, description) VALUES ($1, $2, 'Maintenance', 'Equipment maintenance and repair')`,
+		maintID, orgID,
+	)
+	if err != nil {
+		h.logger.Error("create org: seed maintenance team", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	// Add the creator as the Maintenance team lead so they can manage
+	// technicians (add members, assign machines).
+	_, err = tx.Exec(ctx,
+		`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'lead')`,
+		maintID, claims.UserID,
+	)
+	if err != nil {
+		h.logger.Error("create org: add creator as maintenance lead", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		h.logger.Error("create org: commit", slog.String("err", err.Error()))
@@ -743,8 +764,8 @@ func (h *OrgsHandler) AddTeamMember(c echo.Context) error {
 	if body.UserID == 0 || body.Role == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "user_id and role are required"})
 	}
-	if body.Role != "lead" && body.Role != "member" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "role must be lead or member"})
+	if body.Role != "lead" && body.Role != "member" && body.Role != "technician" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "role must be lead, member, or technician"})
 	}
 
 	ctx := c.Request().Context()

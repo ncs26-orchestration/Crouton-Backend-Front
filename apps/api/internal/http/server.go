@@ -152,6 +152,27 @@ func NewServer(d Deps) *echo.Echo {
 	e.POST("/tasks/:id/complete", wh.PostTaskComplete, authMiddleware)
 	e.POST("/tasks/:id/decision", wh.PostTaskDecision, authMiddleware)
 
+	// Machine registry (M-F1) — equipment owned by the org. Technician
+	// RBAC is enforced inside the handler (technician sees only assigned).
+	machH := handler.NewMachinesHandler(d.Logger, d.PgPool, d.JWTSecret)
+	orgGroup.POST("/:orgId/machines", machH.CreateMachine)
+	orgGroup.GET("/:orgId/machines", machH.ListMachines)
+	e.GET("/machines/:id", machH.GetMachine, authMiddleware)
+	e.PUT("/machines/:id", machH.UpdateMachine, authMiddleware)
+	// Telemetry webhook — no auth middleware (handler handles both JWT
+	// and machine API key auth internally).
+	e.POST("/machines/:id/telemetry", machH.PostTelemetry)
+	e.GET("/machines/:id/telemetry", machH.ListTelemetry, authMiddleware)
+
+	// Incidents (M-F6) — technician-reported problems on machines. Creating an
+	// incident auto-flips machine status to "down"; resolving flips it back.
+	incH := handler.NewIncidentsHandler(d.Logger, d.PgPool, d.JWTSecret)
+	e.POST("/incidents", incH.CreateIncident, authMiddleware)
+	e.GET("/incidents/:id/messages", incH.ListMessages, authMiddleware)
+	e.POST("/incidents/:id/messages", incH.AppendMessage, authMiddleware)
+	e.POST("/incidents/:id/resolve", incH.ResolveIncident, authMiddleware)
+	e.GET("/incidents/:id/events", incH.StreamEvents)
+
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup
 	// the HTTP layer uses to route /compile/:target, and the source
