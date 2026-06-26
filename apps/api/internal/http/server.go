@@ -85,7 +85,11 @@ func NewServer(d Deps) *echo.Echo {
 	// workflow; the orchestration engine then runs each node through its
 	// department agent on a background worker (F3).
 	agentClient := agentclient.New(d.AgentURL)
-	store := orchestrator.NewDBStore(repo.NewRequestRepo(d.PgPool), repo.NewWorkflowRepo(d.PgPool))
+	store := orchestrator.NewDBStore(
+		repo.NewRequestRepo(d.PgPool),
+		repo.NewWorkflowRepo(d.PgPool),
+		repo.NewDependencyRepo(d.PgPool),
+	)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {
 		rootCtx = context.Background()
