@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Loader2, Plus, X } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, FileText, Loader2, Plus, X } from "lucide-react";
 
 import { api } from "../lib/api";
-import { useOrg } from "../contexts/OrgContext";
 import { useToasts } from "../components/Toasts";
 import {
   MAX_REQUEST_DESCRIPTION_LEN,
   MAX_REQUEST_TITLE_LEN,
-  priorityBadgeClass,
-  prettyStatus,
+  prettyLabel,
+  priorityTextClass,
   statusBadgeClass,
 } from "../lib/request-format";
 import type { OrgRequest, RequestPriority, RequestStatus } from "../lib/types";
@@ -24,21 +23,23 @@ const STATUSES: RequestStatus[] = [
   "completed",
 ];
 
-export function RequestsView({ onOpenRequest }: { onOpenRequest: (id: string) => void }) {
-  const { activeOrg } = useOrg();
-  const [showCreate, setShowCreate] = useState(false);
+interface Props {
+  orgId: string;
+  onOpenWorkflow: (requestId: string) => void;
+}
+
+export function RequestsView({ orgId, onOpenWorkflow }: Props) {
+  const qc = useQueryClient();
+  const [modalOpen, setModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<RequestStatus | "all">("all");
   const [priorityFilter, setPriorityFilter] = useState<RequestPriority | "all">("all");
 
-  const orgId = activeOrg?.id ?? "";
-
-  const requestsQ = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["requests", orgId],
-    queryFn: () => api.listRequests(orgId).then((r) => r.requests),
-    enabled: !!orgId,
+    queryFn: () => api.listRequests(orgId),
   });
 
-  const requests = requestsQ.data ?? [];
+  const requests = useMemo(() => data?.requests ?? [], [data]);
   const filtered = useMemo(
     () =>
       requests.filter(
@@ -49,135 +50,109 @@ export function RequestsView({ onOpenRequest }: { onOpenRequest: (id: string) =>
     [requests, statusFilter, priorityFilter],
   );
 
-  if (!activeOrg) return null;
-
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-bg)] text-[var(--color-fg)]">
+    <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="border-b border-[var(--color-border)] px-8 py-5 shrink-0 flex items-start justify-between">
+      <div className="shrink-0 px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Requests</h1>
-          <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">
-            Business requests submitted into {activeOrg.name}
+          <h1
+            className="text-lg font-medium text-[var(--color-fg)]"
+            style={{ fontFeatureSettings: '"ss01"' }}
+          >
+            Requests
+          </h1>
+          <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
+            Submit and track business requests across the organization
           </p>
         </div>
         <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          onClick={() => setModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+          style={{ fontFeatureSettings: '"ss01"' }}
         >
-          <Plus size={14} /> New request
+          <Plus size={14} strokeWidth={2} />
+          New Request
         </button>
       </div>
 
       {/* Filters */}
-      <div className="px-8 py-3 border-b border-[var(--color-border)] flex items-center gap-3 shrink-0">
-        <Filter
+      <div className="shrink-0 px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3">
+        <FilterSelect
           label="Status"
           value={statusFilter}
           onChange={(v) => setStatusFilter(v as RequestStatus | "all")}
           options={STATUSES}
-          render={prettyStatus}
         />
-        <Filter
+        <FilterSelect
           label="Priority"
           value={priorityFilter}
           onChange={(v) => setPriorityFilter(v as RequestPriority | "all")}
           options={PRIORITIES}
-          render={(v) => v}
         />
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        {requestsQ.isLoading && (
-          <div className="flex justify-center py-16">
-            <Loader2 size={20} className="animate-spin text-[var(--color-fg-muted)]" />
+      {/* Table */}
+      <div className="flex-1 overflow-auto">
+        {isLoading && (
+          <div className="flex items-center justify-center h-40">
+            <div className="size-6 rounded-full border-2 border-[var(--color-brand)] border-t-transparent animate-spin" />
           </div>
         )}
 
-        {requestsQ.isError && (
-          <div className="rounded-lg border border-[#ea2261]/30 bg-[#ea2261]/8 px-4 py-3 text-sm text-[#ea2261]">
-            Failed to load requests: {(requestsQ.error as Error).message}
+        {error && (
+          <div className="flex items-center justify-center h-40 gap-2 text-sm text-[var(--color-danger)]">
+            <AlertCircle size={16} />
+            Failed to load requests
           </div>
         )}
 
-        {!requestsQ.isLoading && !requestsQ.isError && filtered.length === 0 && (
-          <div className="flex flex-col items-center gap-3 py-20 text-center">
-            <div className="size-14 rounded-2xl bg-[var(--color-accent-bg)] border border-[var(--color-accent-border)] flex items-center justify-center">
-              <FileText size={24} className="text-[var(--color-brand)]" strokeWidth={1.5} />
+        {!isLoading && !error && filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-60 gap-3 text-center">
+            <div className="size-10 rounded-lg bg-[var(--color-surface-2)] flex items-center justify-center">
+              <FileText size={20} className="text-[var(--color-fg-subtle)]" />
             </div>
-            <div>
-              <p className="text-sm font-medium">
-                {requests.length === 0 ? "No requests yet" : "No requests match these filters"}
-              </p>
-              <p className="text-xs text-[var(--color-fg-muted)] mt-1">
-                {requests.length === 0
-                  ? "Submit a request to start a department workflow."
-                  : "Try clearing the status or priority filter."}
-              </p>
-            </div>
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              {requests.length === 0 ? "No requests yet" : "No requests match these filters"}
+            </p>
+            {requests.length === 0 && (
+              <button
+                onClick={() => setModalOpen(true)}
+                className="text-sm text-[var(--color-brand)] hover:underline"
+              >
+                Submit your first request
+              </button>
+            )}
           </div>
         )}
 
         {filtered.length > 0 && (
-          <div className="overflow-hidden rounded-xl border border-[var(--color-border)]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[var(--color-surface)] text-left text-xs uppercase tracking-wide text-[var(--color-fg-muted)]">
-                  <th className="px-4 py-2.5 font-medium">Title</th>
-                  <th className="px-4 py-2.5 font-medium">Requester</th>
-                  <th className="px-4 py-2.5 font-medium">Priority</th>
-                  <th className="px-4 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 font-medium w-40">Progress</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr
-                    key={r.id}
-                    onClick={() => onOpenRequest(r.id)}
-                    className="border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-surface-2)] transition-colors"
-                  >
-                    <td className="px-4 py-3 font-medium">{r.title}</td>
-                    <td className="px-4 py-3 text-[var(--color-fg-muted)]">{r.requester_name || "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium capitalize ${priorityBadgeClass(r.priority)}`}>
-                        {r.priority}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium capitalize ${statusBadgeClass(r.status)}`}>
-                        {prettyStatus(r.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 flex-1 rounded-full bg-[var(--color-surface-2)] overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-[var(--color-brand)]"
-                            style={{ width: `${r.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-[var(--color-fg-muted)] tabular-nums w-8 text-right">
-                          {r.progress}%
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-[var(--color-fg-muted)] border-b border-[var(--color-border)]">
+                <th className="px-6 py-2.5 font-medium">Title</th>
+                <th className="px-4 py-2.5 font-medium">Requester</th>
+                <th className="px-4 py-2.5 font-medium">Priority</th>
+                <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-4 py-2.5 font-medium text-right">Progress</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <RequestRow key={r.id} request={r} onClick={() => onOpenWorkflow(r.id)} />
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
-      {showCreate && (
+      {modalOpen && (
         <NewRequestModal
           orgId={orgId}
-          onClose={() => setShowCreate(false)}
+          onClose={() => setModalOpen(false)}
           onCreated={(id) => {
-            setShowCreate(false);
-            onOpenRequest(id);
+            setModalOpen(false);
+            qc.invalidateQueries({ queryKey: ["requests", orgId] });
+            onOpenWorkflow(id);
           }}
         />
       )}
@@ -185,35 +160,60 @@ export function RequestsView({ onOpenRequest }: { onOpenRequest: (id: string) =>
   );
 }
 
-function Filter<T extends string>({
+function FilterSelect<T extends string>({
   label,
   value,
   onChange,
   options,
-  render,
 }: {
   label: string;
   value: T | "all";
   onChange: (v: string) => void;
   options: readonly T[];
-  render: (v: T) => string;
 }) {
   return (
-    <label className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+    <label className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
       {label}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors capitalize"
+        className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
       >
         <option value="all">All</option>
         {options.map((o) => (
-          <option key={o} value={o} className="capitalize">
-            {render(o)}
+          <option key={o} value={o}>
+            {prettyLabel(o)}
           </option>
         ))}
       </select>
     </label>
+  );
+}
+
+function RequestRow({ request: r, onClick }: { request: OrgRequest; onClick: () => void }) {
+  return (
+    <tr
+      onClick={onClick}
+      className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface-2)] cursor-pointer transition-colors"
+    >
+      <td className="px-6 py-3">
+        <span className="font-medium text-[var(--color-fg)]" style={{ fontFeatureSettings: '"ss01"' }}>
+          {r.title}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-[var(--color-fg-muted)]">{r.requester_name}</td>
+      <td className="px-4 py-3">
+        <span className={`text-xs font-medium capitalize ${priorityTextClass(r.priority)}`}>
+          {r.priority}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${statusBadgeClass(r.status)}`}>
+          {prettyLabel(r.status)}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-right text-[var(--color-fg-muted)]">{r.progress}%</td>
+    </tr>
   );
 }
 
@@ -224,7 +224,7 @@ function NewRequestModal({
 }: {
   orgId: string;
   onClose: () => void;
-  onCreated: (id: string) => void;
+  onCreated: (requestId: string) => void;
 }) {
   const qc = useQueryClient();
   const toasts = useToasts();
@@ -233,12 +233,12 @@ function NewRequestModal({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<RequestPriority>("medium");
 
-  const createMut = useMutation({
+  const mutation = useMutation({
     mutationFn: () =>
       api.createRequest(orgId, { title: title.trim(), description: description.trim(), priority }),
-    onSuccess: (res: { request: OrgRequest }) => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["requests", orgId] });
-      onCreated(res.request.id);
+      onCreated(data.request.id);
     },
     onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
@@ -274,25 +274,23 @@ function NewRequestModal({
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-request-title"
-        className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-stripe-elevated"
-        onClick={(e) => e.stopPropagation()}
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)]"
       >
         <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 id="new-request-title" className="text-lg font-semibold text-[var(--color-fg)]">New request</h2>
-            <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">
-              Describe what you need; the right departments get pulled in automatically.
-            </p>
-          </div>
+          <h2
+            id="new-request-title"
+            className="text-base font-medium text-[var(--color-fg)]"
+            style={{ fontFeatureSettings: '"ss01"' }}
+          >
+            New Request
+          </h2>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -303,60 +301,61 @@ function NewRequestModal({
         </div>
 
         <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-[var(--color-fg-muted)]">Title</span>
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Title</label>
             <input
               autoFocus
+              type="text"
               value={title}
               maxLength={MAX_REQUEST_TITLE_LEN}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Open a new office in Berlin"
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors"
+              className="w-full px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-transparent"
             />
-          </label>
+          </div>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-[var(--color-fg-muted)]">Description</span>
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Description</label>
             <textarea
               value={description}
               maxLength={MAX_REQUEST_DESCRIPTION_LEN}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add any context the departments should know."
-              rows={4}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors resize-none"
+              rows={3}
+              placeholder="Describe the request..."
+              className="w-full px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-transparent resize-none"
             />
-          </label>
+          </div>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-[var(--color-fg-muted)]">Priority</span>
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Priority</label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as RequestPriority)}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors capitalize"
+              className="w-full px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-transparent"
             >
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p} className="capitalize">
-                  {p}
-                </option>
-              ))}
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
             </select>
-          </label>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] transition-colors"
+            className="px-3 py-2 text-sm rounded border border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] transition-colors"
           >
             Cancel
           </button>
           <button
-            disabled={!title.trim() || createMut.isPending}
-            onClick={() => createMut.mutate()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            onClick={() => mutation.mutate()}
+            disabled={!title.trim() || mutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            style={{ fontFeatureSettings: '"ss01"' }}
           >
-            {createMut.isPending && <Loader2 size={13} className="animate-spin" />}
-            Submit request
+            {mutation.isPending && <Loader2 size={13} className="animate-spin" />}
+            {mutation.isPending ? "Creating..." : "Submit Request"}
           </button>
         </div>
       </div>

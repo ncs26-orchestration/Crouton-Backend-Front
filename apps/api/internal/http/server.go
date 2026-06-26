@@ -71,9 +71,10 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
 	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
 
-	// Requests — the AI Org OS spine. F1 ships create/list/get; the
-	// planner + engine hang the workflow graph off these in F2/F3.
-	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool)
+	// Requests — submission, listing, and detail with the workflow graph.
+	// The intake planner (agent service) turns a request into a department
+	// workflow; the client trims the URL and falls back when unavailable.
+	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, d.AgentURL)
 	orgGroup.POST("/:orgId/requests", reqh.CreateRequest)
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)

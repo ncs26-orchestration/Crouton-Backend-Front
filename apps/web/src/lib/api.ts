@@ -12,7 +12,7 @@ import type {
   ISRegistry,
   OrgRequest,
   Project,
-  RequestDetail,
+  RequestGraph,
   RequestPriority,
   Workflow,
   WorkflowDiff,
@@ -501,7 +501,7 @@ export const api = {
   lookupUser: (email: string): Promise<{ id: number; name: string; email: string }> =>
     fetchJSON(`/api/users/lookup?email=${encodeURIComponent(email)}`),
 
-  // --- Requests (F1) ---
+  // --- Requests + workflow graph (AI Organization OS) ---
 
   listRequests: (orgId: string): Promise<{ requests: OrgRequest[] }> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`),
@@ -515,6 +515,6 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  getRequest: (id: string): Promise<RequestDetail> =>
+  getRequest: (id: string): Promise<RequestGraph> =>
     fetchJSON(`/api/requests/${encodeURIComponent(id)}`),
 };

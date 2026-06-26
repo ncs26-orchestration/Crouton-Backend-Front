@@ -255,6 +255,63 @@ export interface DeployResponse {
   diagnostics?: Diagnostic[];
 }
 
+// --- AI Organization OS: Requests & Workflow ---
+
+export type RequestPriority = "low" | "medium" | "high" | "urgent";
+
+export type RequestStatus =
+  | "submitted"
+  | "in_progress"
+  | "awaiting_approval"
+  | "approved"
+  | "rejected"
+  | "completed";
+
+export type NodeStatus = "pending" | "in_progress" | "completed" | "blocked";
+
+// A business request submitted into the org. The workflow graph
+// (nodes/edges) is attached by the intake planner (F2).
+export interface OrgRequest {
+  id: string;
+  org_id: string;
+  title: string;
+  description: string;
+  requester_user_id: number;
+  requester_name: string;
+  priority: RequestPriority;
+  status: RequestStatus;
+  progress: number;
+  estimated_completion: string | null;
+  created_at: string;
+}
+
+export interface WorkflowNodeData {
+  id: string;
+  key: string;
+  name: string;
+  agent_type: string;
+  department: string;
+  status: NodeStatus;
+  description: string;
+  progress_percent: number;
+  status_text: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface WorkflowEdgeData {
+  id: string;
+  source_node_id: string;
+  target_node_id: string;
+  edge_type: string;
+}
+
+export interface RequestGraph {
+  request: OrgRequest;
+  nodes: WorkflowNodeData[];
+  edges: WorkflowEdgeData[];
+}
+
 // Binding state drives node color. Resolved at canvas build time
 // against the IS Registry; a task with no binding is "idle", a valid
 // binding is "ok", a binding whose id does not resolve is "error",
@@ -284,42 +341,4 @@ export interface WorkflowDiff {
   added: string[];
   removed: string[];
   changed: string[];
-}
-
-// --- AI Org OS: requests (F1) ---
-
-export type RequestPriority = "low" | "medium" | "high" | "urgent";
-
-export type RequestStatus =
-  | "submitted"
-  | "in_progress"
-  | "awaiting_approval"
-  | "approved"
-  | "rejected"
-  | "completed";
-
-// A business request submitted into the org. The workflow graph
-// (nodes/edges/agents) is attached by the planner in F2; F1 carries
-// the request record itself.
-export interface OrgRequest {
-  id: string;
-  org_id: string;
-  title: string;
-  description: string;
-  requester_user_id: number;
-  requester_name: string;
-  priority: RequestPriority;
-  status: RequestStatus;
-  progress: number;
-  estimated_completion: string | null;
-  created_at: string;
-}
-
-// Full graph payload from GET /requests/:id. nodes/edges/agents are
-// empty until the planner runs (F2).
-export interface RequestDetail {
-  request: OrgRequest;
-  nodes: unknown[];
-  edges: unknown[];
-  agents: unknown[];
 }
