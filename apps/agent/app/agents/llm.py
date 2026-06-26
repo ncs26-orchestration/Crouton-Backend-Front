@@ -21,12 +21,18 @@ logger = logging.getLogger(__name__)
 
 
 def _client_and_model() -> tuple[AsyncOpenAI, str] | None:
-    """Pick an OpenAI-compatible provider from settings, or ``None``."""
+    """Pick an OpenAI-compatible provider from settings, or ``None``.
+
+    Every client gets an explicit timeout so a stuck provider fails fast into
+    the deterministic fallback, well inside the orchestrator's per-node budget.
+    """
+    timeout = settings.llm_timeout_seconds
     if settings.deepseek_api_key:
         return (
             AsyncOpenAI(
                 api_key=settings.deepseek_api_key,
                 base_url=settings.deepseek_base_url,
+                timeout=timeout,
             ),
             settings.deepseek_model,
         )
@@ -34,12 +40,16 @@ def _client_and_model() -> tuple[AsyncOpenAI, str] | None:
         return (
             AsyncOpenAI(
                 api_key=settings.groq_api_key,
-                base_url="https://api.groq.com/openai/v1",
+                base_url=settings.groq_base_url,
+                timeout=timeout,
             ),
-            "llama-3.3-70b-versatile",
+            settings.groq_model,
         )
     if settings.openai_api_key:
-        return (AsyncOpenAI(api_key=settings.openai_api_key), "gpt-4o-mini")
+        return (
+            AsyncOpenAI(api_key=settings.openai_api_key, timeout=timeout),
+            settings.openai_model,
+        )
     return None
 
 
@@ -53,10 +63,13 @@ async def complete_json(system: str, user: str, *, max_tokens: int = 2048) -> st
 
     Uses JSON-object response format and a low temperature for stable, parseable
     output. Never raises — a failure means the caller uses its deterministic
-    fallback.
+    fallback. A configured-but-failing provider logs at ERROR so a
+    misconfiguration is visible rather than silently masked by the fallback.
     """
     picked = _client_and_model()
     if picked is None:
+        # No provider configured — expected offline path, not an error.
+        logger.debug("No LLM provider configured; caller will use deterministic path")
         return None
     client, model = picked
     try:
@@ -72,5 +85,12 @@ async def complete_json(system: str, user: str, *, max_tokens: int = 2048) -> st
         )
         return resp.choices[0].message.content
     except Exception as exc:  # noqa: BLE001 — any failure falls back to deterministic
-        logger.warning("LLM call failed, falling back to deterministic: %s", exc)
+        # Provider IS configured but the call failed (bad key/model, network,
+        # timeout). Surface it loudly — the operator expects real reasoning.
+        logger.error(
+            "LLM call failed (model=%s); falling back to deterministic. "
+            "Check the provider key/model/connectivity. error=%s",
+            model,
+            exc,
+        )
         return None

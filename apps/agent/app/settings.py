@@ -19,6 +19,19 @@ class Settings(BaseSettings):
     deepseek_base_url: str = Field(default="https://api.deepseek.com", alias="DEEPSEEK_BASE_URL")
     deepseek_model: str = Field(default="deepseek-v4-flash", alias="DEEPSEEK_MODEL")
 
+    # Groq / OpenAI fallbacks for the agent LLM — base URL + model configurable
+    # for parity with DeepSeek (no hardcoded ids in the client).
+    groq_base_url: str = Field(
+        default="https://api.groq.com/openai/v1", alias="GROQ_BASE_URL"
+    )
+    groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")
+    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+
+    # Hard timeout (seconds) for an agent LLM call. Must stay well under the Go
+    # orchestrator's per-node budget (~60s) so a stuck provider fails fast into
+    # the deterministic fallback instead of dragging the request node by node.
+    llm_timeout_seconds: float = Field(default=25.0, alias="AGENT_LLM_TIMEOUT_SECONDS")
+
     default_model: str = Field(default="claude-opus-4-7", alias="AGENT_DEFAULT_MODEL")
 
     # Extractor stack:

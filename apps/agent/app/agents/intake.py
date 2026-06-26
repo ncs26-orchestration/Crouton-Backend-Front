@@ -116,7 +116,32 @@ def _parse_plan(raw: str | None) -> Plan | None:
         return None
     if not plan.edges:
         return None
+    # Light well-formedness check: every edge must reference real nodes, and
+    # `report` must be reachable from `intake` — otherwise the orchestrator
+    # would just stall on a disconnected graph. Fall back to the default plan.
+    adjacency: dict[str, list[str]] = {k: [] for k in keys}
+    for edge in plan.edges:
+        if edge.from_ not in keys or edge.to not in keys:
+            return None
+        adjacency[edge.from_].append(edge.to)
+    if not _reaches("intake", "report", adjacency):
+        return None
     return plan
+
+
+def _reaches(start: str, goal: str, adjacency: dict[str, list[str]]) -> bool:
+    """True if `goal` is reachable from `start` in the directed graph."""
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        node = stack.pop()
+        if node == goal:
+            return True
+        if node in seen:
+            continue
+        seen.add(node)
+        stack.extend(adjacency.get(node, []))
+    return False
 
 
 async def run_intake(

@@ -182,6 +182,11 @@ Be specific to the request (amounts, locations, systems, people) — do not give
 generic boilerplate. Produce 3-5 tasks. Set blocked_on to null. Output JSON only."""
 
 
+_ALLOWED_SEVERITY = {"info", "warning", "critical"}
+# Map common off-contract severities the model might emit onto our scale.
+_SEVERITY_ALIASES = {"high": "critical", "medium": "warning", "low": "info", "error": "critical"}
+
+
 def _parse_decision(raw: str | None) -> Decision | None:
     """Validate an LLM JSON decision, or return None to fall back."""
     if not raw:
@@ -192,9 +197,31 @@ def _parse_decision(raw: str | None) -> Decision | None:
         return None
     if not decision.summary or not decision.status_text or not decision.tasks:
         return None
+    # Normalize severities to the promised info|warning|critical scale rather
+    # than letting a free-form value (e.g. "high") through.
+    for flag in decision.flags:
+        sev = flag.severity.lower().strip()
+        flag.severity = sev if sev in _ALLOWED_SEVERITY else _SEVERITY_ALIASES.get(sev, "info")
     # F5 (cross-dependency gating) is not built yet, so never block here.
     decision.blocked_on = None
     return decision
+
+
+def _summarize_upstream(upstream_context: list[dict[str, Any]]) -> str:
+    """Compact, bounded view of upstream decisions for the prompt.
+
+    Trims the list (and each item to its key fields) so the context stays small
+    without slicing a serialized JSON string mid-token.
+    """
+    compact = [
+        {
+            "node": item.get("node_key") or item.get("key"),
+            "department": item.get("department"),
+            "summary": str(item.get("summary") or item.get("status_text") or "")[:300],
+        }
+        for item in upstream_context[-8:]
+    ]
+    return json.dumps(compact, ensure_ascii=False)
 
 
 async def run_department(
@@ -216,9 +243,8 @@ async def run_department(
         role = _ROLE_GUIDANCE.get(agent_type, f"the {agent_type} function.")
         user = f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
         if upstream_context:
-            user += (
-                "\n\nUpstream department decisions so far:\n"
-                + json.dumps(upstream_context, ensure_ascii=False)[:2000]
+            user += "\n\nUpstream department decisions so far:\n" + _summarize_upstream(
+                upstream_context
             )
         raw = await complete_json(_DEPT_SYSTEM.format(role=role), user)
         decision = _parse_decision(raw)
