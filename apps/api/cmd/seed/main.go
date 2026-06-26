@@ -335,12 +335,13 @@ func buildTasks(nodes []repo.WorkflowNode) []repo.AgentTask {
 		dec := agentclient.DefaultDecision(n.AgentType)
 		switch n.Status {
 		case "completed":
-			for _, t := range dec.Tasks {
+			for i, t := range dec.Tasks {
 				tasks = append(tasks, repo.AgentTask{
 					ID:          fmt.Sprintf("at_%s", shortID()),
 					NodeID:      n.ID,
 					Title:       t.Title,
 					Status:      "completed",
+					Ordinal:     i,
 					StartedAt:   n.StartedAt,
 					CompletedAt: n.CompletedAt,
 				})
@@ -352,6 +353,7 @@ func buildTasks(nodes []repo.WorkflowNode) []repo.AgentTask {
 					NodeID:    n.ID,
 					Title:     dec.Tasks[0].Title,
 					Status:    "in_progress",
+					Ordinal:   0,
 					StartedAt: n.StartedAt,
 				})
 			}
@@ -476,9 +478,9 @@ func insertRequestGraph(
 	// agent_tasks reference workflow_nodes, queued above in the same tx.
 	for _, t := range tasks {
 		batch.Queue(`
-			INSERT INTO agent_tasks (id, node_id, title, status, started_at, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6)
-		`, t.ID, t.NodeID, t.Title, t.Status, t.StartedAt, t.CompletedAt)
+			INSERT INTO agent_tasks (id, node_id, title, status, ordinal, started_at, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, t.ID, t.NodeID, t.Title, t.Status, t.Ordinal, t.StartedAt, t.CompletedAt)
 	}
 
 	br := tx.SendBatch(ctx, batch)

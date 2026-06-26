@@ -92,6 +92,8 @@ func NewServer(d Deps) *echo.Echo {
 	}
 	orchEngine := orchestrator.NewEngine(rootCtx, d.Logger, store, agentClient,
 		time.Duration(d.OrchStepDelayMS)*time.Millisecond)
+	// Resume any request a prior run left mid-orchestration (restart recovery).
+	go orchEngine.ResumeInProgress()
 	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, agentClient, orchEngine)
 	orgGroup.POST("/:orgId/requests", reqh.CreateRequest)
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)

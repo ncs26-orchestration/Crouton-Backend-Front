@@ -29,7 +29,9 @@ type Store interface {
 	GetRequest(ctx context.Context, requestID string) (*repo.Request, error)
 	ListNodesByRequest(ctx context.Context, requestID string) ([]repo.WorkflowNode, error)
 	ListEdgesByRequest(ctx context.Context, requestID string) ([]repo.WorkflowEdge, error)
+	ListInProgressRequestIDs(ctx context.Context) ([]string, error)
 	UpdateNodeStatus(ctx context.Context, nodeID, status, statusText string, progressPercent int) error
+	ClearNodeTasks(ctx context.Context, nodeID string) error
 	InsertTasks(ctx context.Context, tasks []repo.AgentTask) error
 	UpdateRequestProgress(ctx context.Context, requestID, status string, progressPercent int) error
 }
@@ -80,6 +82,22 @@ func (e *Engine) Start(requestID string) {
 			e.log.Error("orchestrator run", slog.String("request_id", requestID), slog.String("err", err.Error()))
 		}
 	}()
+}
+
+// ResumeInProgress re-starts any request left in_progress by a prior run, so a
+// restart (deploy or crash) doesn't strand a request mid-orchestration. The
+// run loop is idempotent: it re-derives eligibility from node status, so
+// already-completed nodes are skipped and only the unfinished ones run.
+func (e *Engine) ResumeInProgress() {
+	ids, err := e.store.ListInProgressRequestIDs(e.rootCtx)
+	if err != nil {
+		e.log.Error("orchestrator resume: list in_progress", slog.String("err", err.Error()))
+		return
+	}
+	for _, id := range ids {
+		e.log.Info("orchestrator: resuming in_progress request", slog.String("request_id", id))
+		e.Start(id)
+	}
 }
 
 // run drives one request to completion: repeatedly find eligible nodes (all
@@ -171,16 +189,22 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 
 	now := time.Now()
 	tasks := make([]repo.AgentTask, 0, len(decision.Tasks))
-	for _, t := range decision.Tasks {
+	for i, t := range decision.Tasks {
 		started, completedAt := now, now
 		tasks = append(tasks, repo.AgentTask{
 			ID:          "at_" + shortID(),
 			NodeID:      node.ID,
 			Title:       t.Title,
 			Status:      "completed",
+			Ordinal:     i,
 			StartedAt:   &started,
 			CompletedAt: &completedAt,
 		})
+	}
+	// Clear any tasks from a prior (interrupted) run of this node so a resume
+	// doesn't double up.
+	if err := e.store.ClearNodeTasks(ctx, node.ID); err != nil {
+		return fmt.Errorf("clear tasks: %w", err)
 	}
 	if err := e.store.InsertTasks(ctx, tasks); err != nil {
 		return fmt.Errorf("insert tasks: %w", err)
@@ -210,7 +234,10 @@ func (e *Engine) pace(ctx context.Context) {
 	}
 }
 
-// eligibleNodes returns the pending nodes whose every predecessor is completed.
+// eligibleNodes returns the runnable nodes whose every predecessor is
+// completed. Both pending and in_progress nodes are runnable: an in_progress
+// node is one a prior run started but didn't finish (a restart), so it is
+// re-run. runNode clears the node's tasks first, keeping re-runs idempotent.
 func eligibleNodes(nodes []repo.WorkflowNode, edges []repo.WorkflowEdge, status map[string]string) []repo.WorkflowNode {
 	preds := make(map[string][]string, len(nodes))
 	for _, e := range edges {
@@ -218,7 +245,7 @@ func eligibleNodes(nodes []repo.WorkflowNode, edges []repo.WorkflowEdge, status 
 	}
 	var out []repo.WorkflowNode
 	for _, n := range nodes {
-		if n.Status != "pending" {
+		if n.Status != "pending" && n.Status != "in_progress" {
 			continue
 		}
 		ready := true

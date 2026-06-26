@@ -9,6 +9,9 @@ CREATE TABLE agent_tasks (
     title        TEXT        NOT NULL,
     status       TEXT        NOT NULL DEFAULT 'completed'
                              CHECK (status IN ('pending', 'in_progress', 'completed')),
+    -- Display order within a node. created_at is transaction time and ties
+    -- when tasks are inserted together, so ordinal gives a stable sort.
+    ordinal      INT         NOT NULL DEFAULT 0,
     started_at   TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()

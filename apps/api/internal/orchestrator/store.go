@@ -29,8 +29,16 @@ func (s *dbStore) ListEdgesByRequest(ctx context.Context, requestID string) ([]r
 	return s.workflow.ListEdgesByRequest(ctx, requestID)
 }
 
+func (s *dbStore) ListInProgressRequestIDs(ctx context.Context) ([]string, error) {
+	return s.requests.ListIDsByStatus(ctx, "in_progress")
+}
+
 func (s *dbStore) UpdateNodeStatus(ctx context.Context, nodeID, status, statusText string, progressPercent int) error {
 	return s.workflow.UpdateNodeStatus(ctx, nodeID, status, statusText, progressPercent)
+}
+
+func (s *dbStore) ClearNodeTasks(ctx context.Context, nodeID string) error {
+	return s.workflow.DeleteTasksByNode(ctx, nodeID)
 }
 
 func (s *dbStore) InsertTasks(ctx context.Context, tasks []repo.AgentTask) error {

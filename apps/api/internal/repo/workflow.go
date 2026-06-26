@@ -38,6 +38,7 @@ type AgentTask struct {
 	NodeID      string
 	Title       string
 	Status      string
+	Ordinal     int
 	StartedAt   *time.Time
 	CompletedAt *time.Time
 	CreatedAt   time.Time
@@ -200,9 +201,9 @@ func (r *WorkflowRepo) InsertTasks(ctx context.Context, tasks []AgentTask) error
 	batch := &pgx.Batch{}
 	for _, t := range tasks {
 		batch.Queue(`
-			INSERT INTO agent_tasks (id, node_id, title, status, started_at, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6)
-		`, t.ID, t.NodeID, t.Title, t.Status, t.StartedAt, t.CompletedAt)
+			INSERT INTO agent_tasks (id, node_id, title, status, ordinal, started_at, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, t.ID, t.NodeID, t.Title, t.Status, t.Ordinal, t.StartedAt, t.CompletedAt)
 	}
 	br := r.pg.SendBatch(ctx, batch)
 	defer func() { _ = br.Close() }()
@@ -214,13 +215,20 @@ func (r *WorkflowRepo) InsertTasks(ctx context.Context, tasks []AgentTask) error
 	return nil
 }
 
+// DeleteTasksByNode removes a node's tasks. The engine calls it before
+// (re)writing tasks so re-running a node (after a restart) stays idempotent.
+func (r *WorkflowRepo) DeleteTasksByNode(ctx context.Context, nodeID string) error {
+	_, err := r.pg.Exec(ctx, `DELETE FROM agent_tasks WHERE node_id = $1`, nodeID)
+	return err
+}
+
 // ListTasksByNode returns a node's tasks in creation order.
 func (r *WorkflowRepo) ListTasksByNode(ctx context.Context, nodeID string) ([]AgentTask, error) {
 	rows, err := r.pg.Query(ctx, `
-		SELECT id, node_id, title, status, started_at, completed_at, created_at
+		SELECT id, node_id, title, status, ordinal, started_at, completed_at, created_at
 		FROM agent_tasks
 		WHERE node_id = $1
-		ORDER BY created_at ASC
+		ORDER BY ordinal ASC, created_at ASC
 	`, nodeID)
 	if err != nil {
 		return nil, err
@@ -230,7 +238,7 @@ func (r *WorkflowRepo) ListTasksByNode(ctx context.Context, nodeID string) ([]Ag
 	out := make([]AgentTask, 0)
 	for rows.Next() {
 		var t AgentTask
-		if err := rows.Scan(&t.ID, &t.NodeID, &t.Title, &t.Status, &t.StartedAt, &t.CompletedAt, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.NodeID, &t.Title, &t.Status, &t.Ordinal, &t.StartedAt, &t.CompletedAt, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, t)

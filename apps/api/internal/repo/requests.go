@@ -104,6 +104,27 @@ func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([
 	return out, rows.Err()
 }
 
+// ListIDsByStatus returns the ids of requests in a given status. The
+// orchestration engine uses it on boot to resume requests left in_progress by
+// a restart.
+func (r *RequestRepo) ListIDsByStatus(ctx context.Context, status string) ([]string, error) {
+	rows, err := r.pg.Query(ctx, `SELECT id FROM requests WHERE status = $1 ORDER BY created_at ASC`, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // UpdateStatusProgress moves a request's status and progress forward.
 // The orchestration engine (BE-5) drives this as nodes complete.
 func (r *RequestRepo) UpdateStatusProgress(ctx context.Context, id, status string, progress int) error {
