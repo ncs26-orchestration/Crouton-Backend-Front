@@ -77,6 +77,24 @@ curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}" \
        and ([.nodes[].key] | index("exec_approval")) != null' >/dev/null \
   || fail "request detail / workflow graph shape"
 
+# F5: the engine should produce a transient blocked state (Finance blocked on
+# IT) because finance_review runs before it_assessment in the default plan and
+# the deterministic Python _finance() returns blocked_on without IT output.
+say "F5: a blocked node appears while it_assessment is still running"
+blocked_seen=""
+for _ in $(seq 1 30); do
+  detail=$(curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}")
+  blocked_count=$(echo "$detail" | jq '[.nodes[] | select(.status == "blocked")] | length')
+  if [ "$blocked_count" -ge 1 ]; then
+    blocked_seen="yes"
+    blocked_node=$(echo "$detail" | jq -r '.nodes[] | select(.status == "blocked") | .key')
+    echo "  Blocked node detected: $blocked_node"
+    break
+  fi
+  sleep 0.5
+done
+[ -n "$blocked_seen" ] || fail "no blocked node appeared (F5)"
+
 # F3: the orchestration engine runs every node through its department agent
 # (deterministic with no LLM key) and drives the request to completed.
 say "engine runs the request to completion"
