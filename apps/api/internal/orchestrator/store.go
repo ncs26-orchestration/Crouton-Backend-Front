@@ -6,17 +6,18 @@ import (
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
-// dbStore implements Store over the request + workflow + audit + dependency repos.
+// dbStore implements Store over the request + workflow + audit + dependency + document repos.
 type dbStore struct {
 	requests     *repo.RequestRepo
 	workflow     *repo.WorkflowRepo
 	audit        *repo.AuditRepo
 	dependencies *repo.DependencyRepo
+	documents    *repo.DocumentRepo
 }
 
 // NewDBStore adapts the concrete repos to the engine's Store interface.
-func NewDBStore(requests *repo.RequestRepo, workflow *repo.WorkflowRepo, audit *repo.AuditRepo, dependencies *repo.DependencyRepo) Store {
-	return &dbStore{requests: requests, workflow: workflow, audit: audit, dependencies: dependencies}
+func NewDBStore(requests *repo.RequestRepo, workflow *repo.WorkflowRepo, audit *repo.AuditRepo, dependencies *repo.DependencyRepo, documents *repo.DocumentRepo) Store {
+	return &dbStore{requests: requests, workflow: workflow, audit: audit, dependencies: dependencies, documents: documents}
 }
 
 func (s *dbStore) GetRequest(ctx context.Context, requestID string) (*repo.Request, error) {
@@ -69,4 +70,8 @@ func (s *dbStore) ListUnresolvedDepsByRequest(ctx context.Context, requestID str
 
 func (s *dbStore) AppendAuditEvent(ctx context.Context, e repo.AuditEvent) error {
 	return s.audit.Append(ctx, e)
+}
+
+func (s *dbStore) CreateDocument(ctx context.Context, d *repo.Document) error {
+	return s.documents.Create(ctx, d)
 }

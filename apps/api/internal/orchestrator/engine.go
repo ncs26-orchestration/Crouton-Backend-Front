@@ -6,6 +6,7 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -68,6 +69,8 @@ type Store interface {
 	ListUnresolvedDepsByRequest(ctx context.Context, requestID string) ([]repo.NodeDependency, error)
 	// F6: audit trail.
 	AppendAuditEvent(ctx context.Context, e repo.AuditEvent) error
+	// Documents — generated completion summaries and manual uploads.
+	CreateDocument(ctx context.Context, d *repo.Document) error
 }
 
 // Engine advances requests on background goroutines.
@@ -177,12 +180,42 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			if err := e.store.UpdateRequestProgress(ctx, requestID, "completed", 100); err != nil {
 				return fmt.Errorf("update request progress: %w", err)
 			}
+
+			docID := "doc_" + shortID()
+			docBuf := new(bytes.Buffer)
+			fmt.Fprintf(docBuf, "Request: %s\n", req.Title)
+			fmt.Fprintf(docBuf, "Description: %s\n", req.Description)
+			fmt.Fprintf(docBuf, "Priority: %s\n", req.Priority)
+			fmt.Fprintf(docBuf, "Completed: %s\n\n", time.Now().Format(time.RFC1123))
+			fmt.Fprintf(docBuf, "--- Node Results ---\n")
+			for _, n := range nodes {
+				statusText := n.StatusText
+				if statusText == "" {
+					statusText = "—"
+				}
+				fmt.Fprintf(docBuf, "\n  %s (%s) [%s]\n", n.Name, n.Department, n.Status)
+				fmt.Fprintf(docBuf, "    %s\n", statusText)
+			}
+			contentText := docBuf.String()
+
+			if err := e.store.CreateDocument(ctx, &repo.Document{
+				ID:          docID,
+				RequestID:   requestID,
+				Filename:    "completion-summary.txt",
+				Mime:        "text/plain",
+				ContentText: contentText,
+			}); err != nil {
+				e.log.Warn("failed to create completion document", slog.String("request_id", requestID), slog.String("err", err.Error()))
+			}
+
+			aevID := "aev_" + shortID()
 			if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
-				ID:        "aev_" + shortID(),
-				RequestID: requestID,
-				Actor:     "engine",
-				Action:    "request.completed",
-				Reason:    "All " + fmt.Sprintf("%d", completed) + " nodes completed",
+				ID:         aevID,
+				RequestID:  requestID,
+				Actor:      "engine",
+				Action:     "request.completed",
+				Reason:     "All " + fmt.Sprintf("%d", completed) + " nodes completed",
+				DocumentID: &docID,
 			}); err != nil {
 				e.log.Warn("failed to audit request.completed", slog.String("request_id", requestID), slog.String("err", err.Error()))
 			}

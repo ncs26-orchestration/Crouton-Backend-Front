@@ -99,11 +99,13 @@ func NewServer(d Deps) *echo.Echo {
 	// handler (subscribes + streams to the browser).
 	eventBus := orchestrator.NewBus()
 
+	docRepo := repo.NewDocumentRepo(d.PgPool)
 	store := orchestrator.NewDBStore(
 		repo.NewRequestRepo(d.PgPool),
 		repo.NewWorkflowRepo(d.PgPool),
 		auditRepo,
 		repo.NewDependencyRepo(d.PgPool),
+		docRepo,
 	)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {
@@ -124,6 +126,12 @@ func NewServer(d Deps) *echo.Echo {
 	// Audit reads (F6).
 	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
 	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)
+
+	// Documents — auto-generated completion summaries and manual uploads.
+	doch := handler.NewDocumentsHandler(d.Logger, d.PgPool)
+	e.GET("/requests/:id/documents", doch.ListDocuments, authMiddleware)
+	e.POST("/requests/:id/documents", doch.UploadDocument, authMiddleware)
+	e.GET("/documents/:id/download", doch.DownloadDocument, authMiddleware)
 
 	// SSE events endpoint — authenticates via ?token= so EventSource can
 	// connect (it cannot set custom headers). The auth middleware is not
