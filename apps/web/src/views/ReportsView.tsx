@@ -97,7 +97,7 @@ export function ReportsView() {
         </button>
       </div>
 
-      <div className="px-8 py-6 w-full max-w-[1500px] flex flex-col gap-6">
+      <div className="px-8 py-6 w-full flex flex-col gap-6">
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Metric icon={FileText} label="Completed reports" value={completedRequests.length} />
