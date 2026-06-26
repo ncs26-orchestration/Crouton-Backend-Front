@@ -227,6 +227,16 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	}
 	saved.Status = "in_progress"
 
+	if err := h.audit.Append(ctx, repo.AuditEvent{
+		ID:        "aev_" + randomHex(8),
+		RequestID: reqID,
+		Actor:     claims.Name,
+		Action:    "request.created",
+		Reason:    claims.Name + " submitted: " + title,
+	}); err != nil {
+		h.logger.Error("create request: append audit event", slog.String("err", err.Error()))
+	}
+
 	// Hand the request off to the orchestration engine, which runs each node
 	// through its department agent on a background worker (F3).
 	if h.engine != nil {

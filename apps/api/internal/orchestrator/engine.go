@@ -148,7 +148,7 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 				Action:    "request.completed",
 				Reason:    "All " + fmt.Sprintf("%d", completed) + " nodes completed",
 			}); err != nil {
-				return fmt.Errorf("audit request.completed: %w", err)
+				e.log.Warn("failed to audit request.completed", slog.String("request_id", requestID), slog.String("err", err.Error()))
 			}
 			return nil
 		}
@@ -190,7 +190,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		Action:    "node.started",
 		Reason:    node.Name + " started — " + node.Department + " reviewing",
 	}); err != nil {
-		return fmt.Errorf("audit node.started: %w", err)
+		e.log.Warn("failed to audit node.started", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 	}
 	e.pace(ctx)
 
@@ -217,7 +217,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			Action:    "agent.fallback",
 			Reason:    node.Name + " — agent unavailable, used deterministic fallback: " + err.Error(),
 		}); err != nil {
-			return fmt.Errorf("audit agent.fallback: %w", err)
+			e.log.Warn("failed to audit agent.fallback", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 		}
 	}
 
@@ -259,7 +259,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		Action:    "node.completed",
 		Reason:    statusText,
 	}); err != nil {
-		return fmt.Errorf("audit node.completed: %w", err)
+		e.log.Warn("failed to audit node.completed", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 	}
 	return nil
 }
