@@ -1,24 +1,25 @@
 import type {
-  Attachment,
-  Chat,
-  ChatMessage,
-  CompileResponse,
-  DecisionTable,
-  Diagnostic,
-  DeployResponse,
-  DeployTarget,
-  EngineAdapter,
-  ExtractResponse,
-  ISRegistry,
-  OrgRequest,
-  Project,
-  NodeDetailResponse,
-  RequestGraph,
-  RequestPriority,
-  Workflow,
-  WorkflowDiff,
-  WorkflowVersion,
-  WorkflowVersionListItem,
+	Attachment,
+	AuditEvent,
+	Chat,
+	ChatMessage,
+	CompileResponse,
+	DecisionTable,
+	Diagnostic,
+	DeployResponse,
+	DeployTarget,
+	EngineAdapter,
+	ExtractResponse,
+	ISRegistry,
+	OrgRequest,
+	Project,
+	NodeDetailResponse,
+	RequestGraph,
+	RequestPriority,
+	Workflow,
+	WorkflowDiff,
+	WorkflowVersion,
+	WorkflowVersionListItem,
 } from "./types";
 import { authStore } from "./auth";
 
@@ -519,8 +520,16 @@ export const api = {
   getRequest: (id: string): Promise<RequestGraph> =>
     fetchJSON(`/api/requests/${encodeURIComponent(id)}`),
 
-  getNode: (requestId: string, nodeId: string): Promise<NodeDetailResponse> =>
-    fetchJSON(
-      `/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}`,
-    ),
+	getNode: (requestId: string, nodeId: string): Promise<NodeDetailResponse> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}`,
+		),
+
+	// --- Audit trail (F6) ---
+
+	listRequestAudit: (requestId: string): Promise<{ events: AuditEvent[] }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/audit`),
+
+	listOrgAudit: (orgId: string): Promise<{ events: AuditEvent[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/audit`),
 };

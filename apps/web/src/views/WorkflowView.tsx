@@ -21,7 +21,7 @@ import { api } from "../lib/api";
 import { requestToFlow } from "../lib/request-to-flow";
 import { nodeStatusColorClass, prettyLabel, requestStatusTextClass } from "../lib/request-format";
 import { DepartmentNode } from "../components/DepartmentNode";
-import type { WorkflowNodeData } from "../lib/types";
+import type { AuditEvent, WorkflowNodeData } from "../lib/types";
 
 const nodeTypes: NodeTypes = {
   department: DepartmentNode,
@@ -250,15 +250,16 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
   // status is part of the key so the panel refetches once the node flips to
   // completed (tasks are written at that moment) instead of holding the empty
   // in-progress result.
-  const tasksQuery = useQuery({
-    queryKey: ["node", requestId, node.id, node.status],
-    queryFn: () => api.getNode(requestId, node.id),
-    refetchInterval: node.status === "in_progress" ? 1500 : false,
-  });
-  const tasks = tasksQuery.data?.tasks ?? [];
+	const tasksQuery = useQuery({
+		queryKey: ["node", requestId, node.id, node.status],
+		queryFn: () => api.getNode(requestId, node.id),
+		refetchInterval: node.status === "in_progress" ? 1500 : false,
+	});
+	const tasks = tasksQuery.data?.tasks ?? [];
+	const activity = tasksQuery.data?.activity ?? [];
 
-  return (
-    <div className="flex flex-col">
+	return (
+		<div className="flex flex-col">
       <div className="px-4 py-3 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-1.5 mb-1">
           <Bot size={12} className="text-[var(--color-fg-muted)]" />
@@ -320,6 +321,30 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
         </div>
       )}
 
+      {activity.length > 0 && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            Activity
+          </h4>
+          <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+            {activity.map((a: AuditEvent) => (
+              <div key={a.id} className="text-[11px] leading-snug">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium text-[var(--color-fg)]">{a.actor}</span>
+                  <ActionBadge action={a.action} />
+                </div>
+                {a.reason && (
+                  <p className="text-[var(--color-fg-muted)] mt-0.5">{a.reason}</p>
+                )}
+                <span className="text-[10px] text-[var(--color-fg-subtle)]">
+                  {new Date(a.created_at).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {node.description && (
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
           <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-1.5">
@@ -332,6 +357,25 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
       )}
     </div>
   );
+}
+
+function ActionBadge({ action }: { action: string }) {
+	const colors: Record<string, string> = {
+		"node.started": "bg-blue-100 text-blue-700",
+		"node.completed": "bg-green-100 text-green-700",
+		"request.completed": "bg-green-100 text-green-700",
+		"agent.fallback": "bg-yellow-100 text-yellow-700",
+		"node.blocked": "bg-red-100 text-red-700",
+		"node.unblocked": "bg-teal-100 text-teal-700",
+		"approval.granted": "bg-purple-100 text-purple-700",
+		"approval.rejected": "bg-red-100 text-red-700",
+	};
+	const cls = colors[action] ?? "bg-gray-100 text-gray-600";
+	return (
+		<span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${cls}`}>
+			{action.replace(/\./g, " ")}
+		</span>
+	);
 }
 
 function InfoRow({ label, value, children }: { label: string; value?: string; children?: React.ReactNode }) {
