@@ -1,6 +1,6 @@
 output "vm_ip" {
   description = "External IP of the VM — paste this into infra/ansible/inventory.ini"
-  value       = google_compute_address.app_ip.address
+  value       = google_compute_instance.app.network_interface[0].access_config[0].nat_ip
 }
 
 output "vm_name" {
@@ -9,6 +9,6 @@ output "vm_name" {
 }
 
 output "ssh_command" {
-  description = "Ready-to-use SSH command"
-  value       = "ssh ${var.ssh_user}@${google_compute_address.app_ip.address}"
+  description = "Ready-to-use SSH command (OS Login)"
+  value       = "gcloud compute ssh ${google_compute_instance.app.name} --zone ${var.zone}"
 }

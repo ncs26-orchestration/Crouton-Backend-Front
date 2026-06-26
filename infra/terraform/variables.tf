@@ -6,29 +6,23 @@ variable "project_id" {
 variable "region" {
   description = "GCP region"
   type        = string
-  default     = "us-central1"
+  default     = "europe-west1"
 }
 
 variable "zone" {
   description = "GCP zone"
   type        = string
-  default     = "us-central1-a"
+  default     = "europe-west1-b"
 }
 
 variable "machine_type" {
   description = "VM machine type"
   type        = string
-  default     = "e2-standard-2"
+  default     = "e2-medium"
 }
 
-variable "ssh_user" {
-  description = "OS login username for SSH"
+variable "service_account_email" {
+  description = "Service account attached to the VM"
   type        = string
-  default     = "deploy"
-}
-
-variable "ssh_pub_key_path" {
-  description = "Path to the SSH public key to inject into the VM"
-  type        = string
-  default     = "~/.ssh/id_rsa.pub"
+  default     = "vm-runtime@ncs26-solution.iam.gserviceaccount.com"
 }

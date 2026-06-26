@@ -1,0 +1,11 @@
+# Local Terraform state and provider plugins — never commit these.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+override.tf
+override.tf.json
+.terraformrc
+terraform.rc

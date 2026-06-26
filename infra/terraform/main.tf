@@ -4,16 +4,9 @@ provider "google" {
   zone    = var.zone
 }
 
-# ── Static external IP ───────────────────────────────────────────────────────
-
-resource "google_compute_address" "app_ip" {
-  name   = "aios-ip"
-  region = var.region
-}
-
 # ── Firewall ─────────────────────────────────────────────────────────────────
-# Allows inbound traffic on the ports the stack exposes.
-# All services run on a single VM so one rule covers everything.
+# Adds the app ports on top of the project's existing default rules (which
+# already allow 22 and 80). Targets the VM's existing "http-server" tag.
 
 resource "google_compute_firewall" "aios_inbound" {
   name    = "aios-inbound"
@@ -21,49 +14,55 @@ resource "google_compute_firewall" "aios_inbound" {
 
   allow {
     protocol = "tcp"
-    ports    = [
-      "22",   # SSH
-      "80",   # web (nginx)
+    ports = [
+      "80",   # web (nginx) — also covered by allow-http, kept for clarity
       "8080", # api (Go)
       "8000", # agent (Python)
-      "8180", # camunda7
+      "8180", # camunda7 cockpit (demo)
     ]
   }
 
   source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["aios"]
+  target_tags   = ["http-server"]
 }
 
 # ── VM ───────────────────────────────────────────────────────────────────────
+# Describes the pre-existing "ncs26-vm" so Terraform can adopt it via
+# `terraform import` without rebuilding it. Attributes mirror the live instance;
+# changing an immutable one (name, zone, image, disk) would force a replace.
 
 resource "google_compute_instance" "app" {
-  name         = "aios-vm"
+  name         = "ncs26-vm"
   machine_type = var.machine_type
   zone         = var.zone
-  tags         = ["aios"]
+  tags         = ["http-server"]
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 50   # GB — enough for Docker images + Postgres data
-      type  = "pd-balanced"
+      image = "debian-cloud/debian-12"
+      size  = 30
+      type  = "pd-standard"
     }
   }
 
   network_interface {
     network = "default"
-    access_config {
-      nat_ip = google_compute_address.app_ip.address
-    }
+    # Empty access_config = ephemeral external IP (no reserved address).
+    access_config {}
   }
 
-  # Injects your public key so Ansible can SSH in immediately after apply.
-  metadata = {
-    ssh-keys = "${var.ssh_user}:${file(var.ssh_pub_key_path)}"
+  service_account {
+    email  = var.service_account_email
+    scopes = ["cloud-platform"]
   }
 
   lifecycle {
-    # Prevent Terraform from re-creating the VM if the key changes locally.
-    ignore_changes = [metadata]
+    # The VM carries a startup-script and OS Login keys we don't manage here, and
+    # the Debian boot image patch level drifts — ignore both so day-to-day plans
+    # stay clean and never propose a rebuild.
+    ignore_changes = [
+      metadata,
+      boot_disk[0].initialize_params[0].image,
+    ]
   }
 }
