@@ -80,6 +80,10 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
 	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
 
+	// Agents and policies read endpoints (F10).
+	orgGroup.GET("/:orgId/agents", oh.ListAgents)
+	orgGroup.GET("/:orgId/policies", oh.ListPolicies)
+
 	// Me — current user's work items (requests they created or need to act on).
 	mh := handler.NewMeHandler(d.Logger, d.PgPool)
 	e.GET("/me/work", mh.GetMyWork, authMiddleware)

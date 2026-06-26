@@ -97,6 +97,60 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
+	// Seed standard department teams, agents, and starter policies (F10).
+	type deptSeed struct {
+		teamID      string
+		name        string
+		agentType   string
+		agentName   string
+		capabilities string
+	}
+	depts := []deptSeed{
+		{"team_" + randomHex(8), "Finance", "finance", "Finance Agent", "Budget analysis, spend approval, financial risk assessment, ROI calculation"},
+		{"team_" + randomHex(8), "Legal", "legal", "Legal Agent", "Contract review, regulatory compliance, risk flagging, policy advisory"},
+		{"team_" + randomHex(8), "IT", "it", "IT Agent", "Technical feasibility, security assessment, infrastructure planning, systems integration"},
+		{"team_" + randomHex(8), "HR", "hr", "HR Agent", "Staffing assessment, hiring plan, onboarding logistics, people ops"},
+		{"team_" + randomHex(8), "Operations", "ops", "Operations Agent", "Logistics planning, facilities, timeline management, execution coordination"},
+		{"team_" + randomHex(8), "Planning", "planning", "Planning Agent", "Workflow planning, dependency mapping, timeline estimation"},
+		{"team_" + randomHex(8), "Executive", "approval", "Executive Approver", "Strategic decision-making, cross-functional review, approval authority"},
+	}
+	for _, d := range depts {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO teams (id, org_id, name, description) VALUES ($1, $2, $3, $4)
+		`, d.teamID, orgID, d.name, d.name+" department"); err != nil {
+			h.logger.Error("create org: seed team", slog.String("name", d.name), slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities) VALUES ($1, $2, $3, $4, $5, $6)
+		`, "agent_"+randomHex(8), orgID, d.teamID, d.agentType, d.agentName, d.capabilities); err != nil {
+			h.logger.Error("create org: seed agent", slog.String("name", d.name), slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+
+	// Seed starter department policies (one per dept).
+	type policySeed struct {
+		teamID string
+		title  string
+		body   string
+	}
+	policies := []policySeed{
+		{depts[0].teamID, "Finance Policy", "All expenditures over $10k require executive approval. Budget allocations must align with quarterly planning. Vendor contracts must include payment terms and cancellation clauses."},
+		{depts[1].teamID, "Legal Policy", "All contracts must be reviewed for regulatory compliance. Non-disclosure agreements follow the standard template. Data privacy laws (GDPR, CCPA) apply to any cross-border data handling."},
+		{depts[2].teamID, "IT Policy", "New systems must pass a security assessment. Software procurement follows the approved vendor list. Infrastructure changes require change management approval."},
+		{depts[3].teamID, "HR Policy", "New headcount requires approved job descriptions and budget allocation. Onboarding includes equipment provisioning, system access, and compliance training."},
+		{depts[4].teamID, "Operations Policy", "Project timelines must account for dependencies and buffer time. Vendor onboarding follows the standard integration checklist."},
+	}
+	for _, p := range policies {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO department_policies (id, org_id, team_id, title, body) VALUES ($1, $2, $3, $4, $5)
+		`, "pol_"+randomHex(8), orgID, p.teamID, p.title, p.body); err != nil {
+			h.logger.Error("create org: seed policy", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		h.logger.Error("create org: commit", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
@@ -797,6 +851,114 @@ func (h *OrgsHandler) RemoveTeamMember(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "member not found in team"})
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// ── Agent endpoints (F10) ──────────────────────────────────────────────────────
+
+// ListAgents handles GET /orgs/:orgId/agents.
+func (h *OrgsHandler) ListAgents(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+
+	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+
+	ctx := c.Request().Context()
+	rows, err := h.db.Query(ctx, `
+		SELECT a.id, a.org_id, a.team_id, a.agent_type, a.name, a.avatar, a.capabilities, a.created_at,
+		       COALESCE(t.name, '') AS team_name
+		FROM agents a
+		LEFT JOIN teams t ON t.id = a.team_id
+		WHERE a.org_id = $1
+		ORDER BY a.created_at ASC
+	`, orgID)
+	if err != nil {
+		h.logger.Error("list agents: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer rows.Close()
+
+	type agentItem struct {
+		ID           string    `json:"id"`
+		OrgID        string    `json:"org_id"`
+		TeamID       string    `json:"team_id"`
+		TeamName     string    `json:"team_name"`
+		AgentType    string    `json:"agent_type"`
+		Name         string    `json:"name"`
+		Avatar       string    `json:"avatar"`
+		Capabilities string    `json:"capabilities"`
+		CreatedAt    time.Time `json:"created_at"`
+	}
+	result := make([]agentItem, 0)
+	for rows.Next() {
+		var item agentItem
+		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.AgentType, &item.Name, &item.Avatar, &item.Capabilities, &item.CreatedAt, &item.TeamName); err != nil {
+			h.logger.Error("list agents: scan", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+// ── Policy endpoints (F10) ─────────────────────────────────────────────────────
+
+// ListPolicies handles GET /orgs/:orgId/policies.
+func (h *OrgsHandler) ListPolicies(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+
+	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+
+	ctx := c.Request().Context()
+	rows, err := h.db.Query(ctx, `
+		SELECT dp.id, dp.org_id, dp.team_id, dp.title, dp.body, dp.created_at,
+		       COALESCE(t.name, '') AS team_name
+		FROM department_policies dp
+		LEFT JOIN teams t ON t.id = dp.team_id
+		WHERE dp.org_id = $1
+		ORDER BY dp.created_at ASC
+	`, orgID)
+	if err != nil {
+		h.logger.Error("list policies: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer rows.Close()
+
+	type policyItem struct {
+		ID        string    `json:"id"`
+		OrgID     string    `json:"org_id"`
+		TeamID    string    `json:"team_id"`
+		TeamName  string    `json:"team_name"`
+		Title     string    `json:"title"`
+		Body      string    `json:"body"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+	result := make([]policyItem, 0)
+	for rows.Next() {
+		var item policyItem
+		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.Title, &item.Body, &item.CreatedAt, &item.TeamName); err != nil {
+			h.logger.Error("list policies: scan", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, result)
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
