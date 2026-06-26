@@ -213,32 +213,41 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 	}
 
 	// F5: if the agent declared a cross-department dependency, mark the node
-	// as blocked and record the dependency instead of completing it.
+	// as blocked and record the dependency instead of completing it. Only block
+	// when the named department actually has a node in this graph and that node
+	// has not already completed. Otherwise the dependency could never be
+	// resolved (nothing will complete the blocker again) and the node would
+	// deadlock, so we ignore the declaration and complete normally.
 	if decision.BlockedOn != nil {
-		e.log.Info("orchestrator: node declared blocked",
-			slog.String("node_id", node.ID), slog.String("on_department", decision.BlockedOn.OnDepartment), slog.String("reason", decision.BlockedOn.Reason))
-
 		blockingNodeID := findNodeByDepartment(byID, decision.BlockedOn.OnDepartment)
+		blocker, found := byID[blockingNodeID]
+		if blockingNodeID == "" || !found || blocker.Status == "completed" {
+			e.log.Warn("orchestrator: ignoring blocked_on; blocker is missing or already completed, completing node",
+				slog.String("node_id", node.ID), slog.String("on_department", decision.BlockedOn.OnDepartment))
+		} else {
+			e.log.Info("orchestrator: node declared blocked",
+				slog.String("node_id", node.ID), slog.String("on_department", decision.BlockedOn.OnDepartment), slog.String("reason", decision.BlockedOn.Reason))
 
-		if err := e.store.InsertDependency(ctx, repo.NodeDependency{
-			ID:              "nd_" + shortID(),
-			RequestID:       req.ID,
-			DependentNodeID: node.ID,
-			BlockingNodeID:  blockingNodeID,
-			Reason:          decision.BlockedOn.Reason,
-			RunCount:        1,
-		}); err != nil {
-			return false, fmt.Errorf("insert dependency: %w", err)
-		}
+			if err := e.store.InsertDependency(ctx, repo.NodeDependency{
+				ID:              "nd_" + shortID(),
+				RequestID:       req.ID,
+				DependentNodeID: node.ID,
+				BlockingNodeID:  blockingNodeID,
+				Reason:          decision.BlockedOn.Reason,
+				RunCount:        1,
+			}); err != nil {
+				return false, fmt.Errorf("insert dependency: %w", err)
+			}
 
-		statusText := decision.StatusText
-		if statusText == "" {
-			statusText = "Waiting for " + decision.BlockedOn.OnDepartment + ": " + decision.BlockedOn.Reason
+			statusText := decision.StatusText
+			if statusText == "" {
+				statusText = "Waiting for " + decision.BlockedOn.OnDepartment + ": " + decision.BlockedOn.Reason
+			}
+			if err := e.store.UpdateNodeStatus(ctx, node.ID, "blocked", statusText, 50); err != nil {
+				return false, fmt.Errorf("mark blocked: %w", err)
+			}
+			return false, nil
 		}
-		if err := e.store.UpdateNodeStatus(ctx, node.ID, "blocked", statusText, 50); err != nil {
-			return false, fmt.Errorf("mark blocked: %w", err)
-		}
-		return false, nil
 	}
 
 	now := time.Now()
