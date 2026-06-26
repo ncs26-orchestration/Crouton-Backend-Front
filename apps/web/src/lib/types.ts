@@ -312,6 +312,23 @@ export interface RequestGraph {
   edges: WorkflowEdgeData[];
 }
 
+// A unit of work a department agent reported for a node.
+export interface NodeTask {
+  id: string;
+  title: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+// Node detail payload from GET /requests/:id/nodes/:nodeId. activity (audit)
+// arrives in F6.
+export interface NodeDetailResponse {
+  node: WorkflowNodeData;
+  tasks: NodeTask[];
+  activity: unknown[];
+}
+
 // Binding state drives node color. Resolved at canvas build time
 // against the IS Registry; a task with no binding is "idle", a valid
 // binding is "ok", a binding whose id does not resolve is "error",

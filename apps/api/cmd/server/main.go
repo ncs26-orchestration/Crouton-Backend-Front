@@ -43,11 +43,13 @@ func main() {
 	defer rdb.Close()
 
 	e := apihttp.NewServer(apihttp.Deps{
-		Logger:    logger,
-		PgPool:    pool,
-		Redis:     rdb,
-		AgentURL:  cfg.AgentURL,
-		JWTSecret: cfg.JWTSecret,
+		Logger:          logger,
+		PgPool:          pool,
+		Redis:           rdb,
+		AgentURL:        cfg.AgentURL,
+		JWTSecret:       cfg.JWTSecret,
+		OrchStepDelayMS: cfg.OrchStepDelayMS,
+		RootCtx:         ctx,
 	})
 
 	go func() {

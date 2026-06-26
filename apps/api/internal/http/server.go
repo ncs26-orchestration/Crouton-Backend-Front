@@ -1,25 +1,34 @@
 package http
 
 import (
+	"context"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/engine"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/camunda7"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/elsa3"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/handler"
 	authmw "github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/orchestrator"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 	"github.com/redis/go-redis/v9"
 )
 
 type Deps struct {
-	Logger    *slog.Logger
-	PgPool    *pgxpool.Pool
-	Redis     *redis.Client
-	AgentURL  string
-	JWTSecret string
+	Logger          *slog.Logger
+	PgPool          *pgxpool.Pool
+	Redis           *redis.Client
+	AgentURL        string
+	JWTSecret       string
+	OrchStepDelayMS int
+	// RootCtx ties orchestration workers to the server lifetime so they stop
+	// on shutdown. Defaults to context.Background() when nil.
+	RootCtx context.Context
 }
 
 func NewServer(d Deps) *echo.Echo {
@@ -71,13 +80,25 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
 	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
 
-	// Requests — submission, listing, and detail with the workflow graph.
-	// The intake planner (agent service) turns a request into a department
-	// workflow; the client trims the URL and falls back when unavailable.
-	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, d.AgentURL)
+	// Requests — submission, listing, detail with the workflow graph, and
+	// node detail. The intake planner turns a request into a department
+	// workflow; the orchestration engine then runs each node through its
+	// department agent on a background worker (F3).
+	agentClient := agentclient.New(d.AgentURL)
+	store := orchestrator.NewDBStore(repo.NewRequestRepo(d.PgPool), repo.NewWorkflowRepo(d.PgPool))
+	rootCtx := d.RootCtx
+	if rootCtx == nil {
+		rootCtx = context.Background()
+	}
+	orchEngine := orchestrator.NewEngine(rootCtx, d.Logger, store, agentClient,
+		time.Duration(d.OrchStepDelayMS)*time.Millisecond)
+	// Resume any request a prior run left mid-orchestration (restart recovery).
+	go orchEngine.ResumeInProgress()
+	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, agentClient, orchEngine)
 	orgGroup.POST("/:orgId/requests", reqh.CreateRequest)
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
+	e.GET("/requests/:id/nodes/:nodeId", reqh.GetNode, authMiddleware)
 
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup

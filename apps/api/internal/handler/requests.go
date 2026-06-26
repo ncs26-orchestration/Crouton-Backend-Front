@@ -14,27 +14,30 @@ import (
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/orchestrator"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
 // RequestsHandler owns the request lifecycle endpoints: create (which
-// also plans the workflow graph via the intake agent), list, and
-// get-with-graph.
+// plans the workflow graph and launches the orchestration engine), list,
+// get-with-graph, and node detail.
 type RequestsHandler struct {
 	logger   *slog.Logger
 	pg       *pgxpool.Pool
 	requests *repo.RequestRepo
 	workflow *repo.WorkflowRepo
 	agent    *agentclient.Client
+	engine   *orchestrator.Engine
 }
 
-func NewRequestsHandler(logger *slog.Logger, pg *pgxpool.Pool, agentURL string) *RequestsHandler {
+func NewRequestsHandler(logger *slog.Logger, pg *pgxpool.Pool, agent *agentclient.Client, engine *orchestrator.Engine) *RequestsHandler {
 	return &RequestsHandler{
 		logger:   logger,
 		pg:       pg,
 		requests: repo.NewRequestRepo(pg),
 		workflow: repo.NewWorkflowRepo(pg),
-		agent:    agentclient.New(agentURL),
+		agent:    agent,
+		engine:   engine,
 	}
 }
 
@@ -222,6 +225,12 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	}
 	saved.Status = "in_progress"
 
+	// Hand the request off to the orchestration engine, which runs each node
+	// through its department agent on a background worker (F3).
+	if h.engine != nil {
+		h.engine.Start(reqID)
+	}
+
 	names := h.requesterNames(ctx, []int64{saved.RequesterUserID})
 	return c.JSON(http.StatusCreated, map[string]any{"request": toRequestResponse(*saved, names[saved.RequesterUserID])})
 }
@@ -332,6 +341,77 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 		"nodes":   nodeList,
 		"edges":   edgeList,
 		"agents":  []any{},
+	})
+}
+
+// GetNode handles GET /requests/:id/nodes/:nodeId, returning a node plus the
+// agent tasks it produced. activity (audit) is F6 and returned empty for now.
+func (h *RequestsHandler) GetNode(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	requestID := c.Param("id")
+	nodeID := c.Param("nodeId")
+
+	ctx := c.Request().Context()
+	req, err := h.requests.GetByID(ctx, requestID)
+	if errors.Is(err, repo.ErrNotFound) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+	}
+	if err != nil {
+		h.logger.Error("get node: request", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if _, err := requireOrgMember(c, h.pg, req.OrgID, claims.UserID); err != nil {
+		var he *echo.HTTPError
+		if errors.As(err, &he) && he.Code == http.StatusForbidden {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+		}
+		return handleOrgMemberErr(c, err)
+	}
+
+	node, err := h.workflow.GetNode(ctx, nodeID)
+	if errors.Is(err, repo.ErrNotFound) || (node != nil && node.RequestID != requestID) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "node not found"})
+	}
+	if err != nil {
+		h.logger.Error("get node: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	tasks, err := h.workflow.ListTasksByNode(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("get node: tasks", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	taskList := make([]map[string]any, 0, len(tasks))
+	for _, t := range tasks {
+		taskList = append(taskList, map[string]any{
+			"id":           t.ID,
+			"title":        t.Title,
+			"status":       t.Status,
+			"started_at":   t.StartedAt,
+			"completed_at": t.CompletedAt,
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"node": map[string]any{
+			"id":               node.ID,
+			"key":              node.Key,
+			"name":             node.Name,
+			"agent_type":       node.AgentType,
+			"department":       node.Department,
+			"status":           node.Status,
+			"description":      node.Description,
+			"progress_percent": node.ProgressPercent,
+			"status_text":      node.StatusText,
+			"started_at":       node.StartedAt,
+			"completed_at":     node.CompletedAt,
+		},
+		"tasks":    taskList,
+		"activity": []any{},
 	})
 }
 

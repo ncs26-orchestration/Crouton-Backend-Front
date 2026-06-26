@@ -192,36 +192,47 @@ func main() {
 	}
 	defer pool.Close()
 
-	if err := reset(ctx, pool); err != nil {
-		log.Fatalf("seed: reset: %v", err)
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(demoPassword), 12)
+	counts, err := seed(ctx, pool)
 	if err != nil {
-		log.Fatalf("seed: hash password: %v", err)
-	}
-
-	userIDs, err := seedUsers(ctx, pool, string(hash))
-	if err != nil {
-		log.Fatalf("seed: users: %v", err)
-	}
-	if err := seedOrg(ctx, pool, userIDs); err != nil {
-		log.Fatalf("seed: org: %v", err)
-	}
-	if err := seedTeams(ctx, pool, userIDs); err != nil {
-		log.Fatalf("seed: teams: %v", err)
-	}
-	nodeCount, edgeCount, err := seedRequests(ctx, pool, userIDs)
-	if err != nil {
-		log.Fatalf("seed: requests: %v", err)
+		log.Fatalf("seed: %v", err)
 	}
 
 	log.Println("seed complete:")
 	log.Printf("  org      %s (slug %q)", demoOrgName, demoOrgSlug)
 	log.Printf("  users    %d", len(users))
 	log.Printf("  teams    %d", len(teams))
-	log.Printf("  requests %d (%d nodes, %d edges)", len(requests), nodeCount, edgeCount)
+	log.Printf("  requests %d (%d nodes, %d edges, %d tasks)", len(requests), counts.nodes, counts.edges, counts.tasks)
 	log.Println("  login    founder@acme.test / password  (same password for every @acme.test user)")
+}
+
+// seed runs the full demo seed in one go: it removes any prior demo data, then
+// inserts users, the org, teams, and requests with their workflow graphs and
+// agent tasks. Safe to run repeatedly (reset clears the prior demo first).
+func seed(ctx context.Context, pool *pgxpool.Pool) (seedCounts, error) {
+	if err := reset(ctx, pool); err != nil {
+		return seedCounts{}, fmt.Errorf("reset: %w", err)
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(demoPassword), 12)
+	if err != nil {
+		return seedCounts{}, fmt.Errorf("hash password: %w", err)
+	}
+
+	userIDs, err := seedUsers(ctx, pool, string(hash))
+	if err != nil {
+		return seedCounts{}, fmt.Errorf("users: %w", err)
+	}
+	if err := seedOrg(ctx, pool, userIDs); err != nil {
+		return seedCounts{}, fmt.Errorf("org: %w", err)
+	}
+	if err := seedTeams(ctx, pool, userIDs); err != nil {
+		return seedCounts{}, fmt.Errorf("teams: %w", err)
+	}
+	counts, err := seedRequests(ctx, pool, userIDs)
+	if err != nil {
+		return seedCounts{}, fmt.Errorf("requests: %w", err)
+	}
+	return counts, nil
 }
 
 // reset removes any prior demo data. The org delete cascades to its members,
@@ -289,19 +300,66 @@ func seedTeams(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64
 	return nil
 }
 
-func seedRequests(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) (nodeCount, edgeCount int, err error) {
+// seedCounts is what a seed run produced, for the summary log.
+type seedCounts struct {
+	nodes int
+	edges int
+	tasks int
+}
+
+func seedRequests(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) (seedCounts, error) {
 	plan := agentclient.DefaultPlan()
 	now := time.Now()
 
+	var counts seedCounts
 	for _, r := range requests {
 		nodes, edges := buildGraph(r, plan, now)
-		if err := insertRequestGraph(ctx, pool, r, userIDs[r.requester], nodes, edges, now); err != nil {
-			return 0, 0, fmt.Errorf("request %q: %w", r.title, err)
+		tasks := buildTasks(nodes)
+		if err := insertRequestGraph(ctx, pool, r, userIDs[r.requester], nodes, edges, tasks, now); err != nil {
+			return seedCounts{}, fmt.Errorf("request %q: %w", r.title, err)
 		}
-		nodeCount += len(nodes)
-		edgeCount += len(edges)
+		counts.nodes += len(nodes)
+		counts.edges += len(edges)
+		counts.tasks += len(tasks)
 	}
-	return nodeCount, edgeCount, nil
+	return counts, nil
+}
+
+// buildTasks gives each worked node believable agent_tasks drawn from the same
+// deterministic department playbook the engine uses: completed nodes carry the
+// full task set (all completed), in-progress nodes carry the first task still
+// running. Pending nodes have no tasks yet.
+func buildTasks(nodes []repo.WorkflowNode) []repo.AgentTask {
+	var tasks []repo.AgentTask
+	for _, n := range nodes {
+		dec := agentclient.DefaultDecision(n.AgentType)
+		switch n.Status {
+		case "completed":
+			for i, t := range dec.Tasks {
+				tasks = append(tasks, repo.AgentTask{
+					ID:          fmt.Sprintf("at_%s", shortID()),
+					NodeID:      n.ID,
+					Title:       t.Title,
+					Status:      "completed",
+					Ordinal:     i,
+					StartedAt:   n.StartedAt,
+					CompletedAt: n.CompletedAt,
+				})
+			}
+		case "in_progress":
+			if len(dec.Tasks) > 0 {
+				tasks = append(tasks, repo.AgentTask{
+					ID:        fmt.Sprintf("at_%s", shortID()),
+					NodeID:    n.ID,
+					Title:     dec.Tasks[0].Title,
+					Status:    "in_progress",
+					Ordinal:   0,
+					StartedAt: n.StartedAt,
+				})
+			}
+		}
+	}
+	return tasks
 }
 
 // buildGraph turns the canonical plan into concrete nodes/edges for a request,
@@ -379,6 +437,7 @@ func insertRequestGraph(
 	requesterID int64,
 	nodes []repo.WorkflowNode,
 	edges []repo.WorkflowEdge,
+	tasks []repo.AgentTask,
 	now time.Time,
 ) error {
 	tx, err := pool.Begin(ctx)
@@ -416,9 +475,16 @@ func insertRequestGraph(
 			VALUES ($1, $2, $3, $4, $5)
 		`, e.ID, e.RequestID, e.SourceNodeID, e.TargetNodeID, e.EdgeType)
 	}
+	// agent_tasks reference workflow_nodes, queued above in the same tx.
+	for _, t := range tasks {
+		batch.Queue(`
+			INSERT INTO agent_tasks (id, node_id, title, status, ordinal, started_at, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, t.ID, t.NodeID, t.Title, t.Status, t.Ordinal, t.StartedAt, t.CompletedAt)
+	}
 
 	br := tx.SendBatch(ctx, batch)
-	for range len(nodes) + len(edges) {
+	for range len(nodes) + len(edges) + len(tasks) {
 		if _, err := br.Exec(); err != nil {
 			_ = br.Close()
 			return fmt.Errorf("insert graph: %w", err)

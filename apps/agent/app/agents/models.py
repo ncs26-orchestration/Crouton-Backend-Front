@@ -27,3 +27,40 @@ class Plan(BaseModel):
 
     nodes: list[PlanNode] = Field(description="Workflow stages")
     edges: list[PlanEdge] = Field(description="Connections between stages")
+
+
+class Flag(BaseModel):
+    """A risk or note a department agent surfaces while reviewing a request."""
+
+    severity: str = Field(description="One of: info, warning, critical")
+    message: str = Field(description="Plain-language description of the flag")
+
+
+class TaskItem(BaseModel):
+    """A unit of work a department agent performed on a node."""
+
+    title: str = Field(description="What the agent did, e.g. 'Assess budget feasibility'")
+    status: str = Field(default="completed", description="pending, in_progress, or completed")
+
+
+class DependencyDecl(BaseModel):
+    """A cross-department dependency an agent declares when it is blocked.
+
+    Populated by the ``raise_dependency`` tool (F5); ``None`` here means the
+    department could complete without waiting on another.
+    """
+
+    on_department: str = Field(description="Department this stage is waiting on")
+    reason: str = Field(description="The agent's own reason for the dependency")
+
+
+class Decision(BaseModel):
+    """A department agent's output for one workflow node."""
+
+    summary: str = Field(description="Short summary of the department's assessment")
+    flags: list[Flag] = Field(default_factory=list, description="Risks or notes surfaced")
+    tasks: list[TaskItem] = Field(default_factory=list, description="Work performed on this node")
+    status_text: str = Field(description="Plain-language status for the UI")
+    blocked_on: DependencyDecl | None = Field(
+        default=None, description="Set when the agent is blocked on another department (F5)"
+    )

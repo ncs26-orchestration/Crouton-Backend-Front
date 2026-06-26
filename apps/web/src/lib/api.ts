@@ -12,6 +12,7 @@ import type {
   ISRegistry,
   OrgRequest,
   Project,
+  NodeDetailResponse,
   RequestGraph,
   RequestPriority,
   Workflow,
@@ -517,4 +518,9 @@ export const api = {
 
   getRequest: (id: string): Promise<RequestGraph> =>
     fetchJSON(`/api/requests/${encodeURIComponent(id)}`),
+
+  getNode: (requestId: string, nodeId: string): Promise<NodeDetailResponse> =>
+    fetchJSON(
+      `/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}`,
+    ),
 };
