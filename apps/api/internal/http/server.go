@@ -89,12 +89,13 @@ func NewServer(d Deps) *echo.Echo {
 	// workflow; the orchestration engine then runs each node through its
 	// department agent on a background worker (F3).
 	agentClient := agentclient.New(d.AgentURL)
+	auditRepo := repo.NewAuditRepo(d.PgPool)
 
 	// SSE event bus — shared between the engine (publishes) and the events
 	// handler (subscribes + streams to the browser).
 	eventBus := orchestrator.NewBus()
 
-	store := orchestrator.NewDBStore(repo.NewRequestRepo(d.PgPool), repo.NewWorkflowRepo(d.PgPool))
+	store := orchestrator.NewDBStore(repo.NewRequestRepo(d.PgPool), repo.NewWorkflowRepo(d.PgPool), auditRepo)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {
 		rootCtx = context.Background()
@@ -108,6 +109,8 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
 	e.GET("/requests/:id/nodes/:nodeId", reqh.GetNode, authMiddleware)
+	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
+	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)
 
 	// SSE events endpoint — authenticates via ?token= so EventSource can
 	// connect (it cannot set custom headers). The auth middleware is not

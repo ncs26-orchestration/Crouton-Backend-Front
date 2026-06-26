@@ -22,7 +22,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/m
 | F3 | Agents do the work (status progression) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | F4 | Live canvas (real-time SSE) | – | ✅ | – | ✅ | ✅ | 🟡 |
 | F5 | Cross-department dependencies | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| F6 | Traceability / audit trail | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
+| F6 | Traceability / audit trail | ✅ | ✅ | – | ✅ | ✅ | 🟡 |
 | F7 | Human executive approval | – | ⬜ | – | ⬜ | ⬜ | ⬜ |
 | F8 | Execution stage & final report | – | ⬜ | 🟡 | ⬜ | ⬜ | ⬜ |
 | F9 | Roster, Policies & Integrations views | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
