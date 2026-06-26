@@ -39,16 +39,39 @@ curl -fsS -X POST "$API/auth/login" \
   | jq -e '.token != null' >/dev/null || fail "login"
 
 say "create org"
-curl -fsS -X POST "$API/orgs" \
+org_id=$(curl -fsS -X POST "$API/orgs" \
   -H "authorization: Bearer ${token}" \
   -H 'content-type: application/json' \
   -d "{\"name\":\"CI Org\",\"slug\":\"${slug}\"}" \
-  | jq -e '.id != null or .org != null' >/dev/null || fail "create org"
+  | jq -r '.id')
+[ -n "$org_id" ] && [ "$org_id" != "null" ] || fail "create org (no id)"
 
 say "list orgs contains the new org"
 curl -fsS "$API/orgs" -H "authorization: Bearer ${token}" \
   | jq -e --arg slug "$slug" '[.. | .slug? // empty] | index($slug) != null' >/dev/null \
   || fail "new org not found in list"
+
+# --- F1: submit & track a request ---
+
+say "submit a request (Open a new office in Berlin, High)"
+req_id=$(curl -fsS -X POST "$API/orgs/${org_id}/requests" \
+  -H "authorization: Bearer ${token}" \
+  -H 'content-type: application/json' \
+  -d '{"title":"Open a new office in Berlin","description":"Expand into the EU market","priority":"high"}' \
+  | jq -r '.request.id')
+[ -n "$req_id" ] && [ "$req_id" != "null" ] || fail "create request (no id)"
+
+say "new request appears in the org request list"
+curl -fsS "$API/orgs/${org_id}/requests" -H "authorization: Bearer ${token}" \
+  | jq -e --arg id "$req_id" '.requests | map(.id) | index($id) != null' >/dev/null \
+  || fail "new request not found in list"
+
+say "request detail loads with the (still empty) graph"
+curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}" \
+  | jq -e --arg id "$req_id" \
+      '.request.id == $id and .request.status == "submitted" and .request.priority == "high"
+       and (.nodes | length) == 0 and (.edges | length) == 0 and (.agents | length) == 0' >/dev/null \
+  || fail "request detail shape"
 
 echo
 echo "SMOKE OK"

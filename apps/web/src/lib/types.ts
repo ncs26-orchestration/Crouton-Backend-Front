@@ -285,3 +285,41 @@ export interface WorkflowDiff {
   removed: string[];
   changed: string[];
 }
+
+// --- AI Org OS: requests (F1) ---
+
+export type RequestPriority = "low" | "medium" | "high" | "urgent";
+
+export type RequestStatus =
+  | "submitted"
+  | "in_progress"
+  | "awaiting_approval"
+  | "approved"
+  | "rejected"
+  | "completed";
+
+// A business request submitted into the org. The workflow graph
+// (nodes/edges/agents) is attached by the planner in F2; F1 carries
+// the request record itself.
+export interface OrgRequest {
+  id: string;
+  org_id: string;
+  title: string;
+  description: string;
+  requester_user_id: number;
+  requester_name: string;
+  priority: RequestPriority;
+  status: RequestStatus;
+  progress: number;
+  estimated_completion: string | null;
+  created_at: string;
+}
+
+// Full graph payload from GET /requests/:id. nodes/edges/agents are
+// empty until the planner runs (F2).
+export interface RequestDetail {
+  request: OrgRequest;
+  nodes: unknown[];
+  edges: unknown[];
+  agents: unknown[];
+}

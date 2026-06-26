@@ -15,6 +15,7 @@ import { SettingsView } from "./views/SettingsView";
 import { HomeView } from "./views/HomeView";
 import { MyWorkView } from "./views/MyWorkView";
 import { RequestsView } from "./views/RequestsView";
+import { RequestDetailView } from "./views/RequestDetailView";
 import { WorkflowView } from "./views/WorkflowView";
 import { AgentsView } from "./views/AgentsView";
 import { ReportsView } from "./views/ReportsView";
@@ -170,6 +171,12 @@ function Shell() {
     setLocation((prev) => ({ ...prev, section }));
   };
 
+  const openRequest = (requestId: string) =>
+    setLocation((prev) => ({ ...prev, section: "requests", requestId, nodeId: null }));
+
+  const backToRequests = () =>
+    setLocation((prev) => ({ ...prev, section: "requests", requestId: null, nodeId: null }));
+
   return (
     <div className="h-screen w-screen overflow-hidden flex bg-[var(--color-bg)] text-[var(--color-fg)]">
       <ShellRail
@@ -181,7 +188,12 @@ function Shell() {
 
       {location.section === "home" && <HomeView />}
       {location.section === "my-work" && <MyWorkView />}
-      {location.section === "requests" && <RequestsView />}
+      {location.section === "requests" &&
+        (location.requestId ? (
+          <RequestDetailView requestId={location.requestId} onBack={backToRequests} />
+        ) : (
+          <RequestsView onOpenRequest={openRequest} />
+        ))}
       {location.section === "workflows" && <WorkflowView />}
       {location.section === "agents" && <OrgView />}
       {location.section === "reports" && <ReportsView />}
