@@ -132,6 +132,14 @@ func NewServer(d Deps) *echo.Echo {
 	rpt := handler.NewReportHandler(d.Logger, d.PgPool)
 	e.GET("/requests/:id/report", rpt.GetReport, authMiddleware)
 
+	// Mobile-app work endpoints: inbox, task detail, task actions.
+	wh := handler.NewWorkHandler(d.Logger, d.PgPool)
+	e.GET("/me/work", wh.ListMyWork, authMiddleware)
+	e.GET("/tasks/:id/detail", wh.GetTaskDetail, authMiddleware)
+	e.POST("/tasks/:id/progress", wh.PostTaskProgress, authMiddleware)
+	e.POST("/tasks/:id/complete", wh.PostTaskComplete, authMiddleware)
+	e.POST("/tasks/:id/decision", wh.PostTaskDecision, authMiddleware)
+
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup
 	// the HTTP layer uses to route /compile/:target, and the source
