@@ -95,7 +95,12 @@ func NewServer(d Deps) *echo.Echo {
 	// handler (subscribes + streams to the browser).
 	eventBus := orchestrator.NewBus()
 
-	store := orchestrator.NewDBStore(repo.NewRequestRepo(d.PgPool), repo.NewWorkflowRepo(d.PgPool), auditRepo)
+	store := orchestrator.NewDBStore(
+		repo.NewRequestRepo(d.PgPool),
+		repo.NewWorkflowRepo(d.PgPool),
+		auditRepo,
+		repo.NewDependencyRepo(d.PgPool),
+	)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {
 		rootCtx = context.Background()

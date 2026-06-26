@@ -6,16 +6,17 @@ import (
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
-// dbStore implements Store over the request + workflow + audit repos.
+// dbStore implements Store over the request + workflow + audit + dependency repos.
 type dbStore struct {
-	requests *repo.RequestRepo
-	workflow *repo.WorkflowRepo
-	audit    *repo.AuditRepo
+	requests     *repo.RequestRepo
+	workflow     *repo.WorkflowRepo
+	audit        *repo.AuditRepo
+	dependencies *repo.DependencyRepo
 }
 
 // NewDBStore adapts the concrete repos to the engine's Store interface.
-func NewDBStore(requests *repo.RequestRepo, workflow *repo.WorkflowRepo, audit *repo.AuditRepo) Store {
-	return &dbStore{requests: requests, workflow: workflow, audit: audit}
+func NewDBStore(requests *repo.RequestRepo, workflow *repo.WorkflowRepo, audit *repo.AuditRepo, dependencies *repo.DependencyRepo) Store {
+	return &dbStore{requests: requests, workflow: workflow, audit: audit, dependencies: dependencies}
 }
 
 func (s *dbStore) GetRequest(ctx context.Context, requestID string) (*repo.Request, error) {
@@ -48,6 +49,22 @@ func (s *dbStore) InsertTasks(ctx context.Context, tasks []repo.AgentTask) error
 
 func (s *dbStore) UpdateRequestProgress(ctx context.Context, requestID, status string, progressPercent int) error {
 	return s.workflow.UpdateRequestProgress(ctx, requestID, status, progressPercent)
+}
+
+func (s *dbStore) InsertDependency(ctx context.Context, dep repo.NodeDependency) error {
+	return s.dependencies.Insert(ctx, dep)
+}
+
+func (s *dbStore) ResolveDependenciesBlockedBy(ctx context.Context, blockingNodeID string) ([]string, error) {
+	return s.dependencies.ResolveByBlockingNode(ctx, blockingNodeID)
+}
+
+func (s *dbStore) MaxRunCount(ctx context.Context, dependentNodeID string) (int, error) {
+	return s.dependencies.MaxRunCount(ctx, dependentNodeID)
+}
+
+func (s *dbStore) ListUnresolvedDepsByRequest(ctx context.Context, requestID string) ([]repo.NodeDependency, error) {
+	return s.dependencies.ListUnresolvedByRequest(ctx, requestID)
 }
 
 func (s *dbStore) AppendAuditEvent(ctx context.Context, e repo.AuditEvent) error {
