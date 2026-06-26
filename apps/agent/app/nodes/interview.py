@@ -73,7 +73,8 @@ Output ONE JSON object, with this shape — no prose, no markdown:
     }},
     "questions": [
       {{ "id": "q_size", "field": "size",
-         "text": "How many employees does the organisation have? (10-50, 50-200, 200-1000, 1000+?)" }}
+         "text": "How many employees does the organisation have? (10-50, 50-200, 200-1000, 1000+?)"
+      }}
     ]
   }}
 

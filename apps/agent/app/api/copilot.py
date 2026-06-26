@@ -129,7 +129,9 @@ def _path_exists(doc: Any, path: str) -> bool:
         return False
 
 
-def _normalize_patch(doc: dict[str, Any], patch: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+def _normalize_patch(
+    doc: dict[str, Any], patch: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], bool]:
     """Rewrite the model's most common mistakes into valid ops.
 
     Rules (applied in order, each a conservative pass):
