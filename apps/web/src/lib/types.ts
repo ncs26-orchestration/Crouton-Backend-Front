@@ -297,6 +297,7 @@ export interface WorkflowNodeData {
   status_text: string;
   started_at: string | null;
   completed_at: string | null;
+  blocked_by?: { reason: string; blocked_at?: string } | null;
 }
 
 export interface WorkflowEdgeData {

@@ -287,7 +287,19 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
         {node.completed_at && <InfoRow label="Completed" value={new Date(node.completed_at).toLocaleString()} />}
       </div>
 
-      {node.status_text && (
+      {node.status === "blocked" && node.blocked_by && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-danger)] mb-1.5 flex items-center gap-1">
+            <ShieldAlert size={11} />
+            Blocked
+          </h4>
+          <p className="text-xs text-[var(--color-fg)] leading-relaxed">
+            {node.blocked_by.reason}
+          </p>
+        </div>
+      )}
+
+      {node.status_text && node.status !== "blocked" && (
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
           <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-1.5">
             Latest Status
