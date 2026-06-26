@@ -16,7 +16,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/m
 
 | # | Feature (vertical slice) | DB | BE | AG | FE | Link | Overall |
 |---|---|----|----|----|----|----|----|
-| F0 | App shell & navigation | – | – | – | ⬜ | – | ⬜ |
+| F0 | App shell & navigation | – | – | – | ✅ | – | ✅ |
 | F1 | Submit & track a request | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
 | F2 | Auto-planned workflow graph | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | F3 | Agents do the work (status progression) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
