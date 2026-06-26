@@ -266,7 +266,7 @@ func (e *Engine) parkForApproval(ctx context.Context, requestID string, gate rep
 // testable.) justification is the human's written reason and is required by the
 // caller; durable audit of the reason arrives with the audit trail (F6), so for
 // now it is logged.
-func (e *Engine) Approve(ctx context.Context, requestID string, decision ApprovalDecision, justification string) error {
+func (e *Engine) Approve(ctx context.Context, requestID string, decision ApprovalDecision, justification, approverName string) error {
 	req, err := e.store.GetRequest(ctx, requestID)
 	if err != nil {
 		return fmt.Errorf("get request: %w", err)
@@ -304,7 +304,7 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 			ID:        "aev_" + shortID(),
 			RequestID: requestID,
 			NodeID:    &gate.ID,
-			Actor:     "executive",
+			Actor:     approverName,
 			Action:    "approval.granted",
 			Reason:    justification,
 		}); err != nil {
@@ -327,7 +327,7 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 			ID:        "aev_" + shortID(),
 			RequestID: requestID,
 			NodeID:    &gate.ID,
-			Actor:     "executive",
+			Actor:     approverName,
 			Action:    "approval.rejected",
 			Reason:    justification,
 		}); err != nil {
@@ -424,6 +424,16 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			statusText := decision.StatusText
 			if statusText == "" {
 				statusText = "Waiting for " + decision.BlockedOn.OnDepartment + ": " + decision.BlockedOn.Reason
+			}
+			if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+				ID:        "aev_" + shortID(),
+				RequestID: req.ID,
+				NodeID:    &node.ID,
+				Actor:     node.Department,
+				Action:    "node.blocked",
+				Reason:    statusText,
+			}); err != nil {
+				e.log.Warn("failed to audit node.blocked", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 			}
 			if err := e.store.UpdateNodeStatus(ctx, node.ID, "blocked", statusText, 50); err != nil {
 				return false, fmt.Errorf("mark blocked: %w", err)

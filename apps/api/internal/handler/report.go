@@ -189,15 +189,6 @@ func (h *ReportHandler) GetReport(c echo.Context) error {
 			lastEnd = *n.CompletedAt
 		}
 
-		// F5: build flags from blocked events.
-		if n.Status == "blocked" && n.StatusText != "" {
-			flags = append(flags, reportFlag{
-				StageKey:  n.Key,
-				StageName: n.Name,
-				Severity:  "warning",
-				Message:   n.StatusText,
-			})
-		}
 	}
 
 	var completedAt *time.Time
@@ -207,10 +198,10 @@ func (h *ReportHandler) GetReport(c echo.Context) error {
 		completedAt = &lastEnd
 	}
 
-	// Agent fallback flags.
+	// Agent fallback and blocked flags from durable audit events (not live
+	// node status, since blocked nodes are transient — they complete later).
 	for _, ae := range auditEvents {
-		if ae.Action == "agent.fallback" {
-			// Find stage key/node name. We map from node_id.
+		if ae.Action == "agent.fallback" || ae.Action == "node.blocked" {
 			var stageKey, stageName string
 			if ae.NodeID != nil {
 				for _, n := range nodes {
@@ -221,10 +212,14 @@ func (h *ReportHandler) GetReport(c echo.Context) error {
 					}
 				}
 			}
+			severity := "info"
+			if ae.Action == "node.blocked" {
+				severity = "warning"
+			}
 			flags = append(flags, reportFlag{
 				StageKey:  stageKey,
 				StageName: stageName,
-				Severity:  "info",
+				Severity:  severity,
 				Message:   ae.Reason,
 			})
 		}

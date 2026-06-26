@@ -357,7 +357,7 @@ func TestApproveResumesToCompletion(t *testing.T) {
 
 	// Approve resumes the worker synchronously here (Start runs a goroutine,
 	// but run is also driven directly to assert the terminal state).
-	if err := e.Approve(context.Background(), "req_1", ApprovalApprove, "Budget and risk are acceptable."); err != nil {
+	if err := e.Approve(context.Background(), "req_1", ApprovalApprove, "Budget and risk are acceptable.", "CI User"); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
 	if err := e.run(context.Background(), "req_1"); err != nil {
@@ -382,7 +382,7 @@ func TestRejectStopsRequest(t *testing.T) {
 	if err := e.run(context.Background(), "req_1"); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if err := e.Approve(context.Background(), "req_1", ApprovalReject, "Out of budget this quarter."); err != nil {
+	if err := e.Approve(context.Background(), "req_1", ApprovalReject, "Out of budget this quarter.", "CI User"); err != nil {
 		t.Fatalf("reject: %v", err)
 	}
 
@@ -400,7 +400,7 @@ func TestApproveRejectsWhenNotAwaiting(t *testing.T) {
 	if err := e.run(context.Background(), "req_1"); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	err := e.Approve(context.Background(), "req_1", ApprovalApprove, "n/a")
+	err := e.Approve(context.Background(), "req_1", ApprovalApprove, "n/a", "CI User")
 	if !errors.Is(err, ErrNotAwaitingApproval) {
 		t.Fatalf("approve on non-parked request = %v, want ErrNotAwaitingApproval", err)
 	}
