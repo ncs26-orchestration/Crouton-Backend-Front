@@ -80,6 +80,16 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # DeepSeek drives the per-request department reasoning. Without this the
+      # agents fall back to deterministic logic, so it must reach the container.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      AGENT_DEFAULT_MODEL: ${AGENT_DEFAULT_MODEL:-}
+      AGENT_LLM_TIMEOUT_SECONDS: ${AGENT_LLM_TIMEOUT_SECONDS:-25}
+      AGENT_EXTRACTOR_PROVIDER: ${AGENT_EXTRACTOR_PROVIDER:-ollama}
+      AGENT_EXTRACTOR_MODEL: ${AGENT_EXTRACTOR_MODEL:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       APP_ENV: ${APP_ENV:-production}
     depends_on:
       postgres: { condition: service_healthy }
