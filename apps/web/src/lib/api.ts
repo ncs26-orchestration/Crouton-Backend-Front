@@ -10,7 +10,10 @@ import type {
   EngineAdapter,
   ExtractResponse,
   ISRegistry,
+  OrgRequest,
   Project,
+  RequestDetail,
+  RequestPriority,
   Workflow,
   WorkflowDiff,
   WorkflowVersion,
@@ -497,4 +500,21 @@ export const api = {
 
   lookupUser: (email: string): Promise<{ id: number; name: string; email: string }> =>
     fetchJSON(`/api/users/lookup?email=${encodeURIComponent(email)}`),
+
+  // --- Requests (F1) ---
+
+  listRequests: (orgId: string): Promise<{ requests: OrgRequest[] }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`),
+
+  createRequest: (
+    orgId: string,
+    payload: { title: string; description?: string; priority: RequestPriority },
+  ): Promise<{ request: OrgRequest }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getRequest: (id: string): Promise<RequestDetail> =>
+    fetchJSON(`/api/requests/${encodeURIComponent(id)}`),
 };
