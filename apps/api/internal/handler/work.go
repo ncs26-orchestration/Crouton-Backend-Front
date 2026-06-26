@@ -49,9 +49,9 @@ func (h *WorkHandler) ListMyWork(c echo.Context) error {
 	}
 	ctx := c.Request().Context()
 
-	// Fetch individual agent_tasks for orgs the user belongs to,
-	// joined through workflow_nodes and requests, so the mobile app
-	// can navigate to task detail using real task IDs.
+	// Fetch agent_tasks scoped to the user's role:
+	// - admins/executors see all tasks in their org
+	// - team members only see tasks whose department matches their team
 	rows, err := h.pg.Query(ctx, `
 		SELECT at.id, at.title, r.description, r.priority, at.status,
 		       wn.progress_percent AS progress,
@@ -64,8 +64,16 @@ func (h *WorkHandler) ListMyWork(c echo.Context) error {
 		JOIN requests r ON r.id = wn.request_id
 		JOIN org_members om ON om.org_id = r.org_id AND om.user_id = $1
 		JOIN users u ON u.id = r.requester_user_id
-		WHERE at.status != 'completed'
-		  AND r.status NOT IN ('completed', 'rejected')
+		WHERE r.status NOT IN ('rejected')
+		  AND (
+		    om.role IN ('admin', 'executor')
+		    OR EXISTS (
+		      SELECT 1 FROM team_members tm
+		      JOIN teams t ON t.id = tm.team_id
+		      WHERE tm.user_id = $1
+		        AND LOWER(t.name) = LOWER(wn.department)
+		    )
+		  )
 		ORDER BY r.created_at DESC
 		LIMIT 50
 	`, claims.UserID)
