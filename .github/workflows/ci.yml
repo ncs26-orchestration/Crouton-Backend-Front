@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 concurrency:
@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   web:
+    name: web (lint · typecheck · test · build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,10 +23,15 @@ jobs:
           node-version: "24"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter web lint
-      - run: pnpm --filter web build
+      - name: lint
+        run: pnpm --filter web lint
+      - name: typecheck + build
+        run: pnpm --filter web build
+      - name: unit tests
+        run: pnpm --filter web test
 
   api:
+    name: api (fmt · vet · build · test -race)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,15 +42,47 @@ jobs:
         with:
           go-version: "1.25"
           cache-dependency-path: apps/api/go.sum
-      - run: go vet ./...
-      - run: go build ./...
-      - run: go test ./...
+      - name: gofmt check
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"; echo "$unformatted"; exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      - name: test (race + coverage)
+        run: go test -race -coverprofile=coverage.out ./...
+
+  api-lint:
+    name: api (golangci-lint, new issues)
+    # Only on PRs: gates newly-introduced issues against the base branch
+    # without retroactively failing on pre-existing legacy findings.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: apps/api/go.sum
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.7.2
+          working-directory: apps/api
+          only-new-issues: true
 
   agent:
+    name: agent (ruff · format · mypy · pytest)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/agent
+    env:
+      # app.settings instantiates at import time and requires these.
+      DATABASE_URL: postgres://app:app@localhost:5432/app?sslmode=disable
+      REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -52,6 +90,55 @@ jobs:
           enable-cache: true
       - run: uv python install 3.13
       - run: uv sync
-      - run: uv run ruff check .
-      - run: uv run mypy app
-      - run: uv run pytest -q || echo "no tests yet"
+      - name: ruff lint
+        run: uv run ruff check .
+      - name: ruff format check
+        run: uv run ruff format --check .
+      - name: mypy
+        run: uv run mypy app
+      - name: pytest
+        run: uv run pytest -q
+
+  migrations:
+    name: migrations (apply · status · rollback · re-apply)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://app:app@localhost:5432/app?sslmode=disable
+      DBMATE_VERSION: v2.21.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: install dbmate + psql client
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+          sudo curl -fsSL -o /usr/local/bin/dbmate \
+            "https://github.com/amacneil/dbmate/releases/download/${DBMATE_VERSION}/dbmate-linux-amd64"
+          sudo chmod +x /usr/local/bin/dbmate
+      - name: create extensions (matches infra/postgres/init.sql)
+        run: psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+      - name: apply all migrations
+        run: dbmate --migrations-dir apps/api/migrations --no-dump-schema --wait up
+      - name: status (all applied)
+        run: dbmate --migrations-dir apps/api/migrations status
+      - name: rollback every migration then re-apply (reversibility)
+        run: |
+          count=$(ls apps/api/migrations/*.sql | wc -l)
+          echo "rolling back $count migrations"
+          for i in $(seq 1 "$count"); do
+            dbmate --migrations-dir apps/api/migrations --no-dump-schema down
+          done
+          echo "re-applying"
+          dbmate --migrations-dir apps/api/migrations --no-dump-schema up

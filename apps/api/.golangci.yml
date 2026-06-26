@@ -1,0 +1,17 @@
+# golangci-lint v2 config. CI runs this with only-new-issues:true on PRs, so it
+# gates newly-introduced problems without retroactively failing on legacy code.
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  exclusions:
+    rules:
+      # Tests are allowed to ignore error returns for brevity.
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
