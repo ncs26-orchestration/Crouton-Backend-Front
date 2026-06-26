@@ -73,16 +73,16 @@ function WorkflowCanvas({
   onSelectNode: (nodeId: string | null) => void;
   onBack: () => void;
 }) {
-  // Live SSE patches the query cache directly. The fallback poll is longer
-  // (5s vs the old 1.5s) since SSE should carry most updates.
-  useRequestStream(requestId);
-
   const { data, isLoading, error } = useQuery({
     queryKey: ["request", requestId],
     queryFn: () => api.getRequest(requestId),
     refetchInterval: (query) =>
       query.state.data?.request.status === "in_progress" ? 5000 : false,
   });
+
+  // Live updates patch this query's cache entry directly. Open the stream only
+  // once the base graph has loaded, so patchCache has an entry to update.
+  useRequestStream(requestId, !!data);
 
   const flowResult = useMemo(() => {
     if (!data) return { nodes: [], edges: [] };
