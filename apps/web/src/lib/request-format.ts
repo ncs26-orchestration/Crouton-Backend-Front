@@ -91,6 +91,18 @@ export function prettyLabel(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Humanises a duration in seconds into a compact label ("45s", "30m", "4h",
+// "2d"). Used for per-stage timing in reports.
+export function humanizeDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0s";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const min = Math.round(seconds / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.round(seconds / 3600);
+  if (hr < 24) return `${hr}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
 // Short relative-time label for activity feeds ("just now", "3m ago",
 // "2h ago", "5d ago"), falling back to a date past a week.
 export function relativeTime(iso: string): string {

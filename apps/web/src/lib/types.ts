@@ -411,9 +411,10 @@ export interface ReportRequestOverview {
 export interface FinalReport {
   request: ReportRequestOverview;
   summary: ReportSummary;
-  stages: ReportStage[];
+  // The API omits these (null) when empty rather than sending [].
+  stages: ReportStage[] | null;
   approval: ReportApproval | null;
-  flags: ReportFlag[];
+  flags: ReportFlag[] | null;
 }
 
 // --- SSE Event Types (F4 — live canvas) ---
