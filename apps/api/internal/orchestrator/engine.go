@@ -209,12 +209,15 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 // re-launches in_progress requests, so a parked request correctly keeps waiting
 // across a restart instead of auto-advancing.
 func (e *Engine) parkForApproval(ctx context.Context, requestID string, gate repo.WorkflowNode, progress int) error {
-	if err := e.store.UpdateNodeStatus(ctx, gate.ID, "in_progress", "Awaiting executive approval.", 50); err != nil {
+	const statusText = "Awaiting executive approval."
+	if err := e.store.UpdateNodeStatus(ctx, gate.ID, "in_progress", statusText, 50); err != nil {
 		return fmt.Errorf("mark approval in_progress: %w", err)
 	}
 	if err := e.store.UpdateRequestProgress(ctx, requestID, "awaiting_approval", progress); err != nil {
 		return fmt.Errorf("park for approval: %w", err)
 	}
+	e.publishNodeEvent(requestID, "in_progress", gate.ID, gate.Key, 50, statusText, time.Now())
+	e.publishRequestEvent(requestID, "awaiting_approval", progress)
 	e.log.Info("orchestrator: parked for executive approval",
 		slog.String("request_id", requestID), slog.String("node_id", gate.ID))
 	return nil
@@ -256,7 +259,8 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 
 	switch decision {
 	case ApprovalApprove:
-		if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", "Approved by the executive.", 100); err != nil {
+		const statusText = "Approved by the executive."
+		if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", statusText, 100); err != nil {
 			return fmt.Errorf("complete approval node: %w", err)
 		}
 		// Keep the current progress; the resumed run loop recomputes it as the
@@ -264,16 +268,21 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 		if err := e.store.UpdateRequestProgress(ctx, requestID, "in_progress", req.Progress); err != nil {
 			return fmt.Errorf("resume request: %w", err)
 		}
+		e.publishNodeEvent(requestID, "completed", gate.ID, gate.Key, 100, statusText, time.Now())
+		e.publishRequestEvent(requestID, "in_progress", req.Progress)
 		e.log.Info("orchestrator: request approved",
 			slog.String("request_id", requestID), slog.String("justification", justification))
 		return nil
 	case ApprovalReject:
-		if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", "Rejected by the executive.", 100); err != nil {
+		const statusText = "Rejected by the executive."
+		if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", statusText, 100); err != nil {
 			return fmt.Errorf("close approval node: %w", err)
 		}
 		if err := e.store.UpdateRequestProgress(ctx, requestID, "rejected", req.Progress); err != nil {
 			return fmt.Errorf("reject request: %w", err)
 		}
+		e.publishNodeEvent(requestID, "completed", gate.ID, gate.Key, 100, statusText, time.Now())
+		e.publishRequestEvent(requestID, "rejected", req.Progress)
 		e.log.Info("orchestrator: request rejected",
 			slog.String("request_id", requestID), slog.String("justification", justification))
 		return nil
