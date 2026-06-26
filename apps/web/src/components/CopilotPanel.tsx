@@ -17,7 +17,7 @@ import { collectLowConfidence, TIER_COLOR, TIER_TEXT } from "../lib/confidence";
 import type { Workflow } from "../lib/types";
 import { useToasts } from "./Toasts";
 
-// The Copilot sidebar is the interactive face of Pablo. Two modes:
+// The Copilot sidebar is the interactive face of Crouton. Two modes:
 //   - Ask      → grounded Q&A over the current IR + IS + sources.
 //   - Clarify  → auto-populated cards that propose JSON-Patches to
 //                resolve low-confidence elements. Accepting a card
@@ -184,7 +184,7 @@ export function CopilotPanel({
         kind: resp.normalized ? "info" : "success",
         title: resp.normalized ? "Applied (auto-repaired)" : "Applied",
         body: resp.normalized
-          ? `${resp.label} — Pablo fixed a small patch mistake from the Copilot before applying.`
+          ? `${resp.label} — Crouton fixed a small patch mistake from the Copilot before applying.`
           : resp.label,
       });
     },
@@ -280,7 +280,7 @@ export function CopilotPanel({
                 >
                   finalize as-is
                 </button>{" "}
-                and Pablo will proceed with the extractor's best guess.
+                and Crouton will proceed with the extractor's best guess.
               </p>
             </div>
           )}
@@ -696,13 +696,13 @@ function ClarifyCard({
 function humanizeApplyError(raw: string): string {
   const msg = raw.toLowerCase();
   if (msg.includes("can't replace a non-existent")) {
-    return "The suggestion targeted a field that isn't set yet. Try the Clarify suggestion again — Pablo now auto-corrects this kind of mistake.";
+    return "The suggestion targeted a field that isn't set yet. Try the Clarify suggestion again — Crouton now auto-corrects this kind of mistake.";
   }
   if (msg.includes("patched_ir_schema_violation")) {
     return "The suggestion would leave the workflow in an invalid shape. Pick a different Clarify option or refine the text in the composer.";
   }
   if (msg.includes("patched_ir_invalid_json")) {
-    return "Pablo couldn't parse the Copilot's patched workflow. Try re-running Clarify for this item.";
+    return "Crouton couldn't parse the Copilot's patched workflow. Try re-running Clarify for this item.";
   }
   if (msg.includes("unresolved_references") || msg.includes("not in the is registry")) {
     return "The suggestion used an id that isn't in your Information System. Connect the relevant engine or declare the system first.";

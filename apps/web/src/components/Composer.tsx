@@ -41,7 +41,7 @@ export function Composer({ onSubmit, busy, sampleText, initialText, onAfterLoadS
       }}
     >
       <div className="px-5 py-3 mx-auto w-full max-w-3xl">
-        {/* Indeterminate progress bar — shown only while Pablo is
+        {/* Indeterminate progress bar — shown only while Crouton is
             thinking. Gives the user a visible "something is
             happening" cue even though we don't actually stream
             tokens yet. */}

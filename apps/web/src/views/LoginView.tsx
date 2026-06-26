@@ -38,7 +38,7 @@ export function LoginView({ onGoRegister }: Props) {
         {/* Brand */}
         <div className="flex flex-col items-center gap-2">
           <BrandMark size={36} />
-          <h1 className="text-lg font-semibold text-[var(--color-fg)] mt-1">Sign in to Pablo</h1>
+          <h1 className="text-lg font-semibold text-[var(--color-fg)] mt-1">Sign in to Crouton</h1>
           <p className="text-sm text-[var(--color-fg-muted)]">Enterprise AI Organization OS</p>
         </div>
 

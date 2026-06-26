@@ -2,7 +2,7 @@ import { Check, FileText, Rocket, Settings2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 // Three-chip indicator showing where a workflow currently sits in
-// Pablo's compilation pipeline:
+// Crouton's compilation pipeline:
 //
 //   Process  →  Executable  →  Deployed
 //

@@ -55,7 +55,7 @@ export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props
         transition={{ type: "spring", stiffness: 340, damping: 20 }}
       >
         <BrandMark size={26} />
-        <RailTooltip label="Pablo" hint="Go to root" />
+        <RailTooltip label="Crouton" hint="Go to root" />
       </motion.button>
 
       <div className="h-px w-6 bg-[var(--color-border)] mb-3" />

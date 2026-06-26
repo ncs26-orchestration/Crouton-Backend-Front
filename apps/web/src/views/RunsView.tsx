@@ -83,7 +83,7 @@ function Header() {
           Deployed workflows on your engines
         </div>
         <div className="mt-1 text-[14px] text-[var(--color-fg-muted)]" style={{ fontWeight: 300 }}>
-          Process definitions Pablo has deployed, plus live instance counts reported by each engine.
+          Process definitions Crouton has deployed, plus live instance counts reported by each engine.
         </div>
       </div>
     </div>
@@ -102,7 +102,7 @@ function EngineRuns({ engine, onRemoved }: { engine: EngineRef; onRemoved: () =>
   const unreachable = !!q.error;
 
   const handleRemove = async () => {
-    if (!confirm(`Remove engine '${engine.id}' from Pablo's projection? The engine itself is untouched.`)) return;
+    if (!confirm(`Remove engine '${engine.id}' from Crouton's projection? The engine itself is untouched.`)) return;
     try {
       await api.deleteEngine(engine.id);
       toasts.push({ kind: "success", title: "Engine removed", body: engine.id });
@@ -173,7 +173,7 @@ function EngineRuns({ engine, onRemoved }: { engine: EngineRef; onRemoved: () =>
         )}
         {unreachable && !q.isLoading && (
           <div className="px-3 py-3 text-[12px] text-[var(--color-fg-muted)]" style={{ fontWeight: 300 }}>
-            Pablo couldn't reach this endpoint. Check it's healthy, or remove it from the projection.
+            Crouton couldn't reach this endpoint. Check it's healthy, or remove it from the projection.
           </div>
         )}
         {q.data && !unreachable && q.data.process_definitions.length === 0 && (

@@ -82,7 +82,7 @@ export function ISPanel({
       : "";
 
   const deleteEngine = async (id: string) => {
-    if (!confirm(`Remove engine ${id}? Pablo never touches the engine itself — only this cached projection disappears.`))
+    if (!confirm(`Remove engine ${id}? Crouton never touches the engine itself — only this cached projection disappears.`))
       return;
     try {
       await api.deleteEngine(id);
@@ -224,7 +224,7 @@ export function ISPanel({
                   <button
                     onClick={() => deleteEngine(ec.id)}
                     className="opacity-0 group-hover:opacity-100 text-[var(--color-fg-subtle)] hover:text-rose-500 transition-opacity"
-                    title="Remove from Pablo's projection"
+                    title="Remove from Crouton's projection"
                   >
                     <Trash2 size={12} />
                   </button>
