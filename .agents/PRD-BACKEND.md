@@ -4,118 +4,147 @@ Owner: Backend team · Stack: Go 1.25, Echo, pgx, JWT · Skills: `.agents/skills
 
 ## Context
 
-We are pivoting from the dormant "AUP" authoring tool to the **AI Organization OS**: a user submits
-a business request, an Intake agent plans a department workflow, department agents execute in
-parallel with **agent-declared cross-dependencies**, a human approves at the Executive gate, and
-every transition is logged to an append-only audit trail and streamed live to the UI.
+Pivot from the dormant "AUP" authoring tool to the **AI Organization OS**: a user submits a business
+request, an Intake agent plans a department workflow, department agents execute in parallel with
+**agent-declared cross-dependencies**, a human approves at the Executive gate, and every transition
+is logged to an append-only audit trail and streamed live to the UI.
 
-Backend owns the durable system of record and the deterministic orchestration. The Python service
-(see `PRD-AGENT.md`) does the reasoning; the web app (see `PRD-FRONTEND.md`) renders it. This PRD
-also defines the **shared contracts** the other two teams build against.
+Backend owns the durable system of record and the deterministic orchestration. This PRD also defines
+the **shared contracts** the Frontend (`PRD-FRONTEND.md`) and Agent (`PRD-AGENT.md`) teams build
+against. Out of scope: AUP `extract`/`compile`/`copilot`/`deploy` handlers stay registered, untouched.
 
-## Scope / ownership
+Build order is the feature order below (each feature depends on the ones above it).
 
-- New schema (migrations + pgx repos) for requests, workflow graph, tasks, dependencies, audit, agents, policies.
-- The orchestration engine: a background worker per request that walks the graph, gates on edges and
-  dependencies, calls the agent service per node, persists results, and streams SSE.
-- The UI-facing HTTP API and the SSE stream.
-- Seeding (departments, agents, policies on org creation + one demo org with history).
-- Out of scope: the AUP extract/compile/copilot/deploy handlers stay registered but untouched.
+---
 
-## Data model (new migrations — use `dbmate new`, real UTC timestamps)
+## Shared contracts (read first — Frontend and Agent depend on these)
 
-- `requests` (id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at)
-- `workflow_nodes` (id, request_id, key, name, agent_id, team_id, status, description, progress_percent, started_at, completed_at)
-- `workflow_edges` (id, request_id, source_node_id, target_node_id, edge_type `sequential|parallel`)
-- `agent_tasks` (id, node_id, title, status, started_at, completed_at)
-- `node_dependencies` (id, dependent_node_id, blocking_node_id, reason, resolved_at) — `reason` is the agent-declared text
-- `audit_events` (id, request_id, node_id NULL, actor, action, reason, created_at) — append-only
-- `agents` (id, org_id, team_id, agent_type, name, avatar, capabilities)
-- `department_policies` (id, org_id, team_id, title, body)
-
-Node status enum: `pending | in_progress | completed | blocked`. Request status: `submitted |
-in_progress | awaiting_approval | approved | rejected | completed`.
-
-Repos mirror the existing pgx pattern in `apps/api/internal/repo/orgs.go` / `projects.go`. Follow
-`i-golang-database`, `i-golang-project-layout`, `i-golang-naming`.
-
-## HTTP API contract (UI-facing, JWT, registered in `apps/api/internal/http/server.go`)
-
+### UI-facing HTTP API (JWT, registered in `apps/api/internal/http/server.go`)
 ```
-POST /orgs/:orgId/requests        {title, description, priority}            -> {request}
-GET  /orgs/:orgId/requests                                                  -> {requests:[...]}
-GET  /requests/:id                  full graph                              -> {request, nodes:[...], edges:[...], agents:[...]}
-GET  /requests/:id/nodes/:nodeId    node detail                            -> {node, tasks:[...], activity:[...]}
-POST /requests/:id/approve         {decision:"approve"|"reject", justification} -> {request}
+POST /orgs/:orgId/requests        {title, description, priority}                 -> {request}
+GET  /orgs/:orgId/requests                                                       -> {requests:[...]}
+GET  /requests/:id                 full graph                                    -> {request, nodes:[...], edges:[...], agents:[...]}
+GET  /requests/:id/nodes/:nodeId   node detail                                  -> {node, tasks:[...], activity:[...]}
+POST /requests/:id/approve         {decision:"approve"|"reject", justification}  -> {request}
 GET  /requests/:id/events          SSE stream (auth via ?token=)
-GET  /orgs/:orgId/agents           roster + live status                    -> {agents:[...]}
-GET  /orgs/:orgId/audit            org-wide audit                          -> {events:[...]}
-GET  /requests/:id/audit           per-request audit                       -> {events:[...]}
-GET  /orgs/:orgId/policies         seeded department policies              -> {policies:[...]}
+GET  /orgs/:orgId/agents                                                         -> {agents:[...]}
+GET  /orgs/:orgId/audit                                                          -> {events:[...]}
+GET  /requests/:id/audit                                                         -> {events:[...]}
+GET  /orgs/:orgId/policies                                                       -> {policies:[...]}
 ```
-
-### SSE event contract (`text/event-stream`)
-
-One JSON object per event; `event:` is the type. Frontend patches its query cache from these.
-
+### SSE events (`text/event-stream`, one JSON object per event)
 ```
-event: node_status   data: {request_id, node_id, key, status, progress_percent, status_text, at}
+event: node_status    data: {request_id, node_id, key, status, progress_percent, status_text, at}
 event: request_status data: {request_id, status, progress, at}
 event: task           data: {request_id, node_id, task_id, title, status, at}
 event: audit          data: {request_id, node_id, actor, action, reason, at}
 ```
-
-Use an in-process pub/sub (channel fan-out keyed by request_id); SSE handlers subscribe. Honor
-`context.Context` cancellation on client disconnect (`i-golang-context`, `i-golang-concurrency`).
-
-## Agent service contract (Go ↔ Python — also in `PRD-AGENT.md`)
-
+### Go ↔ Python agent service
 ```
-POST {AGENT_URL}/agents/intake
-  req:  {request:{title,description,priority}, org_context:{...}}
-  resp: {nodes:[{key,name,agent_type,department}], edges:[{from,to,type}]}
-
-POST {AGENT_URL}/agents/run
-  req:  {agent_type, request, upstream_context:[{node_key,summary,...}], org_context:{...}}
-  resp: {summary, flags:[{severity,message}], tasks:[{title,status}], status_text,
-         blocked_on: null | {on_department, reason}}
+POST {AGENT_URL}/agents/intake  {request, org_context}                              -> {nodes:[{key,name,agent_type,department}], edges:[{from,to,type}]}
+POST {AGENT_URL}/agents/run     {agent_type, request, upstream_context, org_context} -> {summary, flags:[...], tasks:[...], status_text, blocked_on: null|{on_department, reason}}
 ```
 
-Go injects `org_context` (IS registry snapshot + policies) and `upstream_context` so the agent's
-tools read from injected data — no callback into Go.
+---
 
-## Orchestration engine (`apps/api/internal/orchestrator/`)
+## BE-1 — Schema & migrations
+Goal: the tables the whole system reads/writes. Skills: `i-golang-database`, `i-golang-project-layout`.
+Steps:
+1. `dbmate new add_requests` — `requests` (id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at).
+2. `dbmate new add_workflow_graph` — `workflow_nodes` (id, request_id, key, name, agent_id, team_id, status, description, progress_percent, started_at, completed_at) and `workflow_edges` (id, request_id, source_node_id, target_node_id, edge_type).
+3. `dbmate new add_agent_tasks_deps` — `agent_tasks` (id, node_id, title, status, started_at, completed_at) and `node_dependencies` (id, dependent_node_id, blocking_node_id, reason, resolved_at).
+4. `dbmate new add_audit_events` — `audit_events` (id, request_id, node_id NULL, actor, action, reason, created_at). Index on (request_id, created_at).
+5. `dbmate new add_agents_policies` — `agents` (id, org_id, team_id, agent_type, name, avatar, capabilities) and `department_policies` (id, org_id, team_id, title, body).
+6. Use real UTC timestamps in filenames; every file has `migrate:up` and `migrate:down`. Run `make migrate-up`.
+Acceptance: `make migrate-up` is clean; `make psql` shows all tables; `migrate-down` of the latest works.
+Status enums — node: `pending|in_progress|completed|blocked`; request: `submitted|in_progress|awaiting_approval|approved|rejected|completed`.
 
-A goroutine per request, launched from the create handler. Follow `i-golang-concurrency`,
-`i-golang-design-patterns` (graceful shutdown), `i-golang-error-handling`.
+## BE-2 — Repositories
+Goal: pgx data access mirroring `apps/api/internal/repo/orgs.go`. Skills: `i-golang-database`, `i-golang-naming`, `i-golang-structs-interfaces`.
+Steps:
+1. `repo/requests.go` — Create, GetByID, ListByOrg, UpdateStatusProgress.
+2. `repo/workflow.go` — InsertNodes/Edges (batch), ListNodes/Edges by request, GetNode, UpdateNodeStatus, Insert/UpdateTasks.
+3. `repo/dependencies.go` — InsertDependency, ListBlockedBy(nodeID), ResolveDependenciesBlockedBy(nodeID).
+4. `repo/audit.go` — Append(event), ListByRequest, ListByOrg. Append-only (no update/delete).
+5. `repo/agents.go` — ListByOrg, GetByType. `repo/policies.go` — ListByOrg, GetByTeam.
+6. Every method takes `context.Context` and returns wrapped errors (`i-golang-error-handling`).
+Acceptance: a `go test ./internal/repo/...` round-trips each aggregate against a test DB.
 
-1. On submit: call `/agents/intake`, persist nodes+edges, set request `in_progress`, audit + SSE, start worker.
-2. Loop: for each `pending` node whose predecessors are all `completed`, set `in_progress` (audit+SSE),
-   call `/agents/run`.
-   - If `blocked_on` set → node `blocked`, insert `node_dependencies` (agent reason), audit+SSE, leave for re-run.
-   - Else → persist `agent_tasks` + `status_text`, node `completed`, resolve dependencies this node blocked, audit+SSE.
-3. **Re-run on unblock**: when a node completes, any node blocked on it is re-queued and its agent
-   re-invoked with the blocker's output in `upstream_context` (cap re-runs to prevent loops).
-4. Executive Approval node: set `in_progress`, request `awaiting_approval`, emit a pending-approval
-   audit+SSE, then pause. `POST /requests/:id/approve` resumes (approve → execution stage; reject → request `rejected`).
-5. Pacing: configurable per-stage delay (`ORCH_STEP_DELAY_MS`) so the canvas progression is watchable.
-6. Resilience: any agent error → use the agent service's fallback decision so the run always completes.
+## BE-3 — Agent service client
+Goal: typed client for the Python service. Skills: `i-golang-context`, `i-golang-error-handling`.
+Steps:
+1. `internal/agentclient/client.go` with `Intake(ctx, req) (Plan, error)` and `Run(ctx, req) (Decision, error)` over `AGENT_URL`.
+2. Define request/response structs matching the shared contract exactly.
+3. Per-call timeout via context; on any error return a typed `ErrAgentUnavailable` so callers can fall back.
+Acceptance: unit test with a stub HTTP server returns parsed `Plan`/`Decision`; timeout path returns the typed error.
 
-## Seeding
+## BE-4 — Request intake + plan persistence
+Goal: submitting a request produces a persisted graph. Skills: `i-api-design-principles`.
+Steps:
+1. `handler/requests.go NewRequestsHandler(...)`; register `POST/GET /orgs/:orgId/requests`.
+2. On create: insert `requests` row (status `submitted`); build `org_context` (IS snapshot + policies); call `agentclient.Intake`.
+3. Map the returned plan to `workflow_nodes` (resolve `agent_type`→`agents.id`, `department`→`team_id`) and `workflow_edges`; set every node `pending`.
+4. Write an `audit_events` "request.created" entry; set request `in_progress`; launch the worker (BE-5).
+5. Implement `GET /requests/:id` returning the full graph (request + nodes + edges + agents).
+Acceptance: `POST` "Open a new office in Berlin" returns a request; `GET /requests/:id` shows ~9–10 nodes with edges, all `pending`; audit has `request.created`.
 
-- `handler/orgs.go CreateOrg`: seed standard department `teams` (Finance/Legal/IT/HR/Operations/
-  Planning/Executive), one `agents` row per team, a starter `department_policies` set, creator = approver.
-- A boot seed routine behind `DEMO_SEED=true` (or a dedicated migration): one demo org with an
-  approver login and one already-completed sample request + its audit history, so Home/Reports/Agents
-  are populated on first load.
+## BE-5 — Orchestration worker (state machine)
+Goal: nodes advance automatically. Skills: `i-golang-concurrency`, `i-golang-design-patterns`.
+Steps:
+1. `internal/orchestrator/engine.go`: a goroutine per request keyed in a registry; graceful shutdown on server stop.
+2. Loop: find `pending` nodes whose predecessor edges all point from `completed` nodes → eligible.
+3. For each eligible node: set `in_progress` (audit + publish), build `upstream_context` from completed predecessors, call `agentclient.Run`.
+4. On success (no `blocked_on`): persist `agent_tasks` + `status_text`, set node `completed` (audit + publish), recompute eligibility.
+5. On `agentclient` error: use a deterministic fallback decision so the node still completes (never stall).
+6. Per-stage pacing via `ORCH_STEP_DELAY_MS` so progression is watchable.
+7. When all terminal nodes are `completed`, set request `completed` + audit.
+Acceptance: a request with no dependencies runs intake→…→report, every node ending `completed`, with an audit entry per transition.
 
-## Acceptance criteria
+## BE-6 — Agent-declared cross-dependencies + re-run on unblock
+Goal: the Finance→IT "Waiting for IT" behavior, emergent from the agent. Skills: `i-golang-concurrency`.
+Steps:
+1. When `Run` returns `blocked_on`: resolve `on_department`→the blocking node; insert a `node_dependencies` row with the agent's `reason`; set the node `blocked` and `status_text` to the reason; audit `node.blocked` + publish.
+2. A node is eligible only if predecessors are `completed` AND it has no unresolved `node_dependencies`.
+3. On any node completion: call `ResolveDependenciesBlockedBy(nodeID)`; re-queue nodes whose deps are now all resolved.
+4. Re-invoke a re-queued agent with the blocker's output added to `upstream_context`; cap re-runs per node (e.g. 3) to prevent loops.
+Acceptance: Finance enters `blocked` with the agent's reason while IT runs; when IT completes, `node_dependencies.resolved_at` is set, Finance re-runs and completes; audit shows block→unblock with the agent-authored reason.
 
-- `make migrate-up` applies cleanly; `make psql` shows seeded departments, agents, policies, demo request.
-- `POST /orgs/:id/requests` for "Open a new office in Berlin" returns a graph; the worker drives it to
-  the approval gate; `GET /requests/:id/audit` shows an append-only entry (actor/action/reason/at) for
-  every transition.
-- `node_dependencies.reason` for the Finance→IT block contains the agent's `raise_dependency` text.
-- `curl -N /requests/:id/events?token=...` streams node_status/audit events live.
-- With all LLM keys unset, the flow still completes end to end via the agent fallback.
+## BE-7 — Executive approval gate (human)
+Goal: pause for a human decision. Skills: `i-api-design-principles`.
+Steps:
+1. When the `exec_approval` node becomes eligible: set it `in_progress`, request `awaiting_approval`, audit `approval.requested` + publish; the worker parks (does not auto-complete).
+2. `POST /requests/:id/approve {decision, justification}`: on `approve` → complete the node (audit `approval.granted` with justification), resume the worker into execution (HR/Ops/Implementation/Report). On `reject` → request `rejected`, audit `approval.rejected`.
+3. Validate the caller has an approver role.
+Acceptance: workflow halts at exec_approval; approve resumes to completion; reject stops the request; both write audit with the justification text.
+
+## BE-8 — SSE streaming
+Goal: live UI updates. Skills: `i-golang-concurrency`, `i-golang-context`.
+Steps:
+1. `internal/orchestrator/bus.go`: in-process pub/sub, channel fan-out keyed by request_id; `Publish(event)` + `Subscribe(requestID)`.
+2. Replace the "audit + publish" calls in BE-5..7 with bus publishes carrying the SSE event shapes.
+3. `handler/events.go GET /requests/:id/events`: authenticate via `?token=` (EventSource can't set headers), set SSE headers, stream events, and unsubscribe on `c.Request().Context().Done()`.
+Acceptance: `curl -N /requests/:id/events?token=...` during a run streams node_status/audit/task events in order; closing the client unsubscribes cleanly (no goroutine leak).
+
+## BE-9 — Read endpoints for the tabs
+Goal: data for My Work, Agents, Reports, Policies, node detail.
+Steps:
+1. `GET /requests/:id/nodes/:nodeId` → node + tasks + activity (its audit slice).
+2. `GET /orgs/:orgId/agents` → roster with derived live status (busy if owning an in_progress node).
+3. `GET /orgs/:orgId/audit` and `GET /requests/:id/audit` → ordered events.
+4. `GET /orgs/:orgId/policies` → seeded department policies.
+Acceptance: each returns shapes matching the contract; node detail's `activity` matches that node's audit entries.
+
+## BE-10 — Seeding
+Goal: usable from a cold start. Skills: `i-golang-project-layout`.
+Steps:
+1. In `handler/orgs.go CreateOrg`: seed standard department `teams` (Finance/Legal/IT/HR/Operations/Planning/Executive), one `agents` row per team, a starter `department_policies` set, creator = approver.
+2. A boot seed behind `DEMO_SEED=true` (or a dedicated migration): one demo org + approver login + one already-completed sample request with full audit history.
+Acceptance: a fresh org has departments/agents/policies; with `DEMO_SEED=true`, Home/Reports/Agents are populated before any new request runs.
+
+---
+
+## Definition of done (backend)
 - `go build ./...` and `go test ./...` pass; lint clean (`i-golang-lint`).
+- End-to-end: submit "Open a new office in Berlin" → worker drives to approval gate → approve → completion; audit is append-only with actor/action/reason/at for every transition.
+- The Finance→IT dependency reason in `node_dependencies` is the agent's own text.
+- With all LLM keys unset, the flow still completes via the fallback path.
