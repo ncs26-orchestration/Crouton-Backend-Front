@@ -87,10 +87,16 @@ jobs:
 
       - name: Smoke test
         run: |
-          set -e
           IP=35.241.240.210
-          for path in / /api/healthz /agent/healthz; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "http://${IP}${path}")
-            echo "GET ${path} -> ${code}"
-            [ "$code" = "200" ] || { echo "smoke test failed on ${path}"; exit 1; }
-          done
+          check() {
+            local path="$1"
+            for i in $(seq 1 20); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://${IP}${path}" || echo 000)
+              if [ "$code" = "200" ]; then echo "GET ${path} -> 200 (attempt ${i})"; return 0; fi
+              echo "GET ${path} -> ${code}, retrying..."; sleep 5
+            done
+            echo "smoke test failed on ${path}"; return 1
+          }
+          # web first (proxies the others), then the app health endpoints. Apps
+          # need a few seconds to start serving after a restart, hence the retry.
+          check / && check /api/healthz && check /agent/healthz
