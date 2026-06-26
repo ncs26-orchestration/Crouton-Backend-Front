@@ -20,6 +20,7 @@ import {
 import { api } from "../lib/api";
 import { requestToFlow } from "../lib/request-to-flow";
 import { nodeStatusColorClass, prettyLabel, requestStatusTextClass } from "../lib/request-format";
+import { useRequestStream } from "../lib/sse";
 import { DepartmentNode } from "../components/DepartmentNode";
 import type { WorkflowNodeData } from "../lib/types";
 
@@ -72,13 +73,15 @@ function WorkflowCanvas({
   onSelectNode: (nodeId: string | null) => void;
   onBack: () => void;
 }) {
+  // Live SSE patches the query cache directly. The fallback poll is longer
+  // (5s vs the old 1.5s) since SSE should carry most updates.
+  useRequestStream(requestId);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["request", requestId],
     queryFn: () => api.getRequest(requestId),
-    // Poll while the engine is running so node progression shows without a
-    // manual refresh. Live SSE replaces this in F4.
     refetchInterval: (query) =>
-      query.state.data?.request.status === "in_progress" ? 1500 : false,
+      query.state.data?.request.status === "in_progress" ? 5000 : false,
   });
 
   const flowResult = useMemo(() => {

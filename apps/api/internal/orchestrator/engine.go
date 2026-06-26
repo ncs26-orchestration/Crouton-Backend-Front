@@ -43,6 +43,7 @@ type Engine struct {
 	store     Store
 	agent     AgentRunner
 	stepDelay time.Duration
+	bus       *Bus
 
 	mu      sync.Mutex
 	running map[string]bool
@@ -50,13 +51,14 @@ type Engine struct {
 
 // NewEngine builds an engine. rootCtx ties worker goroutines to the server
 // lifetime so they stop on shutdown (not to any one HTTP request).
-func NewEngine(rootCtx context.Context, log *slog.Logger, store Store, agent AgentRunner, stepDelay time.Duration) *Engine {
+func NewEngine(rootCtx context.Context, log *slog.Logger, store Store, agent AgentRunner, stepDelay time.Duration, bus *Bus) *Engine {
 	return &Engine{
 		rootCtx:   rootCtx,
 		log:       log,
 		store:     store,
 		agent:     agent,
 		stepDelay: stepDelay,
+		bus:       bus,
 		running:   make(map[string]bool),
 	}
 }
@@ -137,7 +139,11 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			}
 		}
 		if completed == len(nodes) {
-			return e.store.UpdateRequestProgress(ctx, requestID, "completed", 100)
+			if err := e.store.UpdateRequestProgress(ctx, requestID, "completed", 100); err != nil {
+				return fmt.Errorf("update request progress: %w", err)
+			}
+			e.publishRequestEvent(requestID, "completed", 100)
+			return nil
 		}
 
 		eligible := eligibleNodes(nodes, edges, status)
@@ -157,6 +163,7 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			if err := e.store.UpdateRequestProgress(ctx, requestID, "in_progress", progress); err != nil {
 				return fmt.Errorf("update request progress: %w", err)
 			}
+			e.publishRequestEvent(requestID, "in_progress", progress)
 		}
 	}
 }
@@ -165,9 +172,11 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 // deterministic decision on error so it never stalls), persists the tasks, and
 // marks the node completed with the agent's plain-language status.
 func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.WorkflowNode, byID map[string]repo.WorkflowNode, edges []repo.WorkflowEdge) error {
+	now := time.Now()
 	if err := e.store.UpdateNodeStatus(ctx, node.ID, "in_progress", node.Department+" reviewing the request…", 25); err != nil {
 		return fmt.Errorf("mark in_progress: %w", err)
 	}
+	e.publishNodeEvent(req.ID, "in_progress", node.ID, node.Key, 25, node.Department+" reviewing the request…", now)
 	e.pace(ctx)
 
 	upstream := upstreamContext(node.ID, byID, edges)
@@ -187,7 +196,6 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		decision = agentclient.DefaultDecision(node.AgentType)
 	}
 
-	now := time.Now()
 	tasks := make([]repo.AgentTask, 0, len(decision.Tasks))
 	for i, t := range decision.Tasks {
 		started, completedAt := now, now
@@ -217,6 +225,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 	if err := e.store.UpdateNodeStatus(ctx, node.ID, "completed", statusText, 100); err != nil {
 		return fmt.Errorf("mark completed: %w", err)
 	}
+	e.publishNodeEvent(req.ID, "completed", node.ID, node.Key, 100, statusText, now)
 	return nil
 }
 
@@ -280,6 +289,35 @@ func upstreamContext(nodeID string, byID map[string]repo.WorkflowNode, edges []r
 		})
 	}
 	return out
+}
+
+func (e *Engine) publishNodeEvent(requestID, status, nodeID, key string, progress int, statusText string, at time.Time) {
+	if e.bus == nil {
+		return
+	}
+	e.bus.Publish(Event{
+		Type:       "node_status",
+		RequestID:  requestID,
+		NodeID:     nodeID,
+		Key:        key,
+		Status:     status,
+		Progress:   progress,
+		StatusText: statusText,
+		At:         at,
+	})
+}
+
+func (e *Engine) publishRequestEvent(requestID, status string, progress int) {
+	if e.bus == nil {
+		return
+	}
+	e.bus.Publish(Event{
+		Type:      "request_status",
+		RequestID: requestID,
+		Status:    status,
+		Progress:  progress,
+		At:        time.Now(),
+	})
 }
 
 func shortID() string {

@@ -119,7 +119,7 @@ func newGraph() *fakeStore {
 
 func quietEngine(store Store, agent AgentRunner) *Engine {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewEngine(context.Background(), log, store, agent, 0)
+	return NewEngine(context.Background(), log, store, agent, 0, NewBus())
 }
 
 func TestRunCompletesEveryNode(t *testing.T) {
