@@ -11,6 +11,7 @@ import (
 	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/elsa3"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/handler"
 	authmw "github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
+	"strings"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -70,6 +71,12 @@ func NewServer(d Deps) *echo.Echo {
 
 	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
 	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
+
+	// Requests — submission, listing, and detail with workflow graph.
+	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, strings.TrimRight(d.AgentURL, "/"))
+	orgGroup.POST("/:orgId/requests", reqh.CreateRequest)
+	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
+	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
 
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup
