@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,6 +34,38 @@ func NewRequestsHandler(logger *slog.Logger, pg *pgxpool.Pool) *RequestsHandler 
 }
 
 var validPriorities = map[string]bool{"low": true, "medium": true, "high": true, "urgent": true}
+
+const (
+	maxTitleLen       = 200
+	maxDescriptionLen = 5000
+	// requestListLimit bounds how many requests a list call returns.
+	requestListLimit = 200
+)
+
+// validateRequestInput normalizes and validates create-request input. It
+// trims the title, defaults an empty priority to "medium", and enforces
+// length caps. It returns the normalized title and priority, plus a
+// non-empty message describing the first failure (empty means valid).
+// Pure so it can be table-tested without a DB or HTTP context.
+func validateRequestInput(title, description, priority string) (normTitle, normPriority, errMsg string) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return "", "", "title is required"
+	}
+	if len(title) > maxTitleLen {
+		return "", "", fmt.Sprintf("title must be at most %d characters", maxTitleLen)
+	}
+	if len(description) > maxDescriptionLen {
+		return "", "", fmt.Sprintf("description must be at most %d characters", maxDescriptionLen)
+	}
+	if priority == "" {
+		priority = "medium"
+	}
+	if !validPriorities[priority] {
+		return "", "", "priority must be low, medium, high, or urgent"
+	}
+	return title, priority, ""
+}
 
 // requestResponse is the wire shape for a request. requester_name is
 // resolved from users so the UI table can show who submitted it.
@@ -86,37 +119,26 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 	}
-	if body.Title == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "title is required"})
-	}
-	if body.Priority == "" {
-		body.Priority = "medium"
-	}
-	if !validPriorities[body.Priority] {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "priority must be low, medium, high, or urgent"})
+	title, priority, verr := validateRequestInput(body.Title, body.Description, body.Priority)
+	if verr != "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": verr})
 	}
 
 	ctx := c.Request().Context()
-	req := repo.Request{
+	saved, err := h.requests.Create(ctx, repo.Request{
 		ID:              fmt.Sprintf("req_%s", randomHex(8)),
 		OrgID:           orgID,
-		Title:           body.Title,
+		Title:           title,
 		Description:     body.Description,
 		RequesterUserID: claims.UserID,
-		Priority:        body.Priority,
+		Priority:        priority,
 		Status:          "submitted",
-	}
-	if err := h.requests.Create(ctx, req); err != nil {
+	})
+	if err != nil {
 		h.logger.Error("create request: insert", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	// Re-read so the response carries DB defaults (status, progress, created_at).
-	saved, err := h.requests.GetByID(ctx, req.ID)
-	if err != nil {
-		h.logger.Error("create request: reload", slog.String("err", err.Error()))
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	}
 	names := h.requesterNames(ctx, []int64{saved.RequesterUserID})
 	return c.JSON(http.StatusCreated, map[string]any{"request": toRequestResponse(*saved, names[saved.RequesterUserID])})
 }
@@ -134,7 +156,7 @@ func (h *RequestsHandler) ListRequests(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	rows, err := h.requests.ListByOrg(ctx, orgID)
+	rows, err := h.requests.ListByOrg(ctx, orgID, requestListLimit)
 	if err != nil {
 		h.logger.Error("list requests: query", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
@@ -173,8 +195,14 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	// Authorize via the request's org membership.
+	// Authorize via the request's org membership. A non-member is told
+	// "not found" rather than "forbidden" so the endpoint can't be used
+	// to probe whether a request id exists in some other org.
 	if _, err := requireOrgMember(c, h.pg, req.OrgID, claims.UserID); err != nil {
+		var he *echo.HTTPError
+		if errors.As(err, &he) && he.Code == http.StatusForbidden {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+		}
 		return handleOrgMemberErr(c, err)
 	}
 

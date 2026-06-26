@@ -33,14 +33,24 @@ func NewRequestRepo(pg *pgxpool.Pool) *RequestRepo {
 	return &RequestRepo{pg: pg}
 }
 
-// Create inserts a row. The ID is caller-supplied so the handler can
-// generate a friendly prefixed id without a follow-up read.
-func (r *RequestRepo) Create(ctx context.Context, req Request) error {
-	_, err := r.pg.Exec(ctx, `
+// Create inserts a row and returns it with the DB-populated defaults
+// (status, progress, created_at) via RETURNING, so the caller doesn't
+// need a follow-up read. The ID is caller-supplied so the handler can
+// generate a friendly prefixed id.
+func (r *RequestRepo) Create(ctx context.Context, req Request) (*Request, error) {
+	row := r.pg.QueryRow(ctx, `
 		INSERT INTO requests (id, org_id, title, description, requester_user_id, priority, status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at
 	`, req.ID, req.OrgID, req.Title, req.Description, req.RequesterUserID, req.Priority, req.Status)
-	return err
+	var out Request
+	if err := row.Scan(
+		&out.ID, &out.OrgID, &out.Title, &out.Description, &out.RequesterUserID,
+		&out.Priority, &out.Status, &out.Progress, &out.EstimatedCompletion, &out.CreatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // GetByID returns a single request or ErrNotFound.
@@ -63,14 +73,17 @@ func (r *RequestRepo) GetByID(ctx context.Context, id string) (*Request, error) 
 	return &req, nil
 }
 
-// ListByOrg returns an org's requests, newest first.
-func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string) ([]Request, error) {
+// ListByOrg returns an org's requests, newest first, bounded by limit.
+// The cap keeps the response and the FE table from growing unbounded as
+// requests pile up; cursor pagination can layer on later.
+func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([]Request, error) {
 	rows, err := r.pg.Query(ctx, `
 		SELECT id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at
 		FROM requests
 		WHERE org_id = $1
 		ORDER BY created_at DESC
-	`, orgID)
+		LIMIT $2
+	`, orgID, limit)
 	if err != nil {
 		return nil, err
 	}
