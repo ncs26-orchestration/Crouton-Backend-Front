@@ -5,6 +5,27 @@
 # from compose.override.yaml.
 
 services:
+  # One-shot migration runner. The api runtime image is distroless and ships
+  # no dbmate/shell, so prod can't migrate by exec-ing the api container.
+  # Instead reuse the api dev target (which bundles dbmate) to apply all
+  # pending migrations before the api boots — same pattern as the dev override.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    command: ["dbmate", "--migrations-dir", "/app/migrations", "--no-dump-schema", "--wait", "up"]
+    working_dir: /app
+    volumes:
+      - ./apps/api:/app
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/app?sslmode=disable}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [aios]
+
   web:
     ports:
       - "80:80"
@@ -12,6 +33,13 @@ services:
   api:
     ports:
       - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   agent:
     ports:
