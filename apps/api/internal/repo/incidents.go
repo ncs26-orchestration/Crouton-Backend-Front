@@ -23,13 +23,13 @@ type Incident struct {
 }
 
 type IncidentMessage struct {
-	ID          string
-	IncidentID  string
-	SenderID    *int64
-	SenderName  string
-	SenderRole  string
-	Content     string
-	CreatedAt   time.Time
+	ID         string
+	IncidentID string
+	SenderID   *int64
+	SenderName string
+	SenderRole string
+	Content    string
+	CreatedAt  time.Time
 }
 
 type IncidentRepo struct {
