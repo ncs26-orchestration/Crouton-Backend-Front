@@ -37,7 +37,9 @@ apps/agent/.mypy_cache/
 # Local agent / assistant state
 .claude/
 
-# Web build output and generated route tree (never commit)
+# Web build output, generated route tree, and compiled JS artifacts (never commit)
 apps/web/.output/
 apps/web/src/routeTree.gen.ts
-apps/web/src/routeTree.gen.js
+apps/web/src/**/*.js
+apps/web/src/**/*.js.map
+apps/web/src/**/*.d.ts.map
