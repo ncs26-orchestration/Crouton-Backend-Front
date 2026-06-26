@@ -22,8 +22,8 @@ ENTRYPOINT ["/server"]
 FROM base AS dev
 ARG DBMATE_VERSION=v2.21.0
 RUN apk add --no-cache curl \
-    && go install github.com/air-verse/air@latest \
-    && curl -fsSL -o /usr/local/bin/dbmate \
+    && for i in $(seq 1 5); do go install github.com/air-verse/air@latest && break || sleep 5; done \
+    && curl --retry 3 --http1.1 -fsSL -o /usr/local/bin/dbmate \
         "https://github.com/amacneil/dbmate/releases/download/${DBMATE_VERSION}/dbmate-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')" \
     && chmod +x /usr/local/bin/dbmate
 WORKDIR /app

@@ -347,6 +347,28 @@ export interface NodeDetailResponse {
 // is "warn".
 export type BindingState = "ok" | "warn" | "idle" | "error";
 
+// --- SSE Event Types (F4 — live canvas) ---
+
+export type SSEEventType = "node_status" | "request_status" | "task" | "audit";
+
+// The JSON body of every SSE event matches the bus.Event shape. Fields
+// are optional because each event type carries only its own subset.
+export interface SSEEvent {
+  type: SSEEventType;
+  request_id: string;
+  node_id?: string;
+  key?: string;
+  status?: string;
+  progress_percent?: number;
+  status_text?: string;
+  task_id?: string;
+  title?: string;
+  actor?: string;
+  action?: string;
+  reason?: string;
+  at: string;
+}
+
 // --- Workflow Versioning (Phase 4) ---
 
 export interface WorkflowVersion {
