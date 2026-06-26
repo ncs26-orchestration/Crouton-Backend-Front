@@ -26,7 +26,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/m
 | F7 | Human executive approval | – | ✅ | – | ✅ | ✅ | 🟡 |
 | F8 | Execution stage & final report | – | ✅ | 🟡 | ✅ | ✅ | 🟡 |
 | F9 | Roster, Policies & Integrations views | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
-| F10 | Seeding & demo data | ⬜ | ⬜ | – | – | – | ⬜ |
+| F10 | Seeding & demo data | ✅ | 🟡 | – | – | – | 🟡 |
 
 Groundwork already done (not features, but the platform features sit on): auth/orgs/teams/members
 foundation ✅ · Docker Compose smooth boot ✅ · CI (lint/test/race/migrations/e2e) ✅ · rebrand
