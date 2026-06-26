@@ -14,28 +14,32 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.agents.models import Decision, Flag, TaskItem
+from app.agents.models import Decision, DependencyDecl, Flag, TaskItem
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
 def _decision(
-    summary: str, status_text: str, tasks: list[str], flags: list[Flag] | None = None
+    summary: str,
+    status_text: str,
+    tasks: list[str],
+    flags: list[Flag] | None = None,
+    blocked_on: DependencyDecl | None = None,
 ) -> Decision:
     return Decision(
         summary=summary,
         flags=flags or [],
         tasks=[TaskItem(title=t, status="completed") for t in tasks],
         status_text=status_text,
-        blocked_on=None,
+        blocked_on=blocked_on,
     )
 
 
 # Deterministic department playbooks keyed by agent_type. Each produces a
 # believable, role-specific decision with real tasks and a plain-language
 # status line for the UI.
-def _intake(title: str) -> Decision:
+def _intake(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary=f"Classified '{title}' and identified the departments involved.",
         status_text="Intake complete — routed to planning.",
@@ -47,7 +51,7 @@ def _intake(title: str) -> Decision:
     )
 
 
-def _planning(title: str) -> Decision:
+def _planning(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary="Outlined the cross-department plan and review sequencing.",
         status_text="Planning complete — department reviews can begin.",
@@ -55,21 +59,53 @@ def _planning(title: str) -> Decision:
     )
 
 
-def _finance(title: str) -> Decision:
+def _finance(
+    title: str,
+    upstream_context: list[dict[str, Any]] | None = None,
+    **kwargs: Any,
+) -> Decision:
+    """Finance review. If IT assessment is not yet available, declare a
+    cross-department dependency (F5) so the engine marks this node blocked
+    until IT completes."""
+    if upstream_context:
+        for item in upstream_context:
+            if isinstance(item, dict) and item.get("key", "").startswith("it_"):
+                return _decision(
+                    summary="Assessed budget feasibility with IT's input.",
+                    status_text="Finance review complete — the request is financially viable.",
+                    tasks=[
+                        "Assess budget feasibility",
+                        "Estimate the financial impact",
+                        "Project the return on investment",
+                        "Confirm funding availability",
+                    ],
+                    flags=[
+                        Flag(
+                            severity="info",
+                            message="Spend is within the approved quarterly budget.",
+                        ),
+                    ],
+                )
     return _decision(
-        summary="Assessed budget feasibility, financial impact, and ROI.",
-        status_text="Finance review complete — the request is financially viable.",
+        summary="Financial impact analysis in progress. Waiting for data from IT assessment.",
+        status_text="Finance review is blocked — waiting for IT assessment.",
         tasks=[
             "Assess budget feasibility",
             "Estimate the financial impact",
             "Project the return on investment",
             "Confirm funding availability",
         ],
-        flags=[Flag(severity="info", message="Spend is within the approved quarterly budget.")],
+        blocked_on=DependencyDecl(
+            on_department="IT",
+            reason=(
+                "Need the IT security assessment and infrastructure cost"
+                " estimate before the budget can be finalized."
+            ),
+        ),
     )
 
 
-def _legal(title: str) -> Decision:
+def _legal(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary="Checked regulatory compliance and contractual requirements.",
         status_text="Legal review complete — no blocking issues, one item to track.",
@@ -83,7 +119,7 @@ def _legal(title: str) -> Decision:
     )
 
 
-def _it(title: str) -> Decision:
+def _it(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary="Evaluated technical feasibility, security, and systems integration.",
         status_text="IT assessment complete — technically feasible with standard provisioning.",
@@ -95,7 +131,7 @@ def _it(title: str) -> Decision:
     )
 
 
-def _hr(title: str) -> Decision:
+def _hr(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary="Planned staffing and hiring needs.",
         status_text="HR planning complete — staffing plan ready.",
@@ -103,7 +139,7 @@ def _hr(title: str) -> Decision:
     )
 
 
-def _ops(title: str) -> Decision:
+def _ops(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary="Planned logistics, facilities, and the operational timeline.",
         status_text="Operations planning complete — execution plan ready.",
@@ -111,7 +147,7 @@ def _ops(title: str) -> Decision:
     )
 
 
-def _approval(title: str) -> Decision:
+def _approval(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary="Compiled department decisions and flags for executive review.",
         status_text="Ready for executive approval.",
@@ -123,7 +159,7 @@ def _approval(title: str) -> Decision:
     )
 
 
-def _implementation(title: str) -> Decision:
+def _implementation(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary="Executed the approved plan across departments.",
         status_text="Implementation complete.",
@@ -131,7 +167,7 @@ def _implementation(title: str) -> Decision:
     )
 
 
-def _report(title: str) -> Decision:
+def _report(title: str, **kwargs: Any) -> Decision:
     return _decision(
         summary="Produced the final report of decisions, flags, and outcomes.",
         status_text="Final report generated.",
@@ -189,4 +225,4 @@ async def run_department(
             status_text=f"{agent_type.replace('_', ' ').title()} stage complete.",
             tasks=["Review the request", "Record the outcome"],
         )
-    return playbook(title)
+    return playbook(title, upstream_context=upstream_context)

@@ -57,6 +57,21 @@ func TestSeedPopulatesAgentTasks(t *testing.T) {
 		t.Fatal("agent_tasks empty after seed")
 	}
 
+	// F5: node_dependencies should be populated for blocked nodes.
+	var depCount int
+	err = pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM node_dependencies nd
+		JOIN requests r ON r.id = nd.request_id
+		WHERE r.org_id = $1
+	`, demoOrgID).Scan(&depCount)
+	if err != nil {
+		t.Fatalf("count node_dependencies: %v", err)
+	}
+	if depCount == 0 {
+		t.Fatal("node_dependencies empty after seed")
+	}
+
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE slug = $1`, demoOrgSlug)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE email LIKE '%' || $1`, emailDomain)

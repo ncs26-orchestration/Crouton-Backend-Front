@@ -300,6 +300,7 @@ export interface WorkflowNodeData {
   status_text: string;
   started_at: string | null;
   completed_at: string | null;
+  blocked_by?: { reason: string; blocked_at?: string } | null;
 }
 
 export interface WorkflowEdgeData {
@@ -324,12 +325,23 @@ export interface NodeTask {
   completed_at: string | null;
 }
 
-// Node detail payload from GET /requests/:id/nodes/:nodeId. activity (audit)
-// arrives in F6.
+// A single audit event recording a state change.
+export interface AuditEvent {
+	id: string;
+	request_id: string;
+	node_id: string | null;
+	actor: string;
+	action: string;
+	reason: string;
+	created_at: string;
+}
+
+// Node detail payload from GET /requests/:id/nodes/:nodeId. activity is
+// the node-scoped audit trail.
 export interface NodeDetailResponse {
-  node: WorkflowNodeData;
-  tasks: NodeTask[];
-  activity: unknown[];
+	node: WorkflowNodeData;
+	tasks: NodeTask[];
+	activity: AuditEvent[];
 }
 
 // Binding state drives node color. Resolved at canvas build time

@@ -84,6 +84,24 @@ sse_out=$(mktemp)
 curl -fsS -N --max-time 10 "$API/requests/${req_id}/events?token=${token}" >"$sse_out" 2>/dev/null &
 sse_pid=$!
 
+# F5: the engine should produce a transient blocked state (Finance blocked on
+# IT) because finance_review runs before it_assessment in the default plan and
+# the deterministic Python _finance() returns blocked_on without IT output.
+say "F5: a blocked node appears while it_assessment is still running"
+blocked_seen=""
+for _ in $(seq 1 30); do
+  detail=$(curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}")
+  blocked_count=$(echo "$detail" | jq '[.nodes[] | select(.status == "blocked")] | length')
+  if [ "$blocked_count" -ge 1 ]; then
+    blocked_seen="yes"
+    blocked_node=$(echo "$detail" | jq -r '.nodes[] | select(.status == "blocked") | .key')
+    echo "  Blocked node detected: $blocked_node"
+    break
+  fi
+  sleep 0.5
+done
+[ -n "$blocked_seen" ] || fail "no blocked node appeared (F5)"
+
 # F3/F7: the orchestration engine runs the review stages through their
 # department agents (deterministic with no LLM key) and then parks the request
 # at the executive-approval gate instead of auto-completing.
@@ -118,6 +136,8 @@ curl -fsS -X POST "$API/requests/${req_id}/approve" \
   | jq -e '.request.status == "in_progress" or .request.status == "completed"' >/dev/null \
   || fail "approve did not return a resumed request"
 
+# F3: after approval the engine resumes and drives the request to completed.
+say "engine runs the request to completion"
 detail=""
 for _ in $(seq 1 60); do
   detail=$(curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}")
@@ -142,9 +162,24 @@ say "SSE events captured: $events"
 
 say "a completed node carries the agent's tasks"
 node_id=$(echo "$detail" | jq -r '.nodes[0].id')
-curl -fsS "$API/requests/${req_id}/nodes/${node_id}" -H "authorization: Bearer ${token}" \
-  | jq -e '(.tasks | length) >= 1 and (.tasks[0].status == "completed") and (.node.status == "completed")' >/dev/null \
+node_detail=$(curl -fsS "$API/requests/${req_id}/nodes/${node_id}" -H "authorization: Bearer ${token}")
+echo "$node_detail" | jq -e '(.tasks | length) >= 1 and (.tasks[0].status == "completed") and (.node.status == "completed")' >/dev/null \
   || fail "node detail / tasks shape"
+
+# F6: verify the audit trail is populated after a completed run.
+say "node detail includes audit activity (F6)"
+echo "$node_detail" | jq -e '(.activity | length) >= 1 and (.activity[0].actor != null and .activity[0].action != null)' >/dev/null \
+  || fail "node detail / audit activity is empty"
+
+say "request audit endpoint returns events (F6)"
+curl -fsS "$API/requests/${req_id}/audit" -H "authorization: Bearer ${token}" \
+  | jq -e '(.events | length) >= 1' >/dev/null \
+  || fail "request audit endpoint returned empty events"
+
+say "org audit endpoint returns events (F6)"
+curl -fsS "$API/orgs/${org_id}/audit" -H "authorization: Bearer ${token}" \
+  | jq -e '(.events | length) >= 1' >/dev/null \
+  || fail "org audit endpoint returned empty events"
 
 echo
 echo "SMOKE OK"

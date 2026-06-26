@@ -20,12 +20,14 @@ import (
 
 // RequestsHandler owns the request lifecycle endpoints: create (which
 // plans the workflow graph and launches the orchestration engine), list,
-// get-with-graph, and node detail.
+// get-with-graph, node detail, and audit reads.
 type RequestsHandler struct {
 	logger   *slog.Logger
 	pg       *pgxpool.Pool
 	requests *repo.RequestRepo
 	workflow *repo.WorkflowRepo
+	deps     *repo.DependencyRepo
+	audit    *repo.AuditRepo
 	agent    *agentclient.Client
 	engine   *orchestrator.Engine
 }
@@ -36,6 +38,8 @@ func NewRequestsHandler(logger *slog.Logger, pg *pgxpool.Pool, agent *agentclien
 		pg:       pg,
 		requests: repo.NewRequestRepo(pg),
 		workflow: repo.NewWorkflowRepo(pg),
+		deps:     repo.NewDependencyRepo(pg),
+		audit:    repo.NewAuditRepo(pg),
 		agent:    agent,
 		engine:   engine,
 	}
@@ -225,6 +229,16 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	}
 	saved.Status = "in_progress"
 
+	if err := h.audit.Append(ctx, repo.AuditEvent{
+		ID:        "aev_" + randomHex(8),
+		RequestID: reqID,
+		Actor:     claims.Name,
+		Action:    "request.created",
+		Reason:    claims.Name + " submitted: " + title,
+	}); err != nil {
+		h.logger.Error("create request: append audit event", slog.String("err", err.Error()))
+	}
+
 	// Hand the request off to the orchestration engine, which runs each node
 	// through its department agent on a background worker (F3).
 	if h.engine != nil {
@@ -308,10 +322,27 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 		h.logger.Error("get request: list edges", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
+	deps, err := h.deps.ListUnresolvedByRequest(ctx, id)
+	if err != nil {
+		h.logger.Error("get request: list deps", slog.String("err", err.Error()))
+	}
 
 	nodeList := make([]map[string]any, 0, len(nodes))
 	for _, n := range nodes {
-		nodeList = append(nodeList, map[string]any{
+		// Include dependency info for blocked nodes (F5).
+		var blockedBy map[string]any
+		if n.Status == "blocked" {
+			for _, d := range deps {
+				if d.DependentNodeID == n.ID {
+					blockedBy = map[string]any{
+						"reason":     d.Reason,
+						"blocked_at": d.CreatedAt,
+					}
+					break
+				}
+			}
+		}
+		nodeEntry := map[string]any{
 			"id":               n.ID,
 			"key":              n.Key,
 			"name":             n.Name,
@@ -323,7 +354,11 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 			"status_text":      n.StatusText,
 			"started_at":       n.StartedAt,
 			"completed_at":     n.CompletedAt,
-		})
+		}
+		if blockedBy != nil {
+			nodeEntry["blocked_by"] = blockedBy
+		}
+		nodeList = append(nodeList, nodeEntry)
 	}
 	edgeList := make([]map[string]any, 0, len(edges))
 	for _, e := range edges {
@@ -344,8 +379,8 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 	})
 }
 
-// GetNode handles GET /requests/:id/nodes/:nodeId, returning a node plus the
-// agent tasks it produced. activity (audit) is F6 and returned empty for now.
+// GetNode handles GET /requests/:id/nodes/:nodeId, returning a node plus its
+// agent tasks and audit activity.
 func (h *RequestsHandler) GetNode(c echo.Context) error {
 	claims := middleware.UserFromCtx(c)
 	if claims == nil {
@@ -396,22 +431,55 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		})
 	}
 
+	// F5: include dependency info for blocked nodes.
+	var blockedBy map[string]any
+	if node.Status == "blocked" {
+		deps, err := h.deps.ListUnresolvedByDependent(ctx, nodeID)
+		if err == nil && len(deps) > 0 {
+			blockedBy = map[string]any{
+				"reason":     deps[0].Reason,
+				"blocked_at": deps[0].CreatedAt,
+			}
+		}
+	}
+
+	nodeResp := map[string]any{
+		"id":               node.ID,
+		"key":              node.Key,
+		"name":             node.Name,
+		"agent_type":       node.AgentType,
+		"department":       node.Department,
+		"status":           node.Status,
+		"description":      node.Description,
+		"progress_percent": node.ProgressPercent,
+		"status_text":      node.StatusText,
+		"started_at":       node.StartedAt,
+		"completed_at":     node.CompletedAt,
+	}
+	if blockedBy != nil {
+		nodeResp["blocked_by"] = blockedBy
+	}
+
+	// F6: node-scoped audit activity.
+	activity, err := h.audit.ListByNode(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("get node: activity audit", slog.String("err", err.Error()))
+	}
+	activityList := make([]map[string]any, 0, len(activity))
+	for _, a := range activity {
+		activityList = append(activityList, map[string]any{
+			"id":         a.ID,
+			"actor":      a.Actor,
+			"action":     a.Action,
+			"reason":     a.Reason,
+			"created_at": a.CreatedAt,
+		})
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"node": map[string]any{
-			"id":               node.ID,
-			"key":              node.Key,
-			"name":             node.Name,
-			"agent_type":       node.AgentType,
-			"department":       node.Department,
-			"status":           node.Status,
-			"description":      node.Description,
-			"progress_percent": node.ProgressPercent,
-			"status_text":      node.StatusText,
-			"started_at":       node.StartedAt,
-			"completed_at":     node.CompletedAt,
-		},
+		"node":     nodeResp,
 		"tasks":    taskList,
-		"activity": []any{},
+		"activity": activityList,
 	})
 }
 
@@ -516,6 +584,88 @@ func (h *RequestsHandler) ApproveRequest(c echo.Context) error {
 	}
 	names := h.requesterNames(ctx, []int64{updated.RequesterUserID})
 	return c.JSON(http.StatusOK, map[string]any{"request": toRequestResponse(*updated, names[updated.RequesterUserID])})
+}
+
+// ListRequestAudit handles GET /requests/:id/audit, returning all audit
+// events for a request, newest first.
+func (h *RequestsHandler) ListRequestAudit(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	requestID := c.Param("id")
+
+	ctx := c.Request().Context()
+	req, err := h.requests.GetByID(ctx, requestID)
+	if errors.Is(err, repo.ErrNotFound) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+	}
+	if err != nil {
+		h.logger.Error("list request audit: get request", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if _, err := requireOrgMember(c, h.pg, req.OrgID, claims.UserID); err != nil {
+		var he *echo.HTTPError
+		if errors.As(err, &he) && he.Code == http.StatusForbidden {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+		}
+		return handleOrgMemberErr(c, err)
+	}
+
+	events, err := h.audit.ListByRequest(ctx, requestID)
+	if err != nil {
+		h.logger.Error("list request audit: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	eventList := make([]map[string]any, 0, len(events))
+	for _, e := range events {
+		eventList = append(eventList, map[string]any{
+			"id":         e.ID,
+			"request_id": e.RequestID,
+			"node_id":    e.NodeID,
+			"actor":      e.Actor,
+			"action":     e.Action,
+			"reason":     e.Reason,
+			"created_at": e.CreatedAt,
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"events": eventList})
+}
+
+// ListOrgAudit handles GET /orgs/:orgId/audit, returning audit events across
+// all requests in an org, newest first.
+func (h *RequestsHandler) ListOrgAudit(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+
+	if _, err := requireOrgMember(c, h.pg, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+
+	ctx := c.Request().Context()
+	events, err := h.audit.ListByOrg(ctx, orgID)
+	if err != nil {
+		h.logger.Error("list org audit: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	eventList := make([]map[string]any, 0, len(events))
+	for _, e := range events {
+		eventList = append(eventList, map[string]any{
+			"id":         e.ID,
+			"request_id": e.RequestID,
+			"node_id":    e.NodeID,
+			"actor":      e.Actor,
+			"action":     e.Action,
+			"reason":     e.Reason,
+			"created_at": e.CreatedAt,
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"events": eventList})
 }
 
 // requesterNames resolves user ids to display names in one query. A
