@@ -24,7 +24,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/m
 | F5 | Cross-department dependencies | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | F6 | Traceability / audit trail | ✅ | ✅ | – | ✅ | ✅ | 🟡 |
 | F7 | Human executive approval | – | ✅ | – | ✅ | ✅ | 🟡 |
-| F8 | Execution stage & final report | – | ⬜ | 🟡 | ⬜ | ⬜ | ⬜ |
+| F8 | Execution stage & final report | – | ✅ | 🟡 | ✅ | ✅ | 🟡 |
 | F9 | Roster, Policies & Integrations views | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
 | F10 | Seeding & demo data | ⬜ | ⬜ | – | – | – | ⬜ |
 
