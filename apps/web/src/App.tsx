@@ -191,7 +191,13 @@ function Shell() {
         onUserClick={() => { qc.clear(); logout(); }}
       />
 
-      {section === "home" && <HomeView />}
+      {section === "home" && activeOrg && (
+        <HomeView
+          orgId={activeOrg.id}
+          onOpenWorkflow={navigateToWorkflow}
+          onNavigate={setSection}
+        />
+      )}
       {section === "my-work" && activeOrg && (
         <MyWorkView
           orgId={activeOrg.id}
@@ -213,7 +219,7 @@ function Shell() {
         />
       )}
 
-      {section === "agents" && <AgentsView />}
+      {section === "agents" && activeOrg && <AgentsView orgId={activeOrg.id} />}
       {section === "reports" && <ReportsView />}
       {section === "policies" && <PoliciesView />}
       {section === "integrations" && <IntegrationsView />}
