@@ -11,6 +11,7 @@ import type {
 	DeployTarget,
 	EngineAdapter,
 	ExtractResponse,
+	FinalReport,
 	ISRegistry,
 	OrgRequest,
 	Project,
@@ -545,4 +546,9 @@ export const api = {
 
 	listOrgAudit: (orgId: string): Promise<{ events: AuditEvent[] }> =>
 		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/audit`),
+
+	// --- Final report (F8) ---
+
+	getReport: (requestId: string): Promise<FinalReport> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/report`),
 };
