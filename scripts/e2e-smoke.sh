@@ -95,9 +95,24 @@ echo "$detail" | jq -e \
 
 say "a completed node carries the agent's tasks"
 node_id=$(echo "$detail" | jq -r '.nodes[0].id')
-curl -fsS "$API/requests/${req_id}/nodes/${node_id}" -H "authorization: Bearer ${token}" \
-  | jq -e '(.tasks | length) >= 1 and (.tasks[0].status == "completed") and (.node.status == "completed")' >/dev/null \
+node_detail=$(curl -fsS "$API/requests/${req_id}/nodes/${node_id}" -H "authorization: Bearer ${token}")
+echo "$node_detail" | jq -e '(.tasks | length) >= 1 and (.tasks[0].status == "completed") and (.node.status == "completed")' >/dev/null \
   || fail "node detail / tasks shape"
+
+# F6: verify the audit trail is populated after a completed run.
+say "node detail includes audit activity (F6)"
+echo "$node_detail" | jq -e '(.activity | length) >= 1 and (.activity[0].actor != null and .activity[0].action != null)' >/dev/null \
+  || fail "node detail / audit activity is empty"
+
+say "request audit endpoint returns events (F6)"
+curl -fsS "$API/requests/${req_id}/audit" -H "authorization: Bearer ${token}" \
+  | jq -e '(.events | length) >= 1' >/dev/null \
+  || fail "request audit endpoint returned empty events"
+
+say "org audit endpoint returns events (F6)"
+curl -fsS "$API/orgs/${org_id}/audit" -H "authorization: Bearer ${token}" \
+  | jq -e '(.events | length) >= 1' >/dev/null \
+  || fail "org audit endpoint returned empty events"
 
 echo
 echo "SMOKE OK"
