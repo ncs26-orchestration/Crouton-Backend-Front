@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import type { Chat, Project } from "../lib/types";
 import { OnboardingWizard } from "../components/OnboardingWizard";
 import { useToasts } from "../components/Toasts";
+import { useOrg } from "../contexts/OrgContext";
 
 // ProjectsHomeView is the landing surface when no chat is open. It
 // renders the project grid. Clicking a card opens the project in
@@ -20,9 +21,11 @@ interface Props {
 export function ProjectsHomeView({ onOpenChat, onOpenProject }: Props) {
   const toasts = useToasts();
   const qc = useQueryClient();
+  const { activeOrg } = useOrg();
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => api.listProjects().then((r) => r.projects),
+    queryKey: ["projects", activeOrg?.id],
+    queryFn: () => api.listProjects(activeOrg!.id).then((r) => r.projects),
+    enabled: !!activeOrg,
   });
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -197,7 +200,7 @@ export function ProjectsHomeView({ onOpenChat, onOpenProject }: Props) {
         {showOnboarding && (
           <OnboardingWizard
             onComplete={(overview, projectId) => {
-              qc.invalidateQueries({ queryKey: ["projects"] });
+              qc.invalidateQueries({ queryKey: ["projects", activeOrg?.id] });
               setShowOnboarding(false);
               if (projectId) {
                 onOpenProject(projectId);

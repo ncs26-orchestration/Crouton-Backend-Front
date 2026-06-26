@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/Noussour/aup/apps/api/internal/ir"
+	"github.com/Noussour/aup/apps/api/internal/middleware"
 	"github.com/Noussour/aup/apps/api/internal/repo"
 )
 
@@ -74,6 +75,17 @@ type projectResponse struct {
 }
 
 func (h *ProjectsHandler) CreateProject(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	if orgID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "org_id_required"})
+	}
+	if _, err := requireOrgMember(c, h.pg, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
 	var req projectRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid_json"})
@@ -86,6 +98,7 @@ func (h *ProjectsHandler) CreateProject(c echo.Context) error {
 		ID:          makeID("p", name),
 		Name:        name,
 		Description: strings.TrimSpace(req.Description),
+		OrgID:       &orgID,
 	}
 	if err := h.projects.Create(c.Request().Context(), p); err != nil {
 		h.logger.Error("create project", slog.String("err", err.Error()))
@@ -97,7 +110,18 @@ func (h *ProjectsHandler) CreateProject(c echo.Context) error {
 }
 
 func (h *ProjectsHandler) ListProjects(c echo.Context) error {
-	ps, err := h.projects.List(c.Request().Context())
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	if orgID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "org_id_required"})
+	}
+	if _, err := requireOrgMember(c, h.pg, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	ps, err := h.projects.ListByOrg(c.Request().Context(), orgID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db_error"})
 	}
@@ -110,12 +134,22 @@ func (h *ProjectsHandler) ListProjects(c echo.Context) error {
 }
 
 func (h *ProjectsHandler) GetProject(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
 	p, err := h.projects.Get(c.Request().Context(), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "not_found"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db_error"})
+	}
+	// Implicit org membership check for org-scoped projects.
+	if p.OrgID != nil {
+		if _, err := requireOrgMember(c, h.pg, *p.OrgID, claims.UserID); err != nil {
+			return handleOrgMemberErr(c, err)
+		}
 	}
 	chats, _ := h.chats.ListByProject(c.Request().Context(), p.ID)
 	overview, _ := h.projects.GetOverview(c.Request().Context(), p.ID)
@@ -126,6 +160,23 @@ func (h *ProjectsHandler) GetProject(c echo.Context) error {
 }
 
 func (h *ProjectsHandler) UpdateProject(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	// Fetch project first to check org membership.
+	p, err := h.projects.Get(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "not_found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db_error"})
+	}
+	if p.OrgID != nil {
+		if _, err := requireOrgMember(c, h.pg, *p.OrgID, claims.UserID); err != nil {
+			return handleOrgMemberErr(c, err)
+		}
+	}
 	var req projectRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid_json"})
@@ -166,6 +217,23 @@ func (h *ProjectsHandler) UpdateProjectOverview(c echo.Context) error {
 }
 
 func (h *ProjectsHandler) ArchiveProject(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	// Fetch project first to check org membership.
+	p, err := h.projects.Get(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "not_found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db_error"})
+	}
+	if p.OrgID != nil {
+		if _, err := requireOrgMember(c, h.pg, *p.OrgID, claims.UserID); err != nil {
+			return handleOrgMemberErr(c, err)
+		}
+	}
 	if err := h.projects.Archive(c.Request().Context(), c.Param("id")); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "not_found"})

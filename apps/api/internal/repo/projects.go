@@ -16,6 +16,7 @@ type Project struct {
 	ID          string
 	Name        string
 	Description string
+	OrgID       *string // nil for legacy rows created before multi-tenancy
 	CreatedAt   time.Time
 	ArchivedAt  *time.Time
 }
@@ -32,20 +33,20 @@ func NewProjectRepo(pg *pgxpool.Pool) *ProjectRepo {
 // can generate a friendly slug+suffix without a follow-up read.
 func (r *ProjectRepo) Create(ctx context.Context, p Project) error {
 	_, err := r.pg.Exec(ctx, `
-		INSERT INTO projects (id, name, description)
-		VALUES ($1, $2, $3)
-	`, p.ID, p.Name, p.Description)
+		INSERT INTO projects (id, name, description, org_id)
+		VALUES ($1, $2, $3, $4)
+	`, p.ID, p.Name, p.Description, p.OrgID)
 	return err
 }
 
 func (r *ProjectRepo) Get(ctx context.Context, id string) (*Project, error) {
 	row := r.pg.QueryRow(ctx, `
-		SELECT id, name, description, created_at, archived_at
+		SELECT id, name, description, org_id, created_at, archived_at
 		FROM projects
 		WHERE id = $1
 	`, id)
 	var p Project
-	if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.ArchivedAt); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.OrgID, &p.CreatedAt, &p.ArchivedAt); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -60,7 +61,7 @@ func (r *ProjectRepo) Get(ctx context.Context, id string) (*Project, error) {
 // partial index from the migration.
 func (r *ProjectRepo) List(ctx context.Context) ([]Project, error) {
 	rows, err := r.pg.Query(ctx, `
-		SELECT id, name, description, created_at, archived_at
+		SELECT id, name, description, org_id, created_at, archived_at
 		FROM projects
 		WHERE archived_at IS NULL
 		ORDER BY created_at DESC
@@ -73,7 +74,31 @@ func (r *ProjectRepo) List(ctx context.Context) ([]Project, error) {
 	var out []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.ArchivedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.OrgID, &p.CreatedAt, &p.ArchivedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ListByOrg returns active projects scoped to an org, newest first.
+func (r *ProjectRepo) ListByOrg(ctx context.Context, orgID string) ([]Project, error) {
+	rows, err := r.pg.Query(ctx, `
+		SELECT id, name, description, org_id, created_at, archived_at
+		FROM projects
+		WHERE org_id = $1 AND archived_at IS NULL
+		ORDER BY created_at DESC
+	`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Project
+	for rows.Next() {
+		var p Project
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.OrgID, &p.CreatedAt, &p.ArchivedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

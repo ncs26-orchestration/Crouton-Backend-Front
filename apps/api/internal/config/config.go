@@ -8,6 +8,7 @@ type Config struct {
 	RedisURL    string `env:"REDIS_URL,required"`
 	AgentURL    string `env:"AGENT_URL" envDefault:"http://agent:8000"`
 	Environment string `env:"APP_ENV" envDefault:"development"`
+	JWTSecret   string `env:"JWT_SECRET" envDefault:"change-me-in-production"`
 }
 
 func Load() (Config, error) {

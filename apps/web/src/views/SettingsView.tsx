@@ -8,6 +8,7 @@ import type { DeployTarget, Project } from "../lib/types";
 import { useTheme } from "../lib/theme";
 import { OrgSettingsModal } from "../components/OrgSettingsModal";
 import { useToasts } from "../components/Toasts";
+import { useOrg } from "../contexts/OrgContext";
 
 // SettingsView is the operator's control panel. Top section is
 // Projects + their Deploy targets (Camunda, Elsa); bottom is global
@@ -39,9 +40,11 @@ export function SettingsView({
   scopedProjectId: string | null;
 }) {
   const { theme, toggle } = useTheme();
+  const { activeOrg } = useOrg();
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => api.listProjects().then((r) => r.projects),
+    queryKey: ["projects", activeOrg?.id],
+    queryFn: () => api.listProjects(activeOrg!.id).then((r) => r.projects),
+    enabled: !!activeOrg,
   });
   const projects = projectsQuery.data ?? [];
   const [orgModalProject, setOrgModalProject] = useState<{ id: string; name: string } | null>(null);

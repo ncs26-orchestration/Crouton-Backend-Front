@@ -16,12 +16,19 @@ import type {
   WorkflowVersion,
   WorkflowVersionListItem,
 } from "./types";
+import { authStore } from "./auth";
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const token = authStore.get();
+  const authHeader: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+
   const res = await fetch(url, {
     ...init,
     headers: {
       "content-type": "application/json",
+      ...authHeader,
       ...(init?.headers ?? {}),
     },
   });
@@ -156,10 +163,14 @@ export const api = {
 
   // --- Projects / Chats (Round A–B) ---
 
-  listProjects: (): Promise<{ projects: Project[] }> => fetchJSON(`/api/projects`),
+  listProjects: (orgId: string): Promise<{ projects: Project[] }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/projects`),
 
-  createProject: (payload: { name: string; description?: string }): Promise<Project> =>
-    fetchJSON(`/api/projects`, { method: "POST", body: JSON.stringify(payload) }),
+  createProject: (orgId: string, payload: { name: string; description?: string }): Promise<Project> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/projects`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   getProject: (id: string): Promise<{ project: Project; chats: Chat[] }> =>
     fetchJSON(`/api/projects/${encodeURIComponent(id)}`),
@@ -376,4 +387,114 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ other_version_id: versionId2 }),
     }),
+
+  // --- Auth ---
+
+  register: (payload: { name: string; email: string; password: string }): Promise<{ token: string; user: { id: number; email: string; name: string } }> =>
+    fetchJSON(`/api/auth/register`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  login: (payload: { email: string; password: string }): Promise<{ token: string; user: { id: number; email: string; name: string } }> =>
+    fetchJSON(`/api/auth/login`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // --- Orgs ---
+
+  // Backend returns a bare array — wrap it in { orgs } for consistent usage.
+  listOrgs: (): Promise<{ orgs: Array<{ id: string; name: string; slug: string; role: string; created_at: string }> }> =>
+    fetchJSON<Array<{ id: string; name: string; slug: string; role: string; created_at: string }>>(`/api/orgs`)
+      .then((arr) => ({ orgs: Array.isArray(arr) ? arr : [] })),
+
+  createOrg: (payload: { name: string; slug: string }): Promise<{ id: string; name: string; slug: string; created_at: string }> =>
+    fetchJSON(`/api/orgs`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // --- Teams ---
+
+  listTeams: (orgId: string): Promise<{ teams: Array<{ id: string; name: string; description: string; created_at: string; member_count?: number }> }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/teams`),
+
+  getTeam: (orgId: string, teamId: string): Promise<{
+    id: string; name: string; description: string; created_at: string;
+    members: Array<{ id: number; name: string; email: string; role: string; joined_at: string }>;
+  }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/teams/${encodeURIComponent(teamId)}`),
+
+  createTeam: (orgId: string, payload: { name: string; description?: string }): Promise<{ id: string; name: string; description: string; created_at: string }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/teams`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateTeam: (orgId: string, teamId: string, payload: { name?: string; description?: string }): Promise<{ id: string; name: string; description: string }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/teams/${encodeURIComponent(teamId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteTeam: (orgId: string, teamId: string): Promise<void> => {
+    const token = authStore.get();
+    return fetch(`/api/orgs/${encodeURIComponent(orgId)}/teams/${encodeURIComponent(teamId)}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((r) => {
+      if (!r.ok && r.status !== 204) throw new Error(`DELETE /teams ${r.status}`);
+    });
+  },
+
+  // --- Org members ---
+
+  listOrgMembers: (orgId: string): Promise<{ members: Array<{ user_id: number; name: string; email: string; role: string; joined_at: string }> }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members`),
+
+  addOrgMember: (orgId: string, payload: { user_id: number; role: string }): Promise<void> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateOrgMemberRole: (orgId: string, userId: number, role: string): Promise<void> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(String(userId))}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+
+  removeOrgMember: (orgId: string, userId: number): Promise<void> => {
+    const token = authStore.get();
+    return fetch(`/api/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(String(userId))}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((r) => {
+      if (!r.ok && r.status !== 204) throw new Error(`DELETE /members ${r.status}`);
+    });
+  },
+
+  // --- Team members ---
+
+  addTeamMember: (orgId: string, teamId: string, payload: { user_id: number; role: string }): Promise<void> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/teams/${encodeURIComponent(teamId)}/members`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  removeTeamMember: (orgId: string, teamId: string, userId: number): Promise<void> => {
+    const token = authStore.get();
+    return fetch(`/api/orgs/${encodeURIComponent(orgId)}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(String(userId))}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((r) => {
+      if (!r.ok && r.status !== 204) throw new Error(`DELETE /team-members ${r.status}`);
+    });
+  },
+
+  // --- User lookup ---
+
+  lookupUser: (email: string): Promise<{ id: number; name: string; email: string }> =>
+    fetchJSON(`/api/users/lookup?email=${encodeURIComponent(email)}`),
 };

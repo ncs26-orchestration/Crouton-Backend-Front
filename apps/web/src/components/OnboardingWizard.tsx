@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Check, ChevronRight, Loader2, X } from "lucide-react";
 
 import { api } from "../lib/api";
+import { useOrg } from "../contexts/OrgContext";
 
 interface DeterministicQuestion {
   index: number;
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function OnboardingWizard({ onComplete, onSkip }: Props) {
+  const { activeOrg } = useOrg();
   const [questions, setQuestions] = useState<DeterministicQuestion[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
@@ -117,7 +119,7 @@ export function OnboardingWizard({ onComplete, onSkip }: Props) {
         return;
       }
 
-      const project = await api.createProject({ name: orgName });
+      const project = await api.createProject(activeOrg!.id, { name: orgName });
 
       const overview: Overview = {
         name: orgName,

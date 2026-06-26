@@ -1,16 +1,16 @@
 import { motion } from "framer-motion";
-import { HelpCircle, Home, Moon, Settings, Sun, Workflow } from "lucide-react";
+import { Building2, HelpCircle, Home, Inbox, Moon, Settings, Sun, Workflow } from "lucide-react";
 
 import { BrandMark } from "./Brand";
 import { useTheme } from "../lib/theme";
+import { useAuth } from "../contexts/AuthContext";
 
 // ShellRail — the narrow icon column on the far left. Keeps the
-// operator-level actions (home, settings, help, theme, command
-// palette hook-in slot) always reachable regardless of whether a
-// chat is open. Full-size widgets still live in ProjectTree + the
-// per-chat TopBar — this bar is navigation glue only.
+// operator-level actions (home, inbox, workflows, agents, settings, help,
+// theme, command palette hook-in slot) always reachable regardless of
+// whether a chat is open.
 
-export type ShellSection = "home" | "settings" | "help";
+export type ShellSection = "home" | "inbox" | "workflows" | "agents" | "settings" | "help";
 
 interface Props {
   active: ShellSection;
@@ -19,16 +19,30 @@ interface Props {
   // "go home AND clear the scoped project", which the parent
   // implements differently from `onSelect("home")`.
   onBrandClick?: () => void;
+  onUserClick?: () => void;
 }
 
 const ITEMS: { id: ShellSection; icon: typeof Home; label: string; hint?: string }[] = [
-  { id: "home",     icon: Home,       label: "Projects", hint: "Home" },
-  { id: "settings", icon: Settings,   label: "Settings", hint: "Deploy targets + theme" },
-  { id: "help",     icon: HelpCircle, label: "Help",     hint: "Shortcuts" },
+  { id: "home",      icon: Home,       label: "Projects",  hint: "Home" },
+  { id: "inbox",     icon: Inbox,      label: "My Work",   hint: "Tasks assigned to you" },
+  { id: "workflows", icon: Workflow,   label: "Workflows", hint: "Workflow builder" },
+  { id: "agents",    icon: Building2,  label: "Organization", hint: "Teams & members" },
+  { id: "settings",  icon: Settings,   label: "Settings",  hint: "Deploy targets + theme" },
+  { id: "help",      icon: HelpCircle, label: "Help",      hint: "Shortcuts" },
 ];
 
-export function ShellRail({ active, onSelect, onBrandClick }: Props) {
+export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props) {
   const { theme, toggle } = useTheme();
+  const { user } = useAuth();
+
+  const initials = user
+    ? user.name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "?";
 
   return (
     <nav className="w-14 shrink-0 flex flex-col items-center py-3 bg-[var(--color-surface)] border-r border-[var(--color-border)]">
@@ -82,6 +96,23 @@ export function ShellRail({ active, onSelect, onBrandClick }: Props) {
 
       <div className="flex-1" />
 
+      {/* User avatar / logout */}
+      {user && (
+        <div className="relative group mb-1">
+          <motion.button
+            onClick={onUserClick}
+            aria-label={`${user.name} — click to sign out`}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.92 }}
+            className="size-9 flex items-center justify-center rounded-lg bg-[var(--color-accent-bg)] text-[var(--color-brand)] text-[10px] font-bold transition-colors hover:opacity-80"
+          >
+            {initials}
+          </motion.button>
+          <RailTooltip label={user.name} hint="Sign out" />
+        </div>
+      )}
+
+      {/* Theme toggle */}
       <div className="relative group">
         <motion.button
           onClick={toggle}
@@ -93,15 +124,6 @@ export function ShellRail({ active, onSelect, onBrandClick }: Props) {
           {theme === "dark" ? <Sun size={15} strokeWidth={1.75} /> : <Moon size={15} strokeWidth={1.75} />}
         </motion.button>
         <RailTooltip label={theme === "dark" ? "Light mode" : "Dark mode"} />
-      </div>
-
-      <div className="relative group mt-1">
-        <div
-          className="size-9 flex items-center justify-center rounded-lg text-[var(--color-fg-faint)]"
-          title="Workflow compiler"
-        >
-          <Workflow size={14} strokeWidth={1.5} />
-        </div>
       </div>
     </nav>
   );
