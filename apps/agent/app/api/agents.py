@@ -63,7 +63,6 @@ async def intake(body: IntakeRequest) -> PlanResponse:
             for n in plan.nodes
         ],
         edges=[
-            PlanEdgeResponse(**{"from": e.from_, "to": e.to, "type": e.type})
-            for e in plan.edges
+            PlanEdgeResponse(**{"from": e.from_, "to": e.to, "type": e.type}) for e in plan.edges
         ],
     )

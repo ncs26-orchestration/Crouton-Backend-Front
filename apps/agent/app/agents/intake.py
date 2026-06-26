@@ -57,12 +57,14 @@ def _default_plan() -> Plan:
 
 def _has_any_llm_key() -> bool:
     """Check if any LLM provider key is configured."""
-    return any([
-        settings.anthropic_api_key,
-        settings.openai_api_key,
-        settings.google_api_key,
-        settings.groq_api_key,
-    ])
+    return any(
+        [
+            settings.anthropic_api_key,
+            settings.openai_api_key,
+            settings.google_api_key,
+            settings.groq_api_key,
+        ]
+    )
 
 
 async def run_intake(
