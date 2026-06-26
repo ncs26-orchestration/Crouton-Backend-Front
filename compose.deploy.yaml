@@ -1,0 +1,127 @@
+# Production stack for the GCE VM. App images come from Artifact Registry
+# (REGISTRY + TAG), so a deploy is just `pull` + `up` — no building on the box.
+#
+# GitHub Actions builds and pushes the images on every push to main, then runs:
+#   TAG=<sha> docker compose -f compose.deploy.yaml pull
+#   TAG=<sha> docker compose -f compose.deploy.yaml up -d --wait --remove-orphans
+#
+# REGISTRY/TAG come from the deploy command; everything else from /opt/aios/.env.
+name: aios
+
+x-db-url: &db_url ${DATABASE_URL:-postgres://app:app@postgres:5432/app?sslmode=disable}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    volumes:
+      - pg_data:/var/lib/postgresql
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [aios]
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redis_data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [aios]
+
+  camunda7:
+    image: camunda/camunda-bpm-platform:run-latest
+    restart: unless-stopped
+    ports:
+      - "8180:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/engine-rest/engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [aios]
+
+  # One-shot: applies pending migrations, then exits. api waits on it.
+  migrate:
+    image: ${REGISTRY:-europe-west1-docker.pkg.dev/ncs26-solution/solution}/migrate:${TAG:-latest}
+    restart: "no"
+    environment:
+      DATABASE_URL: *db_url
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [aios]
+
+  api:
+    image: ${REGISTRY:-europe-west1-docker.pkg.dev/ncs26-solution/solution}/api:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      DATABASE_URL: *db_url
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      AGENT_URL: ${AGENT_URL:-http://agent:8000}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      APP_ENV: ${APP_ENV:-production}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    networks: [aios]
+
+  agent:
+    image: ${REGISTRY:-europe-west1-docker.pkg.dev/ncs26-solution/solution}/agent:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: *db_url
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      AGENT_DEFAULT_MODEL: ${AGENT_DEFAULT_MODEL:-}
+      AGENT_LLM_TIMEOUT_SECONDS: ${AGENT_LLM_TIMEOUT_SECONDS:-25}
+      AGENT_EXTRACTOR_PROVIDER: ${AGENT_EXTRACTOR_PROVIDER:-ollama}
+      AGENT_EXTRACTOR_MODEL: ${AGENT_EXTRACTOR_MODEL:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      APP_ENV: ${APP_ENV:-production}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [aios]
+
+  web:
+    image: ${REGISTRY:-europe-west1-docker.pkg.dev/ncs26-solution/solution}/web:${TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+      - agent
+    networks: [aios]
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  aios:
+    driver: bridge

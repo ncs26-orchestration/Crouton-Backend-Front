@@ -29,3 +29,18 @@ RUN apk add --no-cache curl \
 WORKDIR /app
 EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
+
+# migrate stage: tiny image that bakes the migrations and runs dbmate.
+# Used by the prod stack as a one-shot before the api boots, since the
+# distroless runtime image ships no dbmate or shell.
+FROM alpine:3.21 AS migrate
+ARG DBMATE_VERSION=v2.21.0
+RUN apk add --no-cache ca-certificates curl \
+    && curl -fsSL -o /usr/local/bin/dbmate \
+        "https://github.com/amacneil/dbmate/releases/download/${DBMATE_VERSION}/dbmate-linux-amd64" \
+    && chmod +x /usr/local/bin/dbmate
+COPY apps/api/migrations /db/migrations
+ENV DBMATE_MIGRATIONS_DIR=/db/migrations \
+    DBMATE_NO_DUMP_SCHEMA=true
+ENTRYPOINT ["dbmate"]
+CMD ["--wait", "up"]
