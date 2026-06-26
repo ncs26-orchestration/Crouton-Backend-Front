@@ -10,7 +10,9 @@ import type {
   EngineAdapter,
   ExtractResponse,
   ISRegistry,
+  OrgRequest,
   Project,
+  RequestGraph,
   Workflow,
   WorkflowDiff,
   WorkflowVersion,
@@ -497,4 +499,18 @@ export const api = {
 
   lookupUser: (email: string): Promise<{ id: number; name: string; email: string }> =>
     fetchJSON(`/api/users/lookup?email=${encodeURIComponent(email)}`),
+
+  // --- Requests (AI Organization OS) ---
+
+  createRequest: (orgId: string, payload: { title: string; description?: string; priority?: string }): Promise<{ request: OrgRequest }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listRequests: (orgId: string): Promise<{ requests: OrgRequest[] }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`),
+
+  getRequest: (id: string): Promise<RequestGraph> =>
+    fetchJSON(`/api/requests/${encodeURIComponent(id)}`),
 };

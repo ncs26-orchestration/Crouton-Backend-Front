@@ -255,6 +255,51 @@ export interface DeployResponse {
   diagnostics?: Diagnostic[];
 }
 
+// --- AI Organization OS: Requests & Workflow ---
+
+export type RequestPriority = "low" | "medium" | "high" | "critical";
+export type RequestStatus = "submitted" | "in_progress" | "awaiting_approval" | "approved" | "rejected" | "completed";
+export type NodeStatus = "pending" | "in_progress" | "completed" | "blocked";
+
+export interface OrgRequest {
+  id: string;
+  org_id?: string;
+  title: string;
+  description: string;
+  requester: string;
+  priority: RequestPriority;
+  status: RequestStatus;
+  progress: number;
+  created_at: string;
+}
+
+export interface WorkflowNodeData {
+  id: string;
+  key: string;
+  name: string;
+  agent_type: string;
+  department: string;
+  status: NodeStatus;
+  description: string;
+  progress_percent: number;
+  status_text: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface WorkflowEdgeData {
+  id: string;
+  source_node_id: string;
+  target_node_id: string;
+  edge_type: string;
+}
+
+export interface RequestGraph {
+  request: OrgRequest;
+  nodes: WorkflowNodeData[];
+  edges: WorkflowEdgeData[];
+}
+
 // Binding state drives node color. Resolved at canvas build time
 // against the IS Registry; a task with no binding is "idle", a valid
 // binding is "ok", a binding whose id does not resolve is "error",

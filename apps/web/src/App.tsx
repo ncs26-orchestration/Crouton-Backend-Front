@@ -21,17 +21,7 @@ import { ReportsView } from "./views/ReportsView";
 import { PoliciesView } from "./views/PoliciesView";
 import { IntegrationsView } from "./views/IntegrationsView";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { OrgProvider } from "./contexts/OrgContext";
-
-// App shell — keeps the operator's persistent surfaces always reachable
-// from the left icon rail.
-//
-//   Home      — projects grid or the current chat
-//   Inbox     — tasks assigned to you
-//   Workflows — workflow builder (alias for home for now)
-//   Agents    — AI agents configured for the org
-//   Settings  — deploy-target connectors + theme
-//   Help      — keyboard-shortcut overlay
+import { OrgProvider, useOrg } from "./contexts/OrgContext";
 
 const STORAGE_KEY = "aios.lastLocation";
 
@@ -41,6 +31,11 @@ interface Location {
   nodeId: string | null;
 }
 
+const VALID_SECTIONS: ShellSection[] = [
+  "home", "my-work", "requests", "workflows", "agents",
+  "reports", "policies", "integrations", "teams", "settings", "help",
+];
+
 function loadLocation(): Location {
   if (typeof window === "undefined") {
     return { section: "home", requestId: null, nodeId: null };
@@ -49,12 +44,8 @@ function loadLocation(): Location {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return { section: "home", requestId: null, nodeId: null };
     const parsed = JSON.parse(raw);
-    const validSections: ShellSection[] = [
-      "home", "my-work", "requests", "workflows", "agents",
-      "reports", "policies", "integrations", "teams", "settings", "help",
-    ];
     return {
-      section: validSections.includes(parsed.section) ? parsed.section : "home",
+      section: VALID_SECTIONS.includes(parsed.section) ? parsed.section : "home",
       requestId: typeof parsed.requestId === "string" ? parsed.requestId : null,
       nodeId: typeof parsed.nodeId === "string" ? parsed.nodeId : null,
     };
@@ -150,6 +141,7 @@ function AppRoot() {
 
 function Shell() {
   const { logout, user } = useAuth();
+  const { activeOrg } = useOrg();
   const qc = useQueryClient();
   const [location, setLocation] = useState<Location>(loadLocation);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -170,29 +162,49 @@ function Shell() {
     setLocation((prev) => ({ ...prev, section }));
   };
 
+  const navigateToWorkflow = (requestId: string) => {
+    setLocation({ section: "workflows", requestId, nodeId: null });
+  };
+
+  const selectNode = (nodeId: string | null) => {
+    setLocation((prev) => ({ ...prev, nodeId }));
+  };
+
+  const section = location.section;
+
   return (
     <div className="h-screen w-screen overflow-hidden flex bg-[var(--color-bg)] text-[var(--color-fg)]">
       <ShellRail
-        active={location.section}
+        active={section}
         onSelect={setSection}
         onBrandClick={() => setLocation({ section: "home", requestId: null, nodeId: null })}
         onUserClick={() => { qc.clear(); logout(); }}
       />
 
-      {location.section === "home" && <HomeView />}
-      {location.section === "my-work" && <MyWorkView />}
-      {location.section === "requests" && <RequestsView />}
-      {location.section === "workflows" && <WorkflowView />}
-      {location.section === "agents" && <OrgView />}
-      {location.section === "reports" && <ReportsView />}
-      {location.section === "policies" && <PoliciesView />}
-      {location.section === "integrations" && <IntegrationsView />}
-      {location.section === "teams" && <OrgView />}
-      {location.section === "settings" && <SettingsView scopedProjectId={null} />}
+      {section === "home" && <HomeView />}
+      {section === "my-work" && <MyWorkView />}
+
+      {section === "requests" && activeOrg && (
+        <RequestsView orgId={activeOrg.id} onOpenWorkflow={navigateToWorkflow} />
+      )}
+
+      {section === "workflows" && (
+        <WorkflowView
+          requestId={location.requestId}
+          selectedNodeId={location.nodeId}
+          onSelectNode={selectNode}
+          onBack={() => setLocation({ section: "requests", requestId: null, nodeId: null })}
+        />
+      )}
+
+      {section === "agents" && <AgentsView />}
+      {section === "reports" && <ReportsView />}
+      {section === "policies" && <PoliciesView />}
+      {section === "integrations" && <IntegrationsView />}
+      {section === "teams" && <OrgView />}
+      {section === "settings" && <SettingsView scopedProjectId={null} />}
 
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }
-
-
