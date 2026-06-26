@@ -139,6 +139,10 @@ func (s *fakeStore) AppendAuditEvent(_ context.Context, e repo.AuditEvent) error
 	return nil
 }
 
+func (s *fakeStore) CreateDocument(_ context.Context, _ *repo.Document) error {
+	return nil
+}
+
 type fakeAgent struct {
 	err       error
 	blockOnIT bool // when true, finance returns blocked_on:IT if no IT in upstream

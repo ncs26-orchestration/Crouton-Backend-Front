@@ -621,13 +621,14 @@ func (h *RequestsHandler) ListRequestAudit(c echo.Context) error {
 	eventList := make([]map[string]any, 0, len(events))
 	for _, e := range events {
 		eventList = append(eventList, map[string]any{
-			"id":         e.ID,
-			"request_id": e.RequestID,
-			"node_id":    e.NodeID,
-			"actor":      e.Actor,
-			"action":     e.Action,
-			"reason":     e.Reason,
-			"created_at": e.CreatedAt,
+			"id":          e.ID,
+			"request_id":  e.RequestID,
+			"node_id":     e.NodeID,
+			"actor":       e.Actor,
+			"action":      e.Action,
+			"reason":      e.Reason,
+			"document_id": e.DocumentID,
+			"created_at":  e.CreatedAt,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"events": eventList})
@@ -656,13 +657,14 @@ func (h *RequestsHandler) ListOrgAudit(c echo.Context) error {
 	eventList := make([]map[string]any, 0, len(events))
 	for _, e := range events {
 		eventList = append(eventList, map[string]any{
-			"id":         e.ID,
-			"request_id": e.RequestID,
-			"node_id":    e.NodeID,
-			"actor":      e.Actor,
-			"action":     e.Action,
-			"reason":     e.Reason,
-			"created_at": e.CreatedAt,
+			"id":          e.ID,
+			"request_id":  e.RequestID,
+			"node_id":     e.NodeID,
+			"actor":       e.Actor,
+			"action":      e.Action,
+			"reason":      e.Reason,
+			"document_id": e.DocumentID,
+			"created_at":  e.CreatedAt,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"events": eventList})
