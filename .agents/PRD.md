@@ -20,7 +20,7 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/m
 | F1 | Submit & track a request | ✅ | ✅ | – | ✅ | ✅ | ✅ |
 | F2 | Auto-planned workflow graph | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | F3 | Agents do the work (status progression) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| F4 | Live canvas (real-time SSE) | – | ⬜ | – | ⬜ | ⬜ | ⬜ |
+| F4 | Live canvas (real-time SSE) | – | ✅ | – | ✅ | ✅ | 🟡 |
 | F5 | Cross-department dependencies | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | F6 | Traceability / audit trail | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
 | F7 | Human executive approval | – | ⬜ | – | ⬜ | ⬜ | ⬜ |
