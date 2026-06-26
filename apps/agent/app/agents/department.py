@@ -11,11 +11,12 @@ here every department completes with real tasks and a plain-language status.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
+from app.agents.llm import complete_json, llm_available
 from app.agents.models import Decision, DependencyDecl, Flag, TaskItem
-from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -189,16 +190,76 @@ _PLAYBOOK = {
 }
 
 
-def _has_any_llm_key() -> bool:
-    """Check if any LLM provider key is configured."""
-    return any(
-        [
-            settings.anthropic_api_key,
-            settings.openai_api_key,
-            settings.google_api_key,
-            settings.groq_api_key,
-        ]
-    )
+# Role guidance per agent_type — gives the LLM the lens to reason through.
+_ROLE_GUIDANCE = {
+    "intake": "the Intake coordinator. Classify the request and identify the departments involved.",
+    "planning": "the Planning lead. Outline the cross-department plan and sequence the reviews.",
+    "finance": "the Finance department. Assess budget feasibility, financial impact, and ROI.",
+    "legal": "the Legal department. Check regulatory compliance and contracts; flag legal risks.",
+    "it": "the IT department. Evaluate technical feasibility, security, and systems integration.",
+    "hr": "the HR department. Plan staffing, hiring, and onboarding needs.",
+    "ops": "the Operations department. Plan logistics, facilities, and the operational timeline.",
+    "approval": "the Executive office. Compile the department decisions and flags for approval.",
+    "implementation": "the Implementation team. Execute the approved plan across departments.",
+    "report": "the Reporting function. Summarize the decisions, flags, and outcomes.",
+}
+
+_DEPT_SYSTEM = """You are {role}
+
+Review THIS specific request and respond ONLY with a JSON object:
+{{
+  "summary": "1-2 sentence assessment grounded in the actual request",
+  "flags": [{{"severity": "info|warning|critical", "message": "specific risk or note"}}],
+  "tasks": [{{"title": "concrete action you took", "status": "completed"}}],
+  "status_text": "one plain-language sentence for the UI"
+}}
+
+Be specific to the request (amounts, locations, systems, people) — do not give \
+generic boilerplate. Produce 3-5 tasks. Set blocked_on to null. Output JSON only."""
+
+
+_ALLOWED_SEVERITY = {"info", "warning", "critical"}
+# Map common off-contract severities the model might emit onto our scale.
+_SEVERITY_ALIASES = {"high": "critical", "medium": "warning", "low": "info", "error": "critical"}
+
+
+def _parse_decision(raw: str | None) -> Decision | None:
+    """Validate an LLM JSON decision, or return None to fall back."""
+    if not raw:
+        return None
+    try:
+        decision = Decision.model_validate_json(raw)
+    except Exception:  # noqa: BLE001 — malformed output falls back to deterministic
+        return None
+    if not decision.summary or not decision.status_text or not decision.tasks:
+        return None
+    # Normalize severities to the promised info|warning|critical scale rather
+    # than letting a free-form value (e.g. "high") through.
+    for flag in decision.flags:
+        sev = flag.severity.lower().strip()
+        flag.severity = sev if sev in _ALLOWED_SEVERITY else _SEVERITY_ALIASES.get(sev, "info")
+    # The LLM prompt asks for blocked_on: null, so clear any stray value the
+    # model emits. Cross-department blocking (F5) is driven by the deterministic
+    # playbook below, not the LLM path.
+    decision.blocked_on = None
+    return decision
+
+
+def _summarize_upstream(upstream_context: list[dict[str, Any]]) -> str:
+    """Compact, bounded view of upstream decisions for the prompt.
+
+    Trims the list (and each item to its key fields) so the context stays small
+    without slicing a serialized JSON string mid-token.
+    """
+    compact = [
+        {
+            "node": item.get("node_key") or item.get("key"),
+            "department": item.get("department"),
+            "summary": str(item.get("summary") or item.get("status_text") or "")[:300],
+        }
+        for item in upstream_context[-8:]
+    ]
+    return json.dumps(compact, ensure_ascii=False)
 
 
 async def run_department(
@@ -211,11 +272,24 @@ async def run_department(
 ) -> Decision:
     """Produce a department decision for one workflow node.
 
-    Returns a deterministic, department-specific decision when no LLM key is
-    available (the offline path the F3 done-check exercises).
+    Uses the configured LLM for real, request-specific reasoning; falls back to
+    the deterministic, department-specific playbook when no provider is
+    configured or the model output fails validation (the offline path the F3
+    done-check exercises).
     """
-    if not _has_any_llm_key():
-        logger.info("No LLM key configured, returning deterministic decision for %s", agent_type)
+    if llm_available():
+        role = _ROLE_GUIDANCE.get(agent_type, f"the {agent_type} function.")
+        user = f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
+        if upstream_context:
+            user += "\n\nUpstream department decisions so far:\n" + _summarize_upstream(
+                upstream_context
+            )
+        raw = await complete_json(_DEPT_SYSTEM.format(role=role), user)
+        decision = _parse_decision(raw)
+        if decision is not None:
+            logger.info("Decision from LLM for %s", agent_type)
+            return decision
+        logger.info("LLM decision unusable for %s, using deterministic playbook", agent_type)
 
     playbook = _PLAYBOOK.get(agent_type)
     if playbook is None:

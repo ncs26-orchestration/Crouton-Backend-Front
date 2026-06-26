@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.agents.llm import complete_json, llm_available
 from app.agents.models import Plan, PlanEdge, PlanNode
-from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -55,16 +55,93 @@ def _default_plan() -> Plan:
     )
 
 
-def _has_any_llm_key() -> bool:
-    """Check if any LLM provider key is configured."""
-    return any(
-        [
-            settings.anthropic_api_key,
-            settings.openai_api_key,
-            settings.google_api_key,
-            settings.groq_api_key,
-        ]
-    )
+# The fixed department catalog the intake agent must plan from. The
+# orchestrator only understands these stage keys, so any LLM plan that strays
+# outside them (or drops the required ends) is rejected for the default plan.
+_ALLOWED_KEYS = {
+    "intake",
+    "planning",
+    "finance_review",
+    "legal_review",
+    "it_assessment",
+    "hr_planning",
+    "ops_planning",
+    "exec_approval",
+    "implementation",
+    "report",
+}
+_REQUIRED_KEYS = {"intake", "exec_approval", "report"}
+
+_INTAKE_SYSTEM = """You are the intake planner for an AI Organization OS. Turn a \
+business request into a department workflow graph.
+
+Return ONLY a JSON object of this shape:
+{
+  "nodes": [{"key": str, "name": str, "agent_type": str, "department": str}],
+  "edges": [{"from": str, "to": str, "type": "sequence"}]
+}
+
+Choose node "key" values ONLY from this fixed set (omit stages the request does \
+not need, but keep the flow sensible):
+  intake (agent_type intake, dept Planning)
+  planning (agent_type planning, dept Planning)
+  finance_review (agent_type finance, dept Finance)
+  legal_review (agent_type legal, dept Legal)
+  it_assessment (agent_type it, dept IT)
+  hr_planning (agent_type hr, dept HR)
+  ops_planning (agent_type ops, dept Operations)
+  exec_approval (agent_type approval, dept Executive)
+  implementation (agent_type implementation, dept Operations)
+  report (agent_type report, dept Planning)
+
+Rules: always include intake, exec_approval, and report. The department reviews \
+(finance_review, legal_review, it_assessment) run in parallel after planning and \
+all feed exec_approval. After approval, hr_planning and ops_planning run, then \
+implementation, then report. Connect every node with edges so the graph flows \
+from intake to report. Output JSON only, no prose."""
+
+
+def _parse_plan(raw: str | None) -> Plan | None:
+    """Validate an LLM JSON plan against the fixed catalog, or return None."""
+    if not raw:
+        return None
+    try:
+        plan = Plan.model_validate_json(raw)
+    except Exception:  # noqa: BLE001 — malformed output falls back to default
+        return None
+    keys = {n.key for n in plan.nodes}
+    if not keys or not keys.issubset(_ALLOWED_KEYS):
+        return None
+    if not _REQUIRED_KEYS.issubset(keys):
+        return None
+    if not plan.edges:
+        return None
+    # Light well-formedness check: every edge must reference real nodes, and
+    # `report` must be reachable from `intake` — otherwise the orchestrator
+    # would just stall on a disconnected graph. Fall back to the default plan.
+    adjacency: dict[str, list[str]] = {k: [] for k in keys}
+    for edge in plan.edges:
+        if edge.from_ not in keys or edge.to not in keys:
+            return None
+        adjacency[edge.from_].append(edge.to)
+    if not _reaches("intake", "report", adjacency):
+        return None
+    return plan
+
+
+def _reaches(start: str, goal: str, adjacency: dict[str, list[str]]) -> bool:
+    """True if `goal` is reachable from `start` in the directed graph."""
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        node = stack.pop()
+        if node == goal:
+            return True
+        if node in seen:
+            continue
+        seen.add(node)
+        stack.extend(adjacency.get(node, []))
+    return False
 
 
 async def run_intake(
@@ -75,13 +152,19 @@ async def run_intake(
 ) -> Plan:
     """Plan a workflow for the given business request.
 
-    Returns a deterministic default plan when no LLM key is available.
+    Uses the configured LLM to reason about which departments the request needs;
+    falls back to the deterministic default plan when no provider is configured
+    or the model output fails validation.
     """
-    if not _has_any_llm_key():
-        logger.info("No LLM key configured, returning default plan")
-        return _default_plan()
+    if llm_available():
+        raw = await complete_json(
+            _INTAKE_SYSTEM,
+            f"Request title: {title}\nDescription: {description}\nPriority: {priority}",
+        )
+        plan = _parse_plan(raw)
+        if plan is not None:
+            logger.info("Intake plan from LLM (%d nodes)", len(plan.nodes))
+            return plan
+        logger.info("LLM intake plan unusable, using default plan")
 
-    # When an LLM key IS available, we still return the default plan
-    # for now. F3/AG-6 will wire the actual Pydantic AI agent.
-    logger.info("Returning default plan (LLM intake agent not yet wired)")
     return _default_plan()
