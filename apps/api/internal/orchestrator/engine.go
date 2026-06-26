@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -16,6 +17,28 @@ import (
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
+)
+
+// approvalAgentType marks the executive-approval gate. A node with this agent
+// type is a human decision point, not an agent step: the engine parks the
+// request there instead of running an agent, and a human resumes it via Approve.
+const approvalAgentType = "approval"
+
+// ApprovalDecision is a human's call on the executive gate.
+type ApprovalDecision string
+
+const (
+	ApprovalApprove ApprovalDecision = "approve"
+	ApprovalReject  ApprovalDecision = "reject"
+)
+
+var (
+	// ErrNotAwaitingApproval means the request is not parked at the gate, so
+	// there is nothing to approve or reject.
+	ErrNotAwaitingApproval = errors.New("request is not awaiting approval")
+	// ErrApprovalNodeMissing means a request is awaiting approval but has no
+	// executive-approval node — a malformed graph.
+	ErrApprovalNodeMissing = errors.New("approval node not found")
 )
 
 // AgentRunner runs one department node. *agentclient.Client satisfies it.
@@ -154,8 +177,17 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			return nil
 		}
 
-		for _, node := range eligible {
-			if err := e.runNode(ctx, req, node, byID, edges); err != nil {
+		// The executive-approval node is a human gate, not an agent step. Run
+		// every other eligible node first; if the gate is among them, park the
+		// request at awaiting_approval and stop. A human resumes it via Approve.
+		var gate *repo.WorkflowNode
+		for i := range eligible {
+			if eligible[i].AgentType == approvalAgentType {
+				node := eligible[i]
+				gate = &node
+				continue
+			}
+			if err := e.runNode(ctx, req, eligible[i], byID, edges); err != nil {
 				return err
 			}
 			completed++
@@ -165,6 +197,88 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			}
 			e.publishRequestEvent(requestID, "in_progress", progress)
 		}
+		if gate != nil {
+			return e.parkForApproval(ctx, requestID, *gate, completed*100/len(nodes))
+		}
+	}
+}
+
+// parkForApproval marks the executive-approval gate in_progress and parks the
+// whole request at awaiting_approval, then returns so the worker goroutine
+// exits. A human resumes the request through Approve. Restart recovery only
+// re-launches in_progress requests, so a parked request correctly keeps waiting
+// across a restart instead of auto-advancing.
+func (e *Engine) parkForApproval(ctx context.Context, requestID string, gate repo.WorkflowNode, progress int) error {
+	if err := e.store.UpdateNodeStatus(ctx, gate.ID, "in_progress", "Awaiting executive approval.", 50); err != nil {
+		return fmt.Errorf("mark approval in_progress: %w", err)
+	}
+	if err := e.store.UpdateRequestProgress(ctx, requestID, "awaiting_approval", progress); err != nil {
+		return fmt.Errorf("park for approval: %w", err)
+	}
+	e.log.Info("orchestrator: parked for executive approval",
+		slog.String("request_id", requestID), slog.String("node_id", gate.ID))
+	return nil
+}
+
+// Approve records a human decision on a request parked at the executive gate.
+// On approve it completes the gate node and moves the request back to
+// in_progress; on reject it stops the request at rejected. It performs only the
+// durable state transition — the caller resumes the worker by calling Start
+// after a successful approve, the same way CreateRequest launches it. (Keeping
+// the goroutine launch out of Approve makes the transition synchronous and
+// testable.) justification is the human's written reason and is required by the
+// caller; durable audit of the reason arrives with the audit trail (F6), so for
+// now it is logged.
+func (e *Engine) Approve(ctx context.Context, requestID string, decision ApprovalDecision, justification string) error {
+	req, err := e.store.GetRequest(ctx, requestID)
+	if err != nil {
+		return fmt.Errorf("get request: %w", err)
+	}
+	if req.Status != "awaiting_approval" {
+		return ErrNotAwaitingApproval
+	}
+
+	nodes, err := e.store.ListNodesByRequest(ctx, requestID)
+	if err != nil {
+		return fmt.Errorf("list nodes: %w", err)
+	}
+	var gate *repo.WorkflowNode
+	for i := range nodes {
+		if nodes[i].AgentType == approvalAgentType {
+			node := nodes[i]
+			gate = &node
+			break
+		}
+	}
+	if gate == nil {
+		return ErrApprovalNodeMissing
+	}
+
+	switch decision {
+	case ApprovalApprove:
+		if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", "Approved by the executive.", 100); err != nil {
+			return fmt.Errorf("complete approval node: %w", err)
+		}
+		// Keep the current progress; the resumed run loop recomputes it as the
+		// execution stages complete.
+		if err := e.store.UpdateRequestProgress(ctx, requestID, "in_progress", req.Progress); err != nil {
+			return fmt.Errorf("resume request: %w", err)
+		}
+		e.log.Info("orchestrator: request approved",
+			slog.String("request_id", requestID), slog.String("justification", justification))
+		return nil
+	case ApprovalReject:
+		if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", "Rejected by the executive.", 100); err != nil {
+			return fmt.Errorf("close approval node: %w", err)
+		}
+		if err := e.store.UpdateRequestProgress(ctx, requestID, "rejected", req.Progress); err != nil {
+			return fmt.Errorf("reject request: %w", err)
+		}
+		e.log.Info("orchestrator: request rejected",
+			slog.String("request_id", requestID), slog.String("justification", justification))
+		return nil
+	default:
+		return fmt.Errorf("invalid approval decision %q", decision)
 	}
 }
 
