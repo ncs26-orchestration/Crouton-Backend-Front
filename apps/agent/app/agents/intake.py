@@ -15,41 +15,42 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 
+def _node(key: str, name: str, agent_type: str, department: str) -> PlanNode:
+    return PlanNode(key=key, name=name, agent_type=agent_type, department=department)
+
+
+def _edge(src: str, tgt: str) -> PlanEdge:
+    return PlanEdge(**{"from": src, "to": tgt, "type": "sequence"})
+
+
 def _default_plan() -> Plan:
     """Deterministic fallback plan with ~10 stages and parallel branches."""
     return Plan(
         nodes=[
-            PlanNode(key="intake", name="Intake & Classification", agent_type="intake", department="Planning"),
-            PlanNode(key="planning", name="Strategic Planning", agent_type="planning", department="Planning"),
-            PlanNode(key="finance_review", name="Finance Review", agent_type="finance", department="Finance"),
-            PlanNode(key="legal_review", name="Legal Review", agent_type="legal", department="Legal"),
-            PlanNode(key="it_assessment", name="IT Assessment", agent_type="it", department="IT"),
-            PlanNode(key="hr_planning", name="HR Planning", agent_type="hr", department="HR"),
-            PlanNode(key="ops_planning", name="Operations Planning", agent_type="ops", department="Operations"),
-            PlanNode(
-                key="exec_approval", name="Executive Approval", agent_type="approval", department="Executive"
-            ),
-            PlanNode(
-                key="implementation",
-                name="Implementation",
-                agent_type="implementation",
-                department="Operations",
-            ),
-            PlanNode(key="report", name="Review & Report", agent_type="report", department="Planning"),
+            _node("intake", "Intake & Classification", "intake", "Planning"),
+            _node("planning", "Strategic Planning", "planning", "Planning"),
+            _node("finance_review", "Finance Review", "finance", "Finance"),
+            _node("legal_review", "Legal Review", "legal", "Legal"),
+            _node("it_assessment", "IT Assessment", "it", "IT"),
+            _node("hr_planning", "HR Planning", "hr", "HR"),
+            _node("ops_planning", "Operations Planning", "ops", "Operations"),
+            _node("exec_approval", "Executive Approval", "approval", "Executive"),
+            _node("implementation", "Implementation", "implementation", "Operations"),
+            _node("report", "Review & Report", "report", "Planning"),
         ],
         edges=[
-            PlanEdge(**{"from": "intake", "to": "planning", "type": "sequence"}),
-            PlanEdge(**{"from": "planning", "to": "finance_review", "type": "sequence"}),
-            PlanEdge(**{"from": "planning", "to": "legal_review", "type": "sequence"}),
-            PlanEdge(**{"from": "planning", "to": "it_assessment", "type": "sequence"}),
-            PlanEdge(**{"from": "finance_review", "to": "exec_approval", "type": "sequence"}),
-            PlanEdge(**{"from": "legal_review", "to": "exec_approval", "type": "sequence"}),
-            PlanEdge(**{"from": "it_assessment", "to": "exec_approval", "type": "sequence"}),
-            PlanEdge(**{"from": "exec_approval", "to": "hr_planning", "type": "sequence"}),
-            PlanEdge(**{"from": "exec_approval", "to": "ops_planning", "type": "sequence"}),
-            PlanEdge(**{"from": "hr_planning", "to": "implementation", "type": "sequence"}),
-            PlanEdge(**{"from": "ops_planning", "to": "implementation", "type": "sequence"}),
-            PlanEdge(**{"from": "implementation", "to": "report", "type": "sequence"}),
+            _edge("intake", "planning"),
+            _edge("planning", "finance_review"),
+            _edge("planning", "legal_review"),
+            _edge("planning", "it_assessment"),
+            _edge("finance_review", "exec_approval"),
+            _edge("legal_review", "exec_approval"),
+            _edge("it_assessment", "exec_approval"),
+            _edge("exec_approval", "hr_planning"),
+            _edge("exec_approval", "ops_planning"),
+            _edge("hr_planning", "implementation"),
+            _edge("ops_planning", "implementation"),
+            _edge("implementation", "report"),
         ],
     )
 
@@ -78,8 +79,7 @@ async def run_intake(
         logger.info("No LLM key configured, returning default plan")
         return _default_plan()
 
-    # When an LLM key IS available, we still return the default plan for now.
-    # A future feature (F3/AG-6) will wire up the actual Pydantic AI agent
-    # with structured output and tool calling.
+    # When an LLM key IS available, we still return the default plan
+    # for now. F3/AG-6 will wire the actual Pydantic AI agent.
     logger.info("Returning default plan (LLM intake agent not yet wired)")
     return _default_plan()

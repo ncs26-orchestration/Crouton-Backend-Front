@@ -2,6 +2,7 @@ package http
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
@@ -11,7 +12,6 @@ import (
 	"github.com/ncs26-orchestration/solution/apps/api/internal/engine/elsa3"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/handler"
 	authmw "github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
-	"strings"
 	"github.com/redis/go-redis/v9"
 )
 
