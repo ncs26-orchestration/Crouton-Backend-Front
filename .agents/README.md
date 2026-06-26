@@ -11,6 +11,7 @@ aligned with the MVP goal.
 | `CONTEXT.md` | Project identity, what's built, what's next, key decisions. Start here. |
 | `MVP-SPEC.md` | Exact specification of what the MVP demo must look like and do. |
 | `PRD.md` | **Umbrella PRD** for the AI Organization OS, with the live **feature status tracker** (built vs not). Start here for status. |
+| `PRD_MOBILE.md` | PRD for the **Flutter mobile app** (separate repo). Client of this backend's contracts; lists the few backend additions mobile needs here. |
 | `PRD-BACKEND.md` | **PRD** for the Go team: schema, HTTP + SSE contract, orchestration engine, seeding. Owns the shared contract. |
 | `PRD-AGENT.md` | **PRD** for the Agent team: the Pydantic AI agent layer, tools, agent-declared dependencies. |
 | `PRD-FRONTEND.md` | **PRD** for the Frontend team: shell nav, the 3-panel live canvas, SSE client, design. |
