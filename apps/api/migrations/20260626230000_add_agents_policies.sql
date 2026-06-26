@@ -12,7 +12,9 @@ CREATE TABLE agents (
     name          TEXT NOT NULL,
     avatar        TEXT NOT NULL DEFAULT '',
     capabilities  TEXT NOT NULL DEFAULT '',
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- One agent per type per org; the seed inserts exactly one of each.
+    UNIQUE (org_id, agent_type)
 );
 
 CREATE INDEX idx_agents_org ON agents(org_id);

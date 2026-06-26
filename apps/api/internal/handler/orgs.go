@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
 )
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9\-]*[a-z0-9]$`)
@@ -97,55 +98,35 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	// Seed standard department teams, agents, and starter policies (F10).
-	type deptSeed struct {
-		teamID       string
-		name         string
-		agentType    string
-		agentName    string
-		capabilities string
-	}
-	depts := []deptSeed{
-		{"team_" + randomHex(8), "Finance", "finance", "Finance Agent", "Budget analysis, spend approval, financial risk assessment, ROI calculation"},
-		{"team_" + randomHex(8), "Legal", "legal", "Legal Agent", "Contract review, regulatory compliance, risk flagging, policy advisory"},
-		{"team_" + randomHex(8), "IT", "it", "IT Agent", "Technical feasibility, security assessment, infrastructure planning, systems integration"},
-		{"team_" + randomHex(8), "HR", "hr", "HR Agent", "Staffing assessment, hiring plan, onboarding logistics, people ops"},
-		{"team_" + randomHex(8), "Operations", "ops", "Operations Agent", "Logistics planning, facilities, timeline management, execution coordination"},
-		{"team_" + randomHex(8), "Planning", "planning", "Planning Agent", "Workflow planning, dependency mapping, timeline estimation"},
-		{"team_" + randomHex(8), "Executive", "approval", "Executive Approver", "Strategic decision-making, cross-functional review, approval authority"},
-	}
-	for _, d := range depts {
+	// Seed the standard department directory (F10): one team per department, an
+	// agent per team, and the starter policies. The agent/policy content lives
+	// in internal/orgdir so this path and the demo seed share one source.
+	teamByDept := make(map[string]string, len(orgdir.Agents))
+	for _, a := range orgdir.Agents {
+		if _, ok := teamByDept[a.Department]; ok {
+			continue
+		}
+		teamID := "team_" + randomHex(8)
+		teamByDept[a.Department] = teamID
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO teams (id, org_id, name, description) VALUES ($1, $2, $3, $4)
-		`, d.teamID, orgID, d.name, d.name+" department"); err != nil {
-			h.logger.Error("create org: seed team", slog.String("name", d.name), slog.String("err", err.Error()))
+		`, teamID, orgID, a.Department, a.Department+" department"); err != nil {
+			h.logger.Error("create org: seed team", slog.String("name", a.Department), slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
+	}
+	for _, a := range orgdir.Agents {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities) VALUES ($1, $2, $3, $4, $5, $6)
-		`, "agent_"+randomHex(8), orgID, d.teamID, d.agentType, d.agentName, d.capabilities); err != nil {
-			h.logger.Error("create org: seed agent", slog.String("name", d.name), slog.String("err", err.Error()))
+		`, "agent_"+randomHex(8), orgID, teamByDept[a.Department], a.AgentType, a.Name, a.Capabilities); err != nil {
+			h.logger.Error("create org: seed agent", slog.String("type", a.AgentType), slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
 	}
-
-	// Seed starter department policies (one per dept).
-	type policySeed struct {
-		teamID string
-		title  string
-		body   string
-	}
-	policies := []policySeed{
-		{depts[0].teamID, "Finance Policy", "All expenditures over $10k require executive approval. Budget allocations must align with quarterly planning. Vendor contracts must include payment terms and cancellation clauses."},
-		{depts[1].teamID, "Legal Policy", "All contracts must be reviewed for regulatory compliance. Non-disclosure agreements follow the standard template. Data privacy laws (GDPR, CCPA) apply to any cross-border data handling."},
-		{depts[2].teamID, "IT Policy", "New systems must pass a security assessment. Software procurement follows the approved vendor list. Infrastructure changes require change management approval."},
-		{depts[3].teamID, "HR Policy", "New headcount requires approved job descriptions and budget allocation. Onboarding includes equipment provisioning, system access, and compliance training."},
-		{depts[4].teamID, "Operations Policy", "Project timelines must account for dependencies and buffer time. Vendor onboarding follows the standard integration checklist."},
-	}
-	for _, p := range policies {
+	for _, p := range orgdir.Policies {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO department_policies (id, org_id, team_id, title, body) VALUES ($1, $2, $3, $4, $5)
-		`, "pol_"+randomHex(8), orgID, p.teamID, p.title, p.body); err != nil {
+		`, "pol_"+randomHex(8), orgID, teamByDept[p.Department], p.Title, p.Body); err != nil {
 			h.logger.Error("create org: seed policy", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
@@ -905,7 +886,7 @@ func (h *OrgsHandler) ListAgents(c echo.Context) error {
 	if err := rows.Err(); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	return c.JSON(http.StatusOK, result)
+	return c.JSON(http.StatusOK, map[string]any{"agents": result})
 }
 
 // ── Policy endpoints (F10) ─────────────────────────────────────────────────────
@@ -958,7 +939,7 @@ func (h *OrgsHandler) ListPolicies(c echo.Context) error {
 	if err := rows.Err(); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	return c.JSON(http.StatusOK, result)
+	return c.JSON(http.StatusOK, map[string]any{"policies": result})
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────

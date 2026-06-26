@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,6 +25,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
@@ -66,43 +68,6 @@ var teams = []teamSpec{
 	{"team_seed_it", "IT", "Systems, security, provisioning", "it.lead@acme.test"},
 	{"team_seed_hr", "HR", "Hiring, onboarding, people ops", "hr.lead@acme.test"},
 	{"team_seed_ops", "Operations", "Execution, logistics, delivery", "ops.lead@acme.test"},
-}
-
-// agentSpec is one seeded department agent linked to a team.
-type agentSpec struct {
-	id           string
-	agentType    string
-	name         string
-	capabilities string
-}
-
-var agents = []agentSpec{
-	{"agent_seed_finance", "finance", "Finance Agent", "Budget analysis, spend approval, financial risk assessment, ROI calculation"},
-	{"agent_seed_legal", "legal", "Legal Agent", "Contract review, regulatory compliance, risk flagging, policy advisory"},
-	{"agent_seed_it", "it", "IT Agent", "Technical feasibility, security assessment, infrastructure planning, systems integration"},
-	{"agent_seed_hr", "hr", "HR Agent", "Staffing assessment, hiring plan, onboarding logistics, people ops"},
-	{"agent_seed_ops", "ops", "Operations Agent", "Logistics planning, facilities, timeline management, execution coordination"},
-}
-
-// policySpec is one seeded department policy.
-type policySpec struct {
-	id     string
-	teamID string
-	title  string
-	body   string
-}
-
-var policies = []policySpec{
-	{"pol_seed_finance", "team_seed_finance", "Finance Policy",
-		"All expenditures over $10k require executive approval. Budget allocations must align with quarterly planning."},
-	{"pol_seed_legal", "team_seed_legal", "Legal Policy",
-		"All contracts must be reviewed for regulatory compliance. Non-disclosure agreements follow the standard template."},
-	{"pol_seed_it", "team_seed_it", "IT Policy",
-		"New systems must pass a security assessment. Software procurement follows the approved vendor list."},
-	{"pol_seed_hr", "team_seed_hr", "HR Policy",
-		"New headcount requires approved job descriptions and budget allocation. Onboarding includes equipment provisioning and system access."},
-	{"pol_seed_ops", "team_seed_ops", "Operations Policy",
-		"Project timelines must account for dependencies and buffer time. Vendor onboarding follows the standard integration checklist."},
 }
 
 // graphProfile describes how a request's workflow graph should look: which
@@ -241,8 +206,8 @@ func main() {
 	log.Printf("  org          %s (slug %q)", demoOrgName, demoOrgSlug)
 	log.Printf("  users        %d", len(users))
 	log.Printf("  teams        %d", len(teams))
-	log.Printf("  agents       %d", len(agents))
-	log.Printf("  policies     %d", len(policies))
+	log.Printf("  agents       %d", counts.agents)
+	log.Printf("  policies     %d", counts.policies)
 	log.Printf("  requests     %d (%d nodes, %d edges, %d tasks, %d deps, %d audit events)", len(requests), counts.nodes, counts.edges, counts.tasks, counts.deps, counts.auditEvents)
 	log.Println("  login    founder@acme.test / password  (same password for every @acme.test user)")
 }
@@ -270,10 +235,19 @@ func seed(ctx context.Context, pool *pgxpool.Pool) (seedCounts, error) {
 	if err := seedTeams(ctx, pool, userIDs); err != nil {
 		return seedCounts{}, fmt.Errorf("teams: %w", err)
 	}
-	if err := seedAgents(ctx, pool); err != nil {
+	// Department directory (agents + policies). The canonical content lives in
+	// internal/orgdir and is shared with the org-create handler; here we link it
+	// to the demo teams by name.
+	teamByName := make(map[string]string, len(teams))
+	for _, t := range teams {
+		teamByName[t.name] = t.id
+	}
+	nAgents, err := seedAgents(ctx, pool, teamByName)
+	if err != nil {
 		return seedCounts{}, fmt.Errorf("agents: %w", err)
 	}
-	if err := seedPolicies(ctx, pool); err != nil {
+	nPolicies, err := seedPolicies(ctx, pool, teamByName)
+	if err != nil {
 		return seedCounts{}, fmt.Errorf("policies: %w", err)
 	}
 	counts, err := seedRequests(ctx, pool, userIDs)
@@ -285,6 +259,8 @@ func seed(ctx context.Context, pool *pgxpool.Pool) (seedCounts, error) {
 		return seedCounts{}, fmt.Errorf("audit events: %w", err)
 	}
 	counts.auditEvents = auditCount
+	counts.agents = nAgents
+	counts.policies = nPolicies
 	return counts, nil
 }
 
@@ -360,6 +336,8 @@ type seedCounts struct {
 	tasks       int
 	deps        int
 	auditEvents int
+	agents      int
+	policies    int
 }
 
 func seedRequests(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) (seedCounts, error) {
@@ -705,31 +683,43 @@ func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64
 	return count, nil
 }
 
-// seedAgents creates one agent row per seeded department team.
-func seedAgents(ctx context.Context, pool *pgxpool.Pool) error {
-	for i, a := range agents {
-		if i >= len(teams) {
-			break
+// seedAgents creates one agent per department that has a seeded demo team.
+// Cross-cutting departments without a demo team (Planning, Executive) are
+// skipped. Returns the number inserted.
+func seedAgents(ctx context.Context, pool *pgxpool.Pool, teamByName map[string]string) (int, error) {
+	count := 0
+	for _, a := range orgdir.Agents {
+		teamID, ok := teamByName[a.Department]
+		if !ok {
+			continue
 		}
 		if _, err := pool.Exec(ctx, `
 			INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities)
 			VALUES ($1, $2, $3, $4, $5, $6)
-		`, a.id, demoOrgID, teams[i].id, a.agentType, a.name, a.capabilities); err != nil {
-			return fmt.Errorf("insert agent %s: %w", a.id, err)
+		`, "agent_seed_"+a.AgentType, demoOrgID, teamID, a.AgentType, a.Name, a.Capabilities); err != nil {
+			return count, fmt.Errorf("insert agent %s: %w", a.AgentType, err)
 		}
+		count++
 	}
-	return nil
+	return count, nil
 }
 
-// seedPolicies creates starter department policies for each seeded team.
-func seedPolicies(ctx context.Context, pool *pgxpool.Pool) error {
-	for _, p := range policies {
+// seedPolicies creates the starter policies for each department that has a
+// seeded demo team. Returns the number inserted.
+func seedPolicies(ctx context.Context, pool *pgxpool.Pool, teamByName map[string]string) (int, error) {
+	count := 0
+	for _, p := range orgdir.Policies {
+		teamID, ok := teamByName[p.Department]
+		if !ok {
+			continue
+		}
 		if _, err := pool.Exec(ctx, `
 			INSERT INTO department_policies (id, org_id, team_id, title, body)
 			VALUES ($1, $2, $3, $4, $5)
-		`, p.id, demoOrgID, p.teamID, p.title, p.body); err != nil {
-			return fmt.Errorf("insert policy %s: %w", p.id, err)
+		`, "pol_seed_"+strings.ToLower(p.Department), demoOrgID, teamID, p.Title, p.Body); err != nil {
+			return count, fmt.Errorf("insert policy %s: %w", p.Title, err)
 		}
+		count++
 	}
-	return nil
+	return count, nil
 }

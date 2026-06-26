@@ -55,12 +55,12 @@ curl -fsS "$API/orgs" -H "authorization: Bearer ${token}" \
 
 say "fresh org has seeded agents (F10)"
 curl -fsS "$API/orgs/${org_id}/agents" -H "authorization: Bearer ${token}" \
-  | jq -e '(length >= 5) and (.[0].agent_type != null)' >/dev/null \
+  | jq -e '(.agents | length >= 5) and (.agents[0].agent_type != null)' >/dev/null \
   || fail "new org should have >= 5 seeded agents"
 
 say "fresh org has seeded policies (F10)"
 curl -fsS "$API/orgs/${org_id}/policies" -H "authorization: Bearer ${token}" \
-  | jq -e '(length >= 1) and (.[0].title != null)' >/dev/null \
+  | jq -e '(.policies | length >= 1) and (.policies[0].title != null)' >/dev/null \
   || fail "new org should have seeded policies"
 
 # --- F1/F2: submit a request and get an auto-planned workflow graph ---
