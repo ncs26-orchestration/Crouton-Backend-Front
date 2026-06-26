@@ -68,15 +68,19 @@ jobs:
           build migrate apps/api/Dockerfile migrate
 
       - name: Copy compose file to VM
+        # scp into /tmp (the deploy user can't write /opt/aios directly); the
+        # next step moves it into place with sudo.
         run: |
-          gcloud compute scp compose.deploy.yaml "${VM}:/opt/aios/compose.deploy.yaml" \
+          gcloud compute scp compose.deploy.yaml "${VM}:/tmp/compose.deploy.yaml" \
             --project "${PROJECT}" --zone "${ZONE}" --quiet
 
       - name: Pull and restart on the VM
         run: |
           gcloud compute ssh "${VM}" --project "${PROJECT}" --zone "${ZONE}" \
             --quiet --command "\
-            set -e; cd /opt/aios; \
+            set -e; \
+            sudo install -m 0644 /tmp/compose.deploy.yaml /opt/aios/compose.deploy.yaml; \
+            cd /opt/aios; \
             sudo env REGISTRY='${REGISTRY}' TAG='${GITHUB_SHA}' docker compose -f compose.deploy.yaml pull; \
             sudo env REGISTRY='${REGISTRY}' TAG='${GITHUB_SHA}' docker compose -f compose.deploy.yaml up -d --remove-orphans --wait --wait-timeout 600; \
             sudo docker compose -f compose.deploy.yaml ps"
