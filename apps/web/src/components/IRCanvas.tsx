@@ -155,7 +155,7 @@ export function IRCanvas({
             empty canvas
           </div>
           <p className="text-sm text-[var(--color-fg-muted)] leading-relaxed" style={{ fontWeight: 300 }}>
-            Describe a process in the composer below. Pablo will extract actors, tasks, decisions
+            Describe a process in the composer below. Crouton will extract actors, tasks, decisions
             and bind them to your{" "}
             <span className="text-[var(--color-fg)]" style={{ fontWeight: 400 }}>
               information system

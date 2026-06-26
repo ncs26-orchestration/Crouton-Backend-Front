@@ -245,7 +245,7 @@ export function OrgSetupView({ onDone }: Props) {
                   </label>
                   <div className="flex items-center rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] focus-within:border-[var(--color-brand)] focus-within:ring-2 focus-within:ring-[var(--color-accent-border)] transition-colors overflow-hidden">
                     <span className="px-3 py-2 text-sm text-[var(--color-fg-muted)] select-none border-r border-[var(--color-border)]">
-                      pablo/
+                      crouton/
                     </span>
                     <input
                       id="org-slug"
@@ -282,7 +282,7 @@ export function OrgSetupView({ onDone }: Props) {
                 className="px-8 pb-8 flex flex-col gap-5"
               >
                 <p className="text-sm text-[var(--color-fg-muted)]">
-                  How will you primarily use Pablo?
+                  How will you primarily use Crouton?
                 </p>
 
                 <div className="flex flex-col gap-3">

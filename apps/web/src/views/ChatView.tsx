@@ -418,7 +418,7 @@ export function ChatView({ chatId }: Props) {
                         className="flex items-center gap-2 text-[11px] text-[var(--color-fg-muted)] italic pl-1"
                       >
                         <Loader2 size={11} className="animate-spin text-[var(--color-brand)]" />
-                        Pablo is drafting the workflow…
+                        Crouton is drafting the workflow…
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -525,7 +525,7 @@ export function ChatView({ chatId }: Props) {
                         placeholder={
                           workflow
                             ? "Ask for a change or refinement…"
-                            : "Paste a process description or drop a PDF — Pablo will extract actors, tasks, decisions."
+                            : "Paste a process description or drop a PDF — Crouton will extract actors, tasks, decisions."
                         }
                         rows={1}
                         disabled={sendMessage.isPending}
@@ -991,7 +991,7 @@ function EmptyThread() {
       </div>
       <div className="text-[11.5px] text-[var(--color-fg-muted)] mt-1 leading-relaxed">
         Describe a workflow below — in any language. You can also paste a process transcript,
-        procedure, or instructions. Pablo extracts actors, tasks, and decisions, and you refine
+        procedure, or instructions. Crouton extracts actors, tasks, and decisions, and you refine
         by chatting.
       </div>
     </div>
@@ -1019,7 +1019,7 @@ function EmptyCanvas({ hasChat }: { hasChat: boolean }) {
         </h2>
         <p className="text-[12.5px] text-[var(--color-fg-muted)] leading-relaxed mt-2">
           Use the composer on the left — type a description, paste a process, or drop a document.
-          Pablo will extract the workflow and render it here. Refine iteratively by chatting.
+          Crouton will extract the workflow and render it here. Refine iteratively by chatting.
         </p>
       </div>
     </div>

@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    allowedHosts: ["pabloworkflow.up.railway.app"],
+    allowedHosts: ["croutonworkflow.up.railway.app"],
     proxy: {
       "/api": {
         target: process.env.API_URL ?? "http://localhost:8080",

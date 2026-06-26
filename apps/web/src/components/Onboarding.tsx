@@ -56,7 +56,7 @@ export function Onboarding({ is, onDismiss, onRefresh, onLoadSample }: Props) {
                 Welcome to
               </div>
               <div className="text-xl font-semibold text-[var(--color-fg)] flex items-center gap-2">
-                Pablo
+                Crouton
                 <span className="text-xs font-normal px-1.5 py-0.5 rounded bg-[var(--color-accent-bg)] text-[var(--color-accent)]">
                   workspace
                 </span>
@@ -64,9 +64,9 @@ export function Onboarding({ is, onDismiss, onRefresh, onLoadSample }: Props) {
             </div>
           </div>
           <p className="text-sm text-[var(--color-fg-muted)] leading-relaxed">
-            Pablo sits <span className="text-[var(--color-fg)] font-medium">above your existing engine</span>{" "}
+            Crouton sits <span className="text-[var(--color-fg)] font-medium">above your existing engine</span>{" "}
             — it never creates users or replaces anything. Describe a process in plain language;
-            Pablo grounds it in your IS and compiles a deployable workflow your engine runs.
+            Crouton grounds it in your IS and compiles a deployable workflow your engine runs.
           </p>
         </div>
 

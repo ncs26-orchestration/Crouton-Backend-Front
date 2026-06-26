@@ -52,7 +52,7 @@ export function LeftRail({
         transition={{ type: "spring", stiffness: 340, damping: 20 }}
       >
         <BrandMark size={28} />
-        <Tooltip label="Pablo · workspace" />
+        <Tooltip label="Crouton · workspace" />
       </motion.div>
 
       <div className="h-px w-6 bg-[var(--color-border)] mb-3" />
@@ -173,14 +173,14 @@ export function LeftRail({
         <div className="relative group">
           <motion.button
             onClick={onOpenHelp}
-            aria-label="About Pablo"
+            aria-label="About Crouton"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.92 }}
             className="size-9 flex items-center justify-center rounded-lg text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)] transition-colors"
           >
             <HelpCircle size={16} strokeWidth={1.75} />
           </motion.button>
-          <Tooltip label="About Pablo" />
+          <Tooltip label="About Crouton" />
         </div>
       </div>
     </nav>
