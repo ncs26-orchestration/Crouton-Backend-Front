@@ -20,20 +20,20 @@ func NewMeHandler(logger *slog.Logger, db *pgxpool.Pool) *MeHandler {
 }
 
 type workItemResponse struct {
-	ID              string     `json:"id"`
-	OrgID           string     `json:"org_id"`
-	OrgName         string     `json:"org_name"`
-	Title           string     `json:"title"`
-	Description     string     `json:"description"`
-	RequesterUserID int64      `json:"requester_user_id"`
-	RequesterName   string     `json:"requester_name"`
-	Priority        string     `json:"priority"`
-	Status          string     `json:"status"`
-	Progress        int        `json:"progress"`
-	CreatedAt       time.Time  `json:"created_at"`
-	IsRequester     bool       `json:"is_requester"`
-	StageName       string     `json:"stage_name,omitempty"`
-	StageStatus     string     `json:"stage_status,omitempty"`
+	ID              string    `json:"id"`
+	OrgID           string    `json:"org_id"`
+	OrgName         string    `json:"org_name"`
+	Title           string    `json:"title"`
+	Description     string    `json:"description"`
+	RequesterUserID int64     `json:"requester_user_id"`
+	RequesterName   string    `json:"requester_name"`
+	Priority        string    `json:"priority"`
+	Status          string    `json:"status"`
+	Progress        int       `json:"progress"`
+	CreatedAt       time.Time `json:"created_at"`
+	IsRequester     bool      `json:"is_requester"`
+	StageName       string    `json:"stage_name,omitempty"`
+	StageStatus     string    `json:"stage_status,omitempty"`
 }
 
 func (h *MeHandler) GetMyWork(c echo.Context) error {
