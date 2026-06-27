@@ -520,7 +520,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			NodeID:    &node.ID,
 			Actor:     "engine",
 			Action:    "agent.fallback",
-			Reason:    node.Name + " — agent unavailable, used deterministic fallback: " + err.Error(),
+			Reason:    fallbackReason(node.Name, err),
 		}); err != nil {
 			e.log.Warn("failed to audit agent.fallback", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 		}
@@ -1005,4 +1005,15 @@ func shortID() string {
 		panic("crypto/rand unavailable: " + err.Error())
 	}
 	return hex.EncodeToString(b)
+}
+
+// fallbackReason builds the human-readable audit reason for an agent fallback.
+// The raw error (which can contain internal host names and DNS detail like
+// "dial tcp: lookup agent ... no such host") stays in the logs; users and the
+// report only see a clean explanation of what happened.
+func fallbackReason(nodeName string, err error) string {
+	if errors.Is(err, agentclient.ErrAgentUnavailable) {
+		return nodeName + " — the AI agent was unavailable, so this stage completed with the built-in deterministic review."
+	}
+	return nodeName + " — the AI agent could not complete this stage, so it completed with the built-in deterministic review."
 }
