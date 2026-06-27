@@ -46,21 +46,21 @@ const STAGES: Stage[] = [
     title: "Intake & planning",
     actor: "agents",
     actorLabel: "Agent",
-    desc: "An intake agent reads the request and plans which departments must weigh in, and in what order.",
+    desc: "An intake agent classifies the request and picks only the departments it actually needs — including any you've added — then orders the reviews. A laptop buy and a new hire get different workflows.",
   },
   {
     icon: Users,
     title: "Department reviews",
     actor: "agents",
     actorLabel: "Agents · in parallel",
-    desc: "Finance, Legal and IT review at once — budget, compliance, feasibility. One can wait on another (e.g. Finance needs IT's cost estimate first).",
+    desc: "Each department reviews against its own policies and reaches a real decision: approve, approve with conditions, flag a risk, wait on another department (Finance needs IT's cost first), or reject. Decisions cite the policy behind them.",
   },
   {
     icon: ShieldCheck,
     title: "Executive approval",
     actor: "you",
     actorLabel: "You",
-    desc: "Once reviews clear, the request waits for your decision. Approve or reject with a written reason — from My Work.",
+    desc: "Once reviews clear, the request waits for your decision with every flag and condition surfaced. Approve or reject with a written reason — from My Work. A hard compliance breach can stop a request before it reaches you.",
   },
   {
     icon: Hammer,
@@ -129,9 +129,9 @@ export function HowItWorks({ open, onClose, onNavigate }: Props) {
 
             <div className="px-6 py-5">
               <p className="text-sm text-[var(--color-fg-muted)] leading-relaxed max-w-[60ch]">
-                You submit a business request; a team of department agents reviews it, an executive
-                approves it, and it gets executed — with every decision logged. Here's the flow and
-                what you do at each step.
+                You submit a business request; a team of department agents reviews it against policy
+                and each reaches a real decision, an executive approves it, and it gets executed — with
+                every decision and the policy behind it logged. Here's the flow and what you do at each step.
               </p>
 
               {/* Pipeline */}
