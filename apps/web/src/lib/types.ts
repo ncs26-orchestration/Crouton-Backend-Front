@@ -290,6 +290,17 @@ export interface NodeAssignment {
   user_email: string;
 }
 
+// A node parked at awaiting_review that the current user may sign off, with the
+// context needed to render it in their work queue.
+export interface NodeVerification {
+  node_id: string;
+  request_id: string;
+  node_name: string;
+  department: string;
+  request_title: string;
+  assigned_to_me: boolean;
+}
+
 // A human's call on the executive-approval gate (F7).
 export type ApprovalDecision = "approve" | "reject";
 
