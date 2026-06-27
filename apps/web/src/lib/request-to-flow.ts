@@ -8,7 +8,7 @@
  */
 
 import type { Node, Edge } from "@xyflow/react";
-import type { WorkflowNodeData, WorkflowEdgeData } from "./types";
+import type { WorkflowNodeData, WorkflowEdgeData, NodeAssignment } from "./types";
 import { nodeStatusToken } from "./request-format";
 
 export const NODE_WIDTH = 210;
@@ -27,9 +27,18 @@ export interface FlowResult {
 export function requestToFlow(
   workflowNodes: WorkflowNodeData[],
   workflowEdges: WorkflowEdgeData[],
+  assignments: NodeAssignment[] = [],
 ): FlowResult {
   if (workflowNodes.length === 0) {
     return { nodes: [], edges: [] };
+  }
+
+  // Group assignee names per node so the card can show their avatars.
+  const assigneesByNode = new Map<string, string[]>();
+  for (const a of assignments) {
+    const list = assigneesByNode.get(a.node_id) ?? [];
+    list.push(a.user_name || a.user_email);
+    assigneesByNode.set(a.node_id, list);
   }
 
   // Build adjacency and in-degree for topological ranking.
@@ -99,7 +108,7 @@ export function requestToFlow(
       id: n.id,
       type: "department",
       position: pos,
-      data: { ...n },
+      data: { ...n, assignees: assigneesByNode.get(n.id) ?? [] },
       style: { width: NODE_WIDTH, height: NODE_HEIGHT },
     };
   });

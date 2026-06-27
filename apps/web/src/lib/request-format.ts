@@ -19,6 +19,8 @@ export function statusBadgeClass(status: RequestStatus): string {
       return "bg-[var(--color-success)]/12 text-[var(--color-success)]";
     case "rejected":
       return "bg-[var(--color-danger)]/12 text-[var(--color-danger)]";
+    case "draft":
+      return "bg-[var(--color-warning)]/15 text-[var(--color-warning-fg)]";
     default:
       return "bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]";
   }
@@ -63,6 +65,8 @@ export function nodeStatusColorClass(status: NodeStatus): string {
       return "bg-[var(--color-success)]";
     case "in_progress":
       return "bg-[var(--color-brand)]";
+    case "awaiting_review":
+      return "bg-[var(--color-warning)]";
     case "blocked":
       return "bg-[var(--color-danger)]";
     default:
@@ -78,6 +82,8 @@ export function nodeStatusToken(status: NodeStatus): string {
       return "var(--color-success)";
     case "in_progress":
       return "var(--color-brand)";
+    case "awaiting_review":
+      return "var(--color-warning)";
     case "blocked":
       return "var(--color-danger)";
     default:

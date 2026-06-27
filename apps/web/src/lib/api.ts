@@ -18,6 +18,7 @@ import type {
 	Incident,
 	IncidentMessage,
 	Machine,
+	NodeAssignment,
 	OrgRequest,
 	Project,
 	NodeDetailResponse,
@@ -557,6 +558,36 @@ export const api = {
 			method: "POST",
 			body: JSON.stringify(payload),
 		}),
+
+	// --- Human-in-the-loop: assign verifiers, launch a draft, verify a node ---
+
+	assignNode: (
+		requestId: string,
+		payload: { node_id: string; user_id: number },
+	): Promise<{ assignments: NodeAssignment[] }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/assignments`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
+
+	unassignNode: (requestId: string, assignmentId: string): Promise<{ assignments: NodeAssignment[] }> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/assignments/${encodeURIComponent(assignmentId)}`,
+			{ method: "DELETE" },
+		),
+
+	launchRequest: (requestId: string): Promise<{ request: OrgRequest }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/launch`, { method: "POST" }),
+
+	verifyNode: (
+		requestId: string,
+		nodeId: string,
+		payload: { decision: ApprovalDecision; note?: string },
+	): Promise<{ status: string }> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}/verify`,
+			{ method: "POST", body: JSON.stringify(payload) },
+		),
 
 	// --- Audit trail (F6) ---
 

@@ -1,5 +1,5 @@
-import { useMemo, useCallback, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ReactFlow,
   Background,
@@ -17,12 +17,17 @@ import {
   AlertCircle,
   ArrowLeft,
   Bot,
+  Check,
   CheckCircle2,
   Clock,
   Loader2,
   Maximize2,
+  Play,
+  Plus,
   RotateCcw,
   ShieldAlert,
+  UserCheck,
+  X,
 } from "lucide-react";
 
 import { api } from "../lib/api";
@@ -44,8 +49,11 @@ import {
 } from "../lib/request-format";
 import { detailLabel } from "../lib/request-templates";
 import { useRequestStream } from "../lib/sse";
+import { useAuth } from "../contexts/AuthContext";
+import { useToasts } from "../components/Toasts";
+import { Avatar } from "../components/Avatar";
 import { DepartmentNode } from "../components/DepartmentNode";
-import type { AuditEvent, WorkflowNodeData } from "../lib/types";
+import type { AuditEvent, NodeAssignment, OrgRequest, WorkflowNodeData } from "../lib/types";
 
 const nodeTypes: NodeTypes = {
   department: DepartmentNode,
@@ -103,6 +111,14 @@ function WorkflowCanvas({
       query.state.data?.request.status === "in_progress" ? 4000 : false,
   });
 
+  const qc = useQueryClient();
+  const toasts = useToasts();
+  const launch = useMutation({
+    mutationFn: () => api.launchRequest(requestId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["request", requestId] }),
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+  });
+
   // Live updates patch this query's cache entry directly. Open the stream only
   // once the base graph has loaded, so patchCache has an entry to update.
   useRequestStream(requestId, !!data);
@@ -119,7 +135,7 @@ function WorkflowCanvas({
   // flipped get a one-shot pulse so live progress is visible.
   useEffect(() => {
     if (!data) return;
-    const layout = requestToFlow(data.nodes, data.edges);
+    const layout = requestToFlow(data.nodes, data.edges, data.assignments);
     const persisted = loadNodePositions(requestId);
     const changed = new Set<string>();
     for (const n of data.nodes) {
@@ -172,7 +188,7 @@ function WorkflowCanvas({
   const resetLayout = useCallback(() => {
     if (!data) return;
     clearNodePositions(requestId);
-    const layout = requestToFlow(data.nodes, data.edges);
+    const layout = requestToFlow(data.nodes, data.edges, data.assignments);
     setNodes(layout.nodes.map((n) => ({ ...n, selected: n.id === selectedNodeId })));
     requestAnimationFrame(() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 }));
   }, [requestId, data, selectedNodeId, setNodes, fitView]);
@@ -251,6 +267,25 @@ function WorkflowCanvas({
           </div>
         </div>
 
+        {/* Draft: assign verifiers, then launch */}
+        {req.status === "draft" && (
+          <div className="px-4 pb-3">
+            <div className="rounded-md border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3">
+              <p className="text-[11px] text-[var(--color-fg-muted)] leading-snug mb-2">
+                This request is a draft. Click a step to assign a verifier who must sign off on the
+                agent's work, then launch. Unassigned steps run automatically.
+              </p>
+              <button
+                onClick={() => launch.mutate()}
+                disabled={launch.isPending}
+                className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)] disabled:opacity-50"
+              >
+                <Play size={14} /> {launch.isPending ? "Launching…" : "Launch workflow"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Participating agents */}
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
           <h3 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
@@ -322,6 +357,7 @@ function WorkflowCanvas({
         >
           <LegendItem color="var(--color-fg-subtle)" label="Pending" />
           <LegendItem color="var(--color-brand)" label="In Progress" />
+          <LegendItem color="var(--color-warning)" label="Needs review" />
           <LegendItem color="var(--color-success)" label="Completed" />
           <LegendItem color="var(--color-danger)" label="Blocked" />
         </div>
@@ -330,7 +366,12 @@ function WorkflowCanvas({
       {/* Right panel — Node Detail */}
       <div className="w-72 shrink-0 border-l border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
         {selectedNode ? (
-          <NodeDetail requestId={requestId} node={selectedNode} />
+          <NodeDetail
+            requestId={requestId}
+            node={selectedNode}
+            request={req}
+            assignments={(data.assignments ?? []).filter((a) => a.node_id === selectedNode.id)}
+          />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
             <div className="size-8 rounded-lg bg-[var(--color-surface-2)] flex items-center justify-center">
@@ -346,10 +387,21 @@ function WorkflowCanvas({
   );
 }
 
-function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNodeData }) {
+function NodeDetail({
+  requestId,
+  node,
+  request,
+  assignments,
+}: {
+  requestId: string;
+  node: WorkflowNodeData;
+  request: OrgRequest;
+  assignments: NodeAssignment[];
+}) {
   const config = {
     pending: { icon: Clock, color: "text-[var(--color-fg-subtle)]" },
     in_progress: { icon: Loader2, color: "text-[var(--color-brand)]" },
+    awaiting_review: { icon: UserCheck, color: "text-[var(--color-warning-fg)]" },
     completed: { icon: CheckCircle2, color: "text-[var(--color-success)]" },
     blocked: { icon: ShieldAlert, color: "text-[var(--color-danger)]" },
   }[node.status] ?? { icon: Clock, color: "text-[var(--color-fg-subtle)]" };
@@ -371,6 +423,47 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
 	// prefer it once loaded and fall back to the graph node before then.
 	const n = tasksQuery.data?.node ?? node;
 	const flags = n.flags ?? [];
+
+	const qc = useQueryClient();
+	const toasts = useToasts();
+	const { user } = useAuth();
+	const [pickUser, setPickUser] = useState("");
+
+	// Members power the assignment picker (people in this node's department) and
+	// the RBAC gate (whether the current user may verify this node).
+	const membersQuery = useQuery({
+		queryKey: ["org-members", request.org_id],
+		queryFn: () => api.listOrgMembers(request.org_id),
+	});
+	const members = membersQuery.data?.members ?? [];
+	const dept = node.department.toLowerCase();
+	const inDept = (m: { team_roles?: { team: string }[] }) =>
+		(m.team_roles ?? []).some((tr) => tr.team.toLowerCase() === dept);
+	const deptMembers = members.filter(inDept);
+	const me = members.find((m) => m.id === user?.id);
+	const isExec = me?.role === "admin" || me?.role === "executor";
+	const canVerify = isExec || (me ? inDept(me) : false) || assignments.some((a) => a.user_id === user?.id);
+	const canAssign = isExec || request.requester_user_id === user?.id;
+
+	const refresh = () => {
+		qc.invalidateQueries({ queryKey: ["request", requestId] });
+		qc.invalidateQueries({ queryKey: ["node", requestId, node.id] });
+	};
+	const assign = useMutation({
+		mutationFn: (userId: number) => api.assignNode(requestId, { node_id: node.id, user_id: userId }),
+		onSuccess: () => { setPickUser(""); refresh(); },
+		onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+	});
+	const unassign = useMutation({
+		mutationFn: (assignmentId: string) => api.unassignNode(requestId, assignmentId),
+		onSuccess: refresh,
+		onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+	});
+	const verify = useMutation({
+		mutationFn: (decision: "approve" | "reject") => api.verifyNode(requestId, node.id, { decision }),
+		onSuccess: refresh,
+		onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+	});
 
 	return (
 		<div className="flex flex-col">
@@ -410,6 +503,96 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
         {node.started_at && <InfoRow label="Started" value={new Date(node.started_at).toLocaleString()} />}
         {node.completed_at && <InfoRow label="Completed" value={new Date(node.completed_at).toLocaleString()} />}
       </div>
+
+      {/* Awaiting review: the verifier (or an exec) signs off here. */}
+      {node.status === "awaiting_review" && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-warning)]/5">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-warning-fg)] mb-1.5 flex items-center gap-1">
+            <UserCheck size={11} /> Awaiting your verification
+          </h4>
+          <p className="text-xs text-[var(--color-fg-muted)] leading-snug mb-2">
+            The agent finished. Review its work below, then sign off or send it back.
+          </p>
+          {canVerify ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => verify.mutate("approve")}
+                disabled={verify.isPending}
+                className="flex-1 flex items-center justify-center gap-1 rounded-md bg-[var(--color-success)] px-2 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+              >
+                <Check size={13} /> Approve
+              </button>
+              <button
+                onClick={() => verify.mutate("reject")}
+                disabled={verify.isPending}
+                className="flex-1 flex items-center justify-center gap-1 rounded-md border border-[var(--color-danger)] px-2 py-1.5 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:opacity-50"
+              >
+                <X size={13} /> Send back
+              </button>
+            </div>
+          ) : (
+            <p className="text-[11px] text-[var(--color-fg-subtle)]">
+              Only the {node.department} team or an executive can verify this step.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Verifiers: assignable while the request is a draft. */}
+      {(request.status === "draft" || assignments.length > 0) && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            Verifiers
+          </h4>
+          {assignments.length === 0 && request.status !== "draft" && (
+            <p className="text-[11px] text-[var(--color-fg-subtle)]">No verifier — runs automatically.</p>
+          )}
+          <ul className="flex flex-col gap-1.5">
+            {assignments.map((a) => (
+              <li key={a.id} className="flex items-center gap-2">
+                <Avatar name={a.user_name || a.user_email} size={18} />
+                <span className="text-xs text-[var(--color-fg)] truncate flex-1">{a.user_name || a.user_email}</span>
+                {request.status === "draft" && canAssign && (
+                  <button
+                    onClick={() => unassign.mutate(a.id)}
+                    className="text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
+                    title="Remove"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {request.status === "draft" && canAssign && (
+            <div className="flex gap-1.5 mt-2">
+              <select
+                value={pickUser}
+                onChange={(e) => setPickUser(e.target.value)}
+                className="flex-1 min-w-0 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+              >
+                <option value="">
+                  {deptMembers.length === 0 ? `No ${node.department} members` : "Assign a verifier…"}
+                </option>
+                {deptMembers
+                  .filter((m) => !assignments.some((a) => a.user_id === m.id))
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name || m.email}
+                    </option>
+                  ))}
+              </select>
+              <button
+                onClick={() => pickUser && assign.mutate(Number(pickUser))}
+                disabled={!pickUser || assign.isPending}
+                className="shrink-0 flex items-center gap-1 rounded bg-[var(--color-brand)] px-2 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-40"
+              >
+                <Plus size={12} /> Add
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {node.status === "blocked" && node.blocked_by && (
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
