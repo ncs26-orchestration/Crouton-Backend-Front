@@ -6,18 +6,20 @@ import (
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
-// dbStore implements Store over the request + workflow + audit + dependency + document repos.
+// dbStore implements Store over the request + workflow + audit + dependency +
+// document + policy repos.
 type dbStore struct {
 	requests     *repo.RequestRepo
 	workflow     *repo.WorkflowRepo
 	audit        *repo.AuditRepo
 	dependencies *repo.DependencyRepo
 	documents    *repo.DocumentRepo
+	policies     *repo.PolicyRepo
 }
 
 // NewDBStore adapts the concrete repos to the engine's Store interface.
-func NewDBStore(requests *repo.RequestRepo, workflow *repo.WorkflowRepo, audit *repo.AuditRepo, dependencies *repo.DependencyRepo, documents *repo.DocumentRepo) Store {
-	return &dbStore{requests: requests, workflow: workflow, audit: audit, dependencies: dependencies, documents: documents}
+func NewDBStore(requests *repo.RequestRepo, workflow *repo.WorkflowRepo, audit *repo.AuditRepo, dependencies *repo.DependencyRepo, documents *repo.DocumentRepo, policies *repo.PolicyRepo) Store {
+	return &dbStore{requests: requests, workflow: workflow, audit: audit, dependencies: dependencies, documents: documents, policies: policies}
 }
 
 func (s *dbStore) GetRequest(ctx context.Context, requestID string) (*repo.Request, error) {
@@ -74,4 +76,12 @@ func (s *dbStore) AppendAuditEvent(ctx context.Context, e repo.AuditEvent) error
 
 func (s *dbStore) CreateDocument(ctx context.Context, d *repo.Document) error {
 	return s.documents.Create(ctx, d)
+}
+
+func (s *dbStore) UpdateNodeDecisionOutcome(ctx context.Context, nodeID, outcome string) error {
+	return s.workflow.UpdateNodeDecisionOutcome(ctx, nodeID, outcome)
+}
+
+func (s *dbStore) ListPoliciesByOrg(ctx context.Context, orgID string) ([]repo.DepartmentPolicy, error) {
+	return s.policies.ListByOrg(ctx, orgID)
 }

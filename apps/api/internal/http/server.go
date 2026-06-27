@@ -106,6 +106,7 @@ func NewServer(d Deps) *echo.Echo {
 		auditRepo,
 		repo.NewDependencyRepo(d.PgPool),
 		docRepo,
+		repo.NewPolicyRepo(d.PgPool),
 	)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {

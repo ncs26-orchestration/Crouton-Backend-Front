@@ -115,21 +115,26 @@ type DependencyDecl struct {
 	Reason       string `json:"reason"`
 }
 
-// Decision is a department agent's output for one workflow node.
+// Decision is a department agent's output for one workflow node. Outcome is one
+// of: approve, approve_with_conditions, flag, reject, block.
 type Decision struct {
 	Summary    string          `json:"summary"`
+	Outcome    string          `json:"outcome"`
 	Flags      []Flag          `json:"flags"`
 	Tasks      []TaskItem      `json:"tasks"`
 	StatusText string          `json:"status_text"`
 	BlockedOn  *DependencyDecl `json:"blocked_on"`
 }
 
-// UpstreamItem is a completed predecessor node's summary, passed so a
-// department can reason over upstream output.
+// UpstreamItem is a completed predecessor node's decision, passed so a
+// department can reason over upstream output — including the outcome it reached
+// and the flags it raised, not just a status line.
 type UpstreamItem struct {
 	Key        string `json:"key"`
 	Department string `json:"department"`
+	Outcome    string `json:"outcome"`
 	Summary    string `json:"summary"`
+	Flags      []Flag `json:"flags"`
 }
 
 // RunRequest is sent to POST /agents/run.
@@ -210,7 +215,7 @@ func DefaultDecision(agentType string) *Decision {
 	for _, t := range spec.tasks {
 		tasks = append(tasks, TaskItem{Title: t, Status: "completed"})
 	}
-	return &Decision{Summary: spec.summary, Flags: []Flag{}, Tasks: tasks, StatusText: spec.statusText}
+	return &Decision{Summary: spec.summary, Outcome: "approve", Flags: []Flag{}, Tasks: tasks, StatusText: spec.statusText}
 }
 
 // DefaultPlan returns a deterministic fallback plan when the agent service

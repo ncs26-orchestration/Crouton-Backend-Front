@@ -453,6 +453,7 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		"description":      node.Description,
 		"progress_percent": node.ProgressPercent,
 		"status_text":      node.StatusText,
+		"decision_outcome": node.DecisionOutcome,
 		"started_at":       node.StartedAt,
 		"completed_at":     node.CompletedAt,
 	}
