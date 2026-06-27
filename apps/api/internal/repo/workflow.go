@@ -19,6 +19,7 @@ type WorkflowNode struct {
 	Description     string
 	ProgressPercent int
 	StatusText      string
+	DecisionOutcome string
 	StartedAt       *time.Time
 	CompletedAt     *time.Time
 	CreatedAt       time.Time
@@ -110,7 +111,7 @@ func (r *WorkflowRepo) InsertEdges(ctx context.Context, edges []WorkflowEdge) er
 func (r *WorkflowRepo) ListNodesByRequest(ctx context.Context, requestID string) ([]WorkflowNode, error) {
 	rows, err := r.pg.Query(ctx, `
 		SELECT id, request_id, key, name, agent_type, department, status, description,
-		       progress_percent, status_text, started_at, completed_at, created_at
+		       progress_percent, status_text, decision_outcome, started_at, completed_at, created_at
 		FROM workflow_nodes WHERE request_id = $1
 		ORDER BY created_at ASC
 	`, requestID)
@@ -123,7 +124,7 @@ func (r *WorkflowRepo) ListNodesByRequest(ctx context.Context, requestID string)
 	for rows.Next() {
 		var n WorkflowNode
 		if err := rows.Scan(&n.ID, &n.RequestID, &n.Key, &n.Name, &n.AgentType, &n.Department,
-			&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText,
+			&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText, &n.DecisionOutcome,
 			&n.StartedAt, &n.CompletedAt, &n.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -156,12 +157,12 @@ func (r *WorkflowRepo) ListEdgesByRequest(ctx context.Context, requestID string)
 func (r *WorkflowRepo) GetNode(ctx context.Context, nodeID string) (*WorkflowNode, error) {
 	row := r.pg.QueryRow(ctx, `
 		SELECT id, request_id, key, name, agent_type, department, status, description,
-		       progress_percent, status_text, started_at, completed_at, created_at
+		       progress_percent, status_text, decision_outcome, started_at, completed_at, created_at
 		FROM workflow_nodes WHERE id = $1
 	`, nodeID)
 	var n WorkflowNode
 	if err := row.Scan(&n.ID, &n.RequestID, &n.Key, &n.Name, &n.AgentType, &n.Department,
-		&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText,
+		&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText, &n.DecisionOutcome,
 		&n.StartedAt, &n.CompletedAt, &n.CreatedAt); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
@@ -184,6 +185,21 @@ func (r *WorkflowRepo) UpdateNodeStatus(ctx context.Context, nodeID, status, sta
 		    completed_at = CASE WHEN $2 = 'completed' THEN now() ELSE completed_at END
 		WHERE id = $1
 	`, nodeID, status, statusText, progressPercent)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateNodeDecisionOutcome records the call a department agent reached on a
+// node (approve, approve_with_conditions, flag, reject, block) for traceability.
+func (r *WorkflowRepo) UpdateNodeDecisionOutcome(ctx context.Context, nodeID, outcome string) error {
+	tag, err := r.pg.Exec(ctx, `
+		UPDATE workflow_nodes SET decision_outcome = $2 WHERE id = $1
+	`, nodeID, outcome)
 	if err != nil {
 		return err
 	}

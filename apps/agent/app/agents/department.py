@@ -16,7 +16,7 @@ import logging
 from typing import Any
 
 from app.agents.llm import complete_json, llm_available
-from app.agents.models import Decision, DependencyDecl, Flag, TaskItem
+from app.agents.models import OUTCOMES, Decision, DependencyDecl, Flag, TaskItem
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,11 @@ def _decision(
     tasks: list[str],
     flags: list[Flag] | None = None,
     blocked_on: DependencyDecl | None = None,
+    outcome: str = "approve",
 ) -> Decision:
     return Decision(
         summary=summary,
+        outcome=outcome,
         flags=flags or [],
         tasks=[TaskItem(title=t, status="completed") for t in tasks],
         status_text=status_text,
@@ -96,6 +98,7 @@ def _finance(
             "Project the return on investment",
             "Confirm funding availability",
         ],
+        outcome="block",
         blocked_on=DependencyDecl(
             on_department="IT",
             reason=(
@@ -190,15 +193,39 @@ _PLAYBOOK = {
 }
 
 
-# Role guidance per agent_type — gives the LLM the lens to reason through.
+# Role guidance per agent_type — the lens each department reasons through, with
+# the concrete criteria and thresholds it should weigh so decisions vary by
+# request instead of reading like boilerplate.
 _ROLE_GUIDANCE = {
-    "intake": "the Intake coordinator. Classify the request and identify the departments involved.",
-    "planning": "the Planning lead. Outline the cross-department plan and sequence the reviews.",
-    "finance": "the Finance department. Assess budget feasibility, financial impact, and ROI.",
-    "legal": "the Legal department. Check regulatory compliance and contracts; flag legal risks.",
-    "it": "the IT department. Evaluate technical feasibility, security, and systems integration.",
-    "hr": "the HR department. Plan staffing, hiring, and onboarding needs.",
-    "ops": "the Operations department. Plan logistics, facilities, and the operational timeline.",
+    "intake": (
+        "the Intake coordinator. Classify the request and identify which departments "
+        "it actually involves."
+    ),
+    "planning": ("the Planning lead. Outline the cross-department plan and sequence the reviews."),
+    "finance": (
+        "the Finance department. Weigh budget feasibility, total cost, and ROI against the "
+        "approved budget. If the cost depends on another department's estimate (e.g. IT "
+        "infrastructure), block on it. Flag spend that exceeds the quarterly budget; reject "
+        "only a clear, policy-defined overspend with no funding path."
+    ),
+    "legal": (
+        "the Legal department. Check regulatory compliance, contracts, data protection, and "
+        "jurisdiction. Flag legal risk that needs tracking; reject a request that would "
+        "violate a hard compliance or regulatory requirement."
+    ),
+    "it": (
+        "the IT department. Assess technical feasibility, security, data handling, and "
+        "systems integration. Give a concrete cost/effort estimate downstream departments "
+        "can rely on. Flag security or scalability risk."
+    ),
+    "hr": (
+        "the HR department. Plan staffing, hiring, headcount, and onboarding. Flag requests "
+        "that exceed approved headcount or compress hiring timelines unrealistically."
+    ),
+    "ops": (
+        "the Operations department. Plan logistics, facilities, vendors, and the operational "
+        "timeline. Flag capacity or supply constraints."
+    ),
     "approval": "the Executive office. Compile the department decisions and flags for approval.",
     "implementation": "the Implementation team. Execute the approved plan across departments.",
     "report": "the Reporting function. Summarize the decisions, flags, and outcomes.",
@@ -206,16 +233,30 @@ _ROLE_GUIDANCE = {
 
 _DEPT_SYSTEM = """You are {role}
 
-Review THIS specific request and respond ONLY with a JSON object:
+Review THIS specific request and decide. Respond ONLY with a JSON object:
 {{
   "summary": "1-2 sentence assessment grounded in the actual request",
+  "outcome": "approve | approve_with_conditions | flag | reject | block",
   "flags": [{{"severity": "info|warning|critical", "message": "specific risk or note"}}],
   "tasks": [{{"title": "concrete action you took", "status": "completed"}}],
-  "status_text": "one plain-language sentence for the UI"
+  "status_text": "one plain-language sentence for the UI",
+  "blocked_on": null
 }}
 
-Be specific to the request (amounts, locations, systems, people) — do not give \
-generic boilerplate. Produce 3-5 tasks. Set blocked_on to null. Output JSON only."""
+How to choose "outcome":
+- "approve": no concerns from your department.
+- "approve_with_conditions": fine to proceed, but list the conditions as flags.
+- "flag": a real risk the executive should see before approving (does not stop the request).
+- "reject": the request violates a hard rule your department owns. Only reject on a clear,
+  policy-grounded violation, and name the policy in a critical flag.
+- "block": you cannot finish until another department gives you something first. Set
+  "blocked_on": {{"on_department": "<Department>", "reason": "<what you need and why>"}} and
+  pick this outcome only when that department has not reported yet.
+
+{policies}{upstream_guidance}Be specific to the request (amounts, locations, people).
+Do not give generic boilerplate. When a flag or rejection is driven by a policy, quote the
+policy in the flag message. Produce 3-5 tasks describing what you actually checked.
+Output JSON only."""
 
 
 _ALLOWED_SEVERITY = {"info", "warning", "critical"}
@@ -238,28 +279,63 @@ def _parse_decision(raw: str | None) -> Decision | None:
     for flag in decision.flags:
         sev = flag.severity.lower().strip()
         flag.severity = sev if sev in _ALLOWED_SEVERITY else _SEVERITY_ALIASES.get(sev, "info")
-    # The LLM prompt asks for blocked_on: null, so clear any stray value the
-    # model emits. Cross-department blocking (F5) is driven by the deterministic
-    # playbook below, not the LLM path.
-    decision.blocked_on = None
+    # Keep outcome and blocked_on consistent: an off-contract outcome falls back
+    # to "approve"; a block without a target is downgraded to a flag; a declared
+    # dependency forces the block outcome so the engine acts on it (F5).
+    decision.outcome = decision.outcome.lower().strip()
+    if decision.outcome not in OUTCOMES:
+        decision.outcome = "approve"
+    if decision.outcome == "block" and decision.blocked_on is None:
+        decision.outcome = "flag"
+    if decision.blocked_on is not None:
+        decision.outcome = "block"
     return decision
 
 
 def _summarize_upstream(upstream_context: list[dict[str, Any]]) -> str:
     """Compact, bounded view of upstream decisions for the prompt.
 
-    Trims the list (and each item to its key fields) so the context stays small
-    without slicing a serialized JSON string mid-token.
+    Carries each upstream department's outcome and flags (not just its status
+    line) so a department can actually reason over what others found — e.g.
+    Finance using IT's cost flag. Trimmed to the last few so the context stays
+    small without slicing a serialized JSON string mid-token.
     """
     compact = [
         {
-            "node": item.get("node_key") or item.get("key"),
             "department": item.get("department"),
+            "outcome": item.get("outcome") or "approve",
             "summary": str(item.get("summary") or item.get("status_text") or "")[:300],
+            "flags": [
+                f"{f.get('severity', 'info')}: {f.get('message', '')}"
+                for f in (item.get("flags") or [])
+            ][:4],
         }
         for item in upstream_context[-8:]
     ]
     return json.dumps(compact, ensure_ascii=False)
+
+
+def _policies_block(org_context: dict[str, Any] | None) -> str:
+    """Render the department's policies for the prompt, or an empty string.
+
+    The engine fills ``org_context["policies"]`` with the policies that apply to
+    this department (title + body). The agent must check the request against them
+    and cite the policy by title in any flag or rejection.
+    """
+    if not org_context:
+        return ""
+    policies = org_context.get("policies") or []
+    if not policies:
+        return ""
+    lines = [
+        f"- {p.get('title', 'Policy')}: {str(p.get('body', '')).strip()}"
+        for p in policies
+        if isinstance(p, dict)
+    ]
+    if not lines:
+        return ""
+    header = "Your department's policies. Check the request against each and cite by title:\n"
+    return header + "\n".join(lines) + "\n\n"
 
 
 async def run_department(
@@ -279,12 +355,24 @@ async def run_department(
     """
     if llm_available():
         role = _ROLE_GUIDANCE.get(agent_type, f"the {agent_type} function.")
+        policies = _policies_block(org_context)
+        upstream_guidance = (
+            "Use the upstream department decisions below — reference their concrete "
+            "findings (costs, headcount, risks) in your reasoning.\n"
+            if upstream_context
+            else ""
+        )
+        system = _DEPT_SYSTEM.format(
+            role=role,
+            policies=policies,
+            upstream_guidance=upstream_guidance,
+        )
         user = f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
         if upstream_context:
             user += "\n\nUpstream department decisions so far:\n" + _summarize_upstream(
                 upstream_context
             )
-        raw = await complete_json(_DEPT_SYSTEM.format(role=role), user)
+        raw = await complete_json(system, user)
         decision = _parse_decision(raw)
         if decision is not None:
             logger.info("Decision from LLM for %s", agent_type)

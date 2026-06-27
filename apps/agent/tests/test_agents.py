@@ -93,6 +93,38 @@ async def test_unknown_agent_type_still_completes() -> None:
     assert decision.blocked_on is None
 
 
+async def test_decisions_carry_an_outcome() -> None:
+    # Every fallback decision exposes the new outcome field; the happy path
+    # approves, and Finance-without-IT blocks.
+    approve = await run_department("it", "Ship a feature", "", "low")
+    assert approve.outcome == "approve"
+    blocked = await run_department("finance", "Open a Berlin office", "", "high")
+    assert blocked.outcome == "block"
+    assert blocked.blocked_on is not None
+
+
+def test_parse_decision_normalizes_outcome_and_block() -> None:
+    from app.agents.department import _parse_decision
+
+    # Off-contract outcome falls back to approve.
+    d = _parse_decision(
+        '{"summary":"ok","outcome":"yolo","tasks":[{"title":"t"}],"status_text":"done"}'
+    )
+    assert d is not None and d.outcome == "approve"
+    # A declared dependency forces the block outcome so the engine acts on it.
+    d2 = _parse_decision(
+        '{"summary":"need IT","outcome":"approve","tasks":[{"title":"t"}],'
+        '"status_text":"waiting","blocked_on":{"on_department":"IT","reason":"cost"}}'
+    )
+    assert d2 is not None and d2.outcome == "block"
+    # A reject survives and keeps its flag.
+    d3 = _parse_decision(
+        '{"summary":"violates policy","outcome":"reject","tasks":[{"title":"t"}],'
+        '"status_text":"rejected","flags":[{"severity":"critical","message":"Policy X"}]}'
+    )
+    assert d3 is not None and d3.outcome == "reject"
+
+
 def test_run_endpoint_routes_by_agent_type() -> None:
     client = TestClient(app)
     resp = client.post(

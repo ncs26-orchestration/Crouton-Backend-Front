@@ -94,11 +94,22 @@ not need, but keep the flow sensible):
   implementation (agent_type implementation, dept Operations)
   report (agent_type report, dept Planning)
 
-Rules: always include intake, exec_approval, and report. The department reviews \
-(finance_review, legal_review, it_assessment) run in parallel after planning and \
-all feed exec_approval. After approval, hr_planning and ops_planning run, then \
-implementation, then report. Connect every node with edges so the graph flows \
-from intake to report. Output JSON only, no prose."""
+Pick the departments the request actually needs — do not include every stage by \
+reflex. Guidance:
+  finance_review — any spend, budget, pricing, or funding implication.
+  legal_review — contracts, regulation, compliance, data/privacy, hiring abroad.
+  it_assessment — software, infrastructure, security, data, or systems work.
+  hr_planning — hiring, headcount, staffing, or onboarding.
+  ops_planning — facilities, logistics, vendors, or physical operations.
+A small software tweak may need only it_assessment; a hire needs hr_planning and \
+legal_review; a pure policy change may need only legal_review. Include planning and \
+implementation when the work is cross-department or needs execution.
+
+Rules: always include intake, exec_approval, and report. The department reviews you \
+choose run in parallel after planning and all feed exec_approval. After approval, \
+any post-approval stages (hr_planning, ops_planning, implementation) run, then \
+report. Connect every node with edges so the graph flows from intake to report. \
+Output JSON only, no prose."""
 
 
 def _parse_plan(raw: str | None) -> Plan | None:
