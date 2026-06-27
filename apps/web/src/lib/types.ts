@@ -344,6 +344,47 @@ export interface NodeDetailResponse {
 	activity: AuditEvent[];
 }
 
+// --- Roster + Policies (F9 — supporting tabs) ---
+
+// Derived live status of a department agent: idle, busy while it owns an
+// in_progress node, or blocked while one of its nodes waits on another team.
+export type AgentStatus = "idle" | "busy" | "blocked";
+
+// One department agent in the org roster (seeded by F10), with activity
+// aggregated across all of the org's requests. The seeded fields (name, avatar,
+// team, capabilities) come from the directory; the counts and status are
+// derived live from the workflow nodes the agent owns. capabilities is a
+// comma-separated free-text list as stored by the seed.
+export interface AgentRosterEntry {
+  id: string;
+  org_id: string;
+  agent_type: string;
+  name: string;
+  avatar: string;
+  team_id: string;
+  team_name: string;
+  capabilities: string;
+  created_at: string;
+  status: AgentStatus;
+  total: number;
+  completed: number;
+  active: number;
+  blocked: number;
+  request_count: number;
+  latest_status: string;
+}
+
+// A read-only department policy agents consult while reasoning (seeded by F10).
+export interface DepartmentPolicy {
+  id: string;
+  org_id: string;
+  team_id: string;
+  team_name: string;
+  title: string;
+  body: string;
+  created_at: string;
+}
+
 // Binding state drives node color. Resolved at canvas build time
 // against the IS Registry; a task with no binding is "idle", a valid
 // binding is "ok", a binding whose id does not resolve is "error",
