@@ -62,7 +62,7 @@ export function IncidentsView({ orgId }: Props) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="shrink-0 px-4 md:px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between gap-3">
+      <div className="shrink-0 px-4 md:px-6 py-4 border-b border-[var(--color-border)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1
             className="text-lg font-medium text-[var(--color-fg)]"

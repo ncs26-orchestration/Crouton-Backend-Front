@@ -60,7 +60,7 @@ export function MachinesView({ orgId }: Props) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="shrink-0 px-4 md:px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between gap-3">
+      <div className="shrink-0 px-4 md:px-6 py-4 border-b border-[var(--color-border)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1
             className="text-lg font-medium text-[var(--color-fg)]"
@@ -354,7 +354,7 @@ function DocumentUploadModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="upload-doc-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-sm p-6 border border-[var(--color-border)] mx-4 md:mx-0"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-sm p-4 md:p-6 border border-[var(--color-border)] mx-4 md:mx-0"
       >
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -525,7 +525,7 @@ function AddMachineModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-machine-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)] mx-4 md:mx-0"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-4 md:p-6 border border-[var(--color-border)] mx-4 md:mx-0"
       >
         <div className="flex items-start justify-between mb-4">
           <h2

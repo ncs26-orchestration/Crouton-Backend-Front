@@ -353,7 +353,7 @@ function ApprovalModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="approval-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)] mx-4 md:mx-0"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-4 md:p-6 border border-[var(--color-border)] mx-4 md:mx-0"
       >
         <div className="flex items-start justify-between mb-1">
           <h2
