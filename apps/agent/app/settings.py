@@ -51,6 +51,10 @@ class Settings(BaseSettings):
         default="http://host.docker.internal:11434",
         alias="OLLAMA_BASE_URL",
     )
+    ollama_model: str = Field(
+        default="qwen2.5:7b",
+        alias="OLLAMA_MODEL",
+    )
 
     @model_validator(mode="after")
     def auto_select_extractor_provider(self) -> "Settings":

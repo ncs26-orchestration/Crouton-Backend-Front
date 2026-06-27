@@ -23,6 +23,7 @@ type MachinesHandler struct {
 	db        *pgxpool.Pool
 	mach      *repo.MachineRepo
 	telemetry *repo.TelemetryRepo
+	inc       *repo.IncidentRepo
 	jwtSecret string
 }
 
@@ -32,6 +33,7 @@ func NewMachinesHandler(logger *slog.Logger, db *pgxpool.Pool, jwtSecret string)
 		db:        db,
 		mach:      repo.NewMachineRepo(db),
 		telemetry: repo.NewTelemetryRepo(db),
+		inc:       repo.NewIncidentRepo(db),
 		jwtSecret: jwtSecret,
 	}
 }
@@ -154,6 +156,7 @@ func (h *MachinesHandler) CreateMachine(c echo.Context) error {
 		Location:       body.Location,
 		SerialNumber:   body.SerialNumber,
 		Status:         body.Status,
+		Metadata:       []byte("{}"),
 		LastServiceAt:  body.LastServiceAt,
 		NextServiceDue: body.NextServiceDue,
 	})
@@ -182,19 +185,7 @@ func (h *MachinesHandler) ListMachines(c echo.Context) error {
 		Status: c.QueryParam("status"),
 	}
 
-	// If the caller is a technician (not admin/executor), scope to their
-	// assigned machines automatically.
-	tech, err := h.isTechnician(c, orgID, claims.UserID)
-	if err != nil {
-		h.logger.Error("list machines: check technician", slog.String("err", err.Error()))
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	}
-	role, _ := h.callerOrgRole(c, orgID, claims.UserID)
-	if tech && role != "admin" && role != "executor" {
-		filter.AssignedToMe = &claims.UserID
-	}
-
-	// Override: ?assigned_to_me=true forces the filter for any role.
+	// ?assigned_to_me=true filters to machines assigned to the caller.
 	if c.QueryParam("assigned_to_me") == "true" {
 		filter.AssignedToMe = &claims.UserID
 	}
@@ -402,6 +393,65 @@ func (h *MachinesHandler) PostTelemetry(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
+	incidentCreated := false
+
+	// Auto-create an incident when the machine reports an error code.
+	// This ensures the maintenance team gets a task in their work inbox.
+	if body.ErrorCode != "" {
+		incidentCreated = true
+
+		// Check if there's already an unresolved incident for this machine.
+		existing, err := h.inc.ListByMachine(ctx, machineID)
+		if err != nil {
+			h.logger.Error("post telemetry: check existing incidents", slog.String("err", err.Error()))
+		}
+
+		hasOpen := false
+		for _, e := range existing {
+			if e.Status != "resolved" {
+				hasOpen = true
+				break
+			}
+		}
+
+		if !hasOpen {
+			incidentID := fmt.Sprintf("inc_%s", randomHex(8))
+			title := fmt.Sprintf("%s reported error: %s", machine.Name, body.ErrorCode)
+			desc := fmt.Sprintf("Auto-created from telemetry error_code=%q on %s", body.ErrorCode, machine.Name)
+
+			if _, err := h.inc.Create(ctx, repo.Incident{
+				ID:          incidentID,
+				MachineID:   machineID,
+				OrgID:       machine.OrgID,
+				ReportedBy:  nil,
+				Title:       title,
+				Description: desc,
+				Severity:    "high",
+				Status:      "open",
+			}); err != nil {
+				h.logger.Error("post telemetry: create incident", slog.String("err", err.Error()))
+			} else {
+				// Flip machine status to "down".
+				machine.Status = "down"
+				if err := h.mach.Update(ctx, *machine); err != nil {
+					h.logger.Error("post telemetry: update machine status", slog.String("err", err.Error()))
+				}
+
+				// Create agent_task linked to the incident so it shows up in
+				// the maintenance team's work inbox (GET /me/work).
+				taskID := "enpanne:machine:" + incidentID
+				if _, err := h.db.Exec(ctx,
+					`INSERT INTO agent_tasks (id, title, status, incident_id)
+					 VALUES ($1, $2, 'pending', $3)
+					 ON CONFLICT (id) DO NOTHING`,
+					taskID, title, incidentID,
+				); err != nil {
+					h.logger.Error("post telemetry: insert agent_task", slog.String("err", err.Error()))
+				}
+			}
+		}
+	}
+
 	return c.JSON(http.StatusCreated, map[string]any{
 		"telemetry": map[string]any{
 			"id":         saved.ID,
@@ -411,7 +461,7 @@ func (h *MachinesHandler) PostTelemetry(c echo.Context) error {
 			"source":     saved.Source,
 			"created_at": saved.CreatedAt,
 		},
-		"incident_created": false,
+		"incident_created": incidentCreated,
 	})
 }
 

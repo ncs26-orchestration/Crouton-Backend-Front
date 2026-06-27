@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
   Loader2,
   Plus,
+  Search,
   Trash2,
   Users,
   X,
@@ -16,7 +17,8 @@ import { useToasts } from "../components/Toasts";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type Team = { id: string; name: string; description: string; created_at: string };
-type OrgMember = { id: number; name: string; email: string; role: string; joined_at: string };
+type TeamRoleEntry = { team: string; role: string };
+type OrgMember = { id: number; name: string; email: string; role: string; team_roles?: TeamRoleEntry[]; joined_at: string };
 
 // ── OrgView ────────────────────────────────────────────────────────────────
 
@@ -366,6 +368,12 @@ function TeamCard({ team, orgId, orgMembers, expanded, onToggle, onDelete, delet
 function MembersTab({ orgId }: { orgId: string }) {
   const qc = useQueryClient();
   const toasts = useToasts();
+  const [showAdd, setShowAdd] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePass, setInvitePass] = useState("");
+  const [newRole, setNewRole] = useState("employee");
+  const nameRef = useRef<HTMLInputElement>(null);
 
   const membersQ = useQuery({
     queryKey: ["org-members", orgId],
@@ -385,6 +393,24 @@ function MembersTab({ orgId }: { orgId: string }) {
     onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
   });
 
+  const addMut = useMutation({
+    mutationFn: () =>
+      api.inviteMember(orgId, {
+        name: inviteName.trim(),
+        email: inviteEmail.trim(),
+        password: invitePass,
+        role: newRole,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["org-members", orgId] });
+      setInviteName("");
+      setInviteEmail("");
+      setInvitePass("");
+      setShowAdd(false);
+    },
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+  });
+
   const members = membersQ.data ?? [];
 
   if (membersQ.isLoading) {
@@ -397,9 +423,75 @@ function MembersTab({ orgId }: { orgId: string }) {
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      <p className="text-xs text-[var(--color-fg-muted)]">
-        {members.length} member{members.length !== 1 ? "s" : ""} in this organization
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          {members.length} member{members.length !== 1 ? "s" : ""} in this organization
+        </p>
+        <button
+          onClick={() => { setShowAdd((v) => !v); setTimeout(() => nameRef.current?.focus(), 50); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+        >
+          <Plus size={14} /> Invite member
+        </button>
+      </div>
+
+      {/* Inline invite form */}
+      {showAdd && (
+        <div className="rounded-xl border border-[var(--color-brand)] bg-[var(--color-accent-bg)] p-4 flex flex-col gap-3">
+          <div className="flex gap-2">
+            <input
+              ref={nameRef}
+              type="text"
+              value={inviteName}
+              onChange={(e) => setInviteName(e.target.value)}
+              placeholder="Full name"
+              className="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors"
+            />
+            <select
+              value={newRole}
+              onChange={(e) => setNewRole(e.target.value)}
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors"
+            >
+              <option value="employee">Employee</option>
+              <option value="executor">Executor</option>
+              <option value="admin">Admin</option>
+              <option value="technician">Technician</option>
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="Email address"
+              className="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors"
+            />
+            <input
+              type="password"
+              value={invitePass}
+              onChange={(e) => setInvitePass(e.target.value)}
+              placeholder="Password"
+              className="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors"
+            />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => setShowAdd(false)}
+              className="px-3 py-1.5 rounded-lg text-sm text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={!inviteName.trim() || !inviteEmail.trim() || !invitePass || addMut.isPending}
+              onClick={() => addMut.mutate()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              {addMut.isPending && <Loader2 size={13} className="animate-spin" />}
+              {addMut.isPending ? "Inviting..." : "Create & add to org"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {members.map((m) => (
         <div
@@ -412,6 +504,18 @@ function MembersTab({ orgId }: { orgId: string }) {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-[var(--color-fg)] truncate">{m.name}</p>
             <p className="text-xs text-[var(--color-fg-muted)] truncate">{m.email}</p>
+            {m.team_roles && m.team_roles.length > 0 && (
+              <div className="flex gap-1 mt-1">
+                {m.team_roles.map((tr, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-brand)]"
+                  >
+                    {tr.team}: {tr.role}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <select
             value={m.role}

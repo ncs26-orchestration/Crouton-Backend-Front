@@ -12,7 +12,7 @@ type Incident struct {
 	ID              string
 	MachineID       string
 	OrgID           string
-	ReportedBy      int64
+	ReportedBy      *int64
 	Title           string
 	Description     string
 	Severity        string
@@ -44,7 +44,7 @@ func (r *IncidentRepo) Create(ctx context.Context, inc Incident) (*Incident, err
 	row := r.pg.QueryRow(ctx, `
 		INSERT INTO incidents (id, machine_id, org_id, reported_by, title, description, severity, status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, machine_id, org_id, reported_by, title, description, severity, status, resolved_at, resolution_notes, created_at
+		RETURNING id, machine_id, org_id, reported_by, title, description, severity, status, resolved_at, COALESCE(resolution_notes, ''), created_at
 	`, inc.ID, inc.MachineID, inc.OrgID, inc.ReportedBy, inc.Title, inc.Description, inc.Severity, inc.Status)
 	var out Incident
 	if err := row.Scan(
@@ -59,7 +59,7 @@ func (r *IncidentRepo) Create(ctx context.Context, inc Incident) (*Incident, err
 
 func (r *IncidentRepo) GetByID(ctx context.Context, id string) (*Incident, error) {
 	row := r.pg.QueryRow(ctx, `
-		SELECT id, machine_id, org_id, reported_by, title, description, severity, status, resolved_at, resolution_notes, created_at
+		SELECT id, machine_id, org_id, reported_by, title, description, severity, status, resolved_at, COALESCE(resolution_notes, ''), created_at
 		FROM incidents
 		WHERE id = $1
 	`, id)
@@ -79,7 +79,7 @@ func (r *IncidentRepo) GetByID(ctx context.Context, id string) (*Incident, error
 
 func (r *IncidentRepo) ListByMachine(ctx context.Context, machineID string) ([]Incident, error) {
 	rows, err := r.pg.Query(ctx, `
-		SELECT id, machine_id, org_id, reported_by, title, description, severity, status, resolved_at, resolution_notes, created_at
+		SELECT id, machine_id, org_id, reported_by, title, description, severity, status, resolved_at, COALESCE(resolution_notes, ''), created_at
 		FROM incidents
 		WHERE machine_id = $1
 		ORDER BY created_at DESC
@@ -105,7 +105,7 @@ func (r *IncidentRepo) ListByMachine(ctx context.Context, machineID string) ([]I
 
 func (r *IncidentRepo) ListByOrg(ctx context.Context, orgID string) ([]Incident, error) {
 	rows, err := r.pg.Query(ctx, `
-		SELECT id, machine_id, org_id, reported_by, title, description, severity, status, resolved_at, resolution_notes, created_at
+		SELECT id, machine_id, org_id, reported_by, title, description, severity, status, resolved_at, COALESCE(resolution_notes, ''), created_at
 		FROM incidents
 		WHERE org_id = $1
 		ORDER BY created_at DESC

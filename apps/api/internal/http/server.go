@@ -73,6 +73,7 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.DELETE("/:orgId/teams/:teamId", oh.DeleteTeam)
 
 	orgGroup.POST("/:orgId/members", oh.AddOrgMember)
+	orgGroup.POST("/:orgId/members/invite", oh.InviteMember)
 	orgGroup.GET("/:orgId/members", oh.ListOrgMembers)
 	orgGroup.PATCH("/:orgId/members/:userId", oh.UpdateOrgMemberRole)
 	orgGroup.DELETE("/:orgId/members/:userId", oh.RemoveOrgMember)
@@ -84,8 +85,9 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.GET("/:orgId/agents", oh.ListAgents)
 	orgGroup.GET("/:orgId/policies", oh.ListPolicies)
 
-	// Me — current user's work items (requests they created or need to act on).
+	// Me — current user's profile and work items.
 	mh := handler.NewMeHandler(d.Logger, d.PgPool)
+	e.GET("/me", mh.GetMeProfile, authMiddleware)
 	e.GET("/me/work", mh.GetMyWork, authMiddleware)
 
 	// Requests — submission, listing, detail with the workflow graph, and
@@ -168,11 +170,21 @@ func NewServer(d Deps) *echo.Echo {
 	// Incidents (M-F6) — technician-reported problems on machines. Creating an
 	// incident auto-flips machine status to "down"; resolving flips it back.
 	incH := handler.NewIncidentsHandler(d.Logger, d.PgPool, d.JWTSecret)
+	orgGroup.GET("/:orgId/incidents", incH.ListIncidents, authMiddleware)
 	e.POST("/incidents", incH.CreateIncident, authMiddleware)
 	e.GET("/incidents/:id/messages", incH.ListMessages, authMiddleware)
 	e.POST("/incidents/:id/messages", incH.AppendMessage, authMiddleware)
 	e.POST("/incidents/:id/resolve", incH.ResolveIncident, authMiddleware)
 	e.GET("/incidents/:id/events", incH.StreamEvents)
+
+	// Diagnosis — AI-powered machine incident diagnostics. Technicians
+	// request a diagnosis and follow step-by-step repair checkpoints.
+	diagH := handler.NewDiagnosisHandler(d.Logger, d.PgPool, agentClient)
+	e.POST("/machines/:id/documents", diagH.UploadMachineDocument, authMiddleware)
+	e.GET("/machines/:id/documents", diagH.ListMachineDocuments, authMiddleware)
+	e.POST("/incidents/:id/diagnose", diagH.RequestDiagnosis, authMiddleware)
+	e.GET("/incidents/:id/diagnosis", diagH.GetDiagnosis, authMiddleware)
+	e.POST("/diagnosis/steps/:stepId/complete", diagH.CompleteStep, authMiddleware)
 
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup
