@@ -144,6 +144,30 @@ export function decisionOutcomeLabel(outcome: DecisionOutcome): string {
   }
 }
 
+// Dot color for a flag severity.
+export function flagSeverityDot(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "bg-[var(--color-danger)]";
+    case "warning":
+      return "bg-[var(--color-warning)]";
+    default:
+      return "bg-[var(--color-fg-subtle)]";
+  }
+}
+
+// Text color for a flag severity label.
+export function flagSeverityText(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "text-[var(--color-danger)]";
+    case "warning":
+      return "text-[var(--color-warning-fg)]";
+    default:
+      return "text-[var(--color-fg-subtle)]";
+  }
+}
+
 // Filled badge color for a decision outcome.
 export function decisionOutcomeBadgeClass(outcome: DecisionOutcome): string {
   switch (outcome) {

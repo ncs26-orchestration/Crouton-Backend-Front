@@ -310,9 +310,17 @@ export interface WorkflowNodeData {
   progress_percent: number;
   status_text: string;
   decision_outcome?: DecisionOutcome;
+  decision_summary?: string;
+  flags?: NodeFlag[];
   started_at: string | null;
   completed_at: string | null;
   blocked_by?: { reason: string; blocked_at?: string } | null;
+}
+
+// A risk or note an agent raised on a node (may cite a policy in the message).
+export interface NodeFlag {
+  severity: "info" | "warning" | "critical";
+  message: string;
 }
 
 export interface WorkflowEdgeData {
