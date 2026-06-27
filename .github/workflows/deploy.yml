@@ -51,21 +51,25 @@ jobs:
           set -euo pipefail
           TAG="${GITHUB_SHA}"
           build() {
-            local svc="$1" dockerfile="$2" target="$3"
+            local svc="$1" dockerfile="$2" target="$3" context="${4:-.}"
             echo "::group::build $svc"
-            docker buildx build \
-              --file "$dockerfile" --target "$target" \
-              --tag "${REGISTRY}/${svc}:${TAG}" \
-              --tag "${REGISTRY}/${svc}:latest" \
-              --cache-from "type=gha,scope=${svc}" \
-              --cache-to "type=gha,mode=max,scope=${svc}" \
-              --push .
+            local args=(
+              --file "$dockerfile"
+              --tag "${REGISTRY}/${svc}:${TAG}"
+              --tag "${REGISTRY}/${svc}:latest"
+              --cache-from "type=gha,scope=${svc}"
+              --cache-to "type=gha,mode=max,scope=${svc}"
+              --push
+            )
+            [ -n "$target" ] && args+=(--target "$target")
+            docker buildx build "${args[@]}" "$context"
             echo "::endgroup::"
           }
-          build api   apps/api/Dockerfile   runtime
-          build agent apps/agent/Dockerfile runtime
-          build web   apps/web/Dockerfile   runtime
-          build migrate apps/api/Dockerfile migrate
+          build api       apps/api/Dockerfile       runtime
+          build agent     apps/agent/Dockerfile     runtime
+          build web       apps/web/Dockerfile       runtime
+          build migrate   apps/api/Dockerfile       migrate
+          build simulator apps/simulator/Dockerfile ""      apps/simulator
 
       - name: Copy compose file to VM
         # scp into /tmp (the deploy user can't write /opt/aios directly); the

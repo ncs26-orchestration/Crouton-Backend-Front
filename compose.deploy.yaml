@@ -108,6 +108,21 @@ services:
       redis: { condition: service_healthy }
     networks: [aios]
 
+  # Background generator: emits machine telemetry / incidents on an interval so
+  # the Machines and Incidents views have live data flowing through the agents.
+  simulator:
+    image: ${REGISTRY:-europe-west1-docker.pkg.dev/ncs26-solution/solution}/simulator:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: *db_url
+      API_URL: ${API_URL:-http://api:8080}
+      INTERVAL: ${SIMULATOR_INTERVAL:-15s}
+      ERROR_PROBABILITY: ${SIMULATOR_ERROR_PROB:-0.08}
+    depends_on:
+      postgres: { condition: service_healthy }
+      api: { condition: service_started }
+    networks: [aios]
+
   web:
     image: ${REGISTRY:-europe-west1-docker.pkg.dev/ncs26-solution/solution}/web:${TAG:-latest}
     restart: unless-stopped
