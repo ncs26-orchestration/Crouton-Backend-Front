@@ -635,6 +635,34 @@ function NodeDetail({
         </div>
       )}
 
+      {(n.checks ?? []).length > 0 && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            Policy checks
+          </h4>
+          <ul className="flex flex-col gap-1.5">
+            {(n.checks ?? []).map((c, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs">
+                {c.status === "pass" ? (
+                  <CheckCircle2 size={13} className="text-[var(--color-success)] shrink-0 mt-0.5" />
+                ) : c.status === "fail" ? (
+                  <X size={13} className="text-[var(--color-danger)] shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle size={13} className="text-[var(--color-warning-fg)] shrink-0 mt-0.5" />
+                )}
+                <span className="leading-snug min-w-0">
+                  <span className="text-[var(--color-fg)] font-medium">{c.label}</span>
+                  {c.detail && <span className="text-[var(--color-fg-muted)]"> — {c.detail}</span>}
+                  {c.policy_title && (
+                    <span className="block text-[10px] text-[var(--color-fg-subtle)]">{c.policy_title}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {flags.length > 0 && (
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
           <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">

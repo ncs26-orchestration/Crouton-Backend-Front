@@ -531,6 +531,12 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		})
 	}
 
+	checks, err := h.workflow.ListChecksByNode(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("get node: checks", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
 	// F5: include dependency info for blocked nodes.
 	var blockedBy map[string]any
 	if node.Status == "blocked" {
@@ -556,6 +562,7 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		"decision_outcome": node.DecisionOutcome,
 		"decision_summary": node.DecisionSummary,
 		"flags":            flagList,
+		"checks":           checks,
 		"started_at":       node.StartedAt,
 		"completed_at":     node.CompletedAt,
 	}

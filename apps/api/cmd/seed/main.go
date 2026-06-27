@@ -27,6 +27,7 @@ import (
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/policyrules"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
@@ -462,7 +463,8 @@ func seedRequests(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]in
 		tasks := buildTasks(nodes)
 		deps := buildDeps(r, plan, nodes)
 		flags := buildFlags(r, nodes)
-		if err := insertRequestGraph(ctx, pool, r, userIDs[r.requester], nodes, edges, tasks, deps, flags, now); err != nil {
+		checks := buildChecks(r, nodes)
+		if err := insertRequestGraph(ctx, pool, r, userIDs[r.requester], nodes, edges, tasks, deps, flags, checks, now); err != nil {
 			return seedCounts{}, fmt.Errorf("request %q: %w", r.title, err)
 		}
 		counts.nodes += len(nodes)
@@ -634,6 +636,37 @@ func buildFlags(r requestSpec, nodes []repo.WorkflowNode) []repo.NodeFlag {
 	return out
 }
 
+// buildChecks evaluates each department's policy rules against the request's
+// details and produces node_checks for the matching nodes, so the demo shows
+// exact pass/fail checks offline — the same evaluation the engine runs live.
+func buildChecks(r requestSpec, nodes []repo.WorkflowNode) []repo.NodeCheck {
+	if len(r.details) == 0 {
+		return nil
+	}
+	// department (lowercased) → policy from orgdir.
+	polByDept := make(map[string]orgdir.PolicySpec, len(orgdir.Policies))
+	for _, p := range orgdir.Policies {
+		polByDept[strings.ToLower(p.Department)] = p
+	}
+	var out []repo.NodeCheck
+	for _, n := range nodes {
+		if n.Status != "completed" && n.Status != "awaiting_review" {
+			continue
+		}
+		p, ok := polByDept[strings.ToLower(n.Department)]
+		if !ok || len(p.Rules) == 0 {
+			continue
+		}
+		for i, c := range policyrules.Evaluate(p.Title, p.Rules, r.details) {
+			out = append(out, repo.NodeCheck{
+				ID: "nck_" + shortID(), RequestID: r.id, NodeID: n.ID,
+				Label: c.Label, Status: c.Status, Detail: c.Detail, PolicyTitle: c.PolicyTitle, Ordinal: i,
+			})
+		}
+	}
+	return out
+}
+
 // buildDeps creates node_dependencies rows for blocked nodes in the seed (F5).
 // It maps the dependent node (the blocked one) to its blocking department node.
 func buildDeps(r requestSpec, plan *agentclient.Plan, nodes []repo.WorkflowNode) []repo.NodeDependency {
@@ -680,6 +713,7 @@ func insertRequestGraph(
 	tasks []repo.AgentTask,
 	deps []repo.NodeDependency,
 	flags []repo.NodeFlag,
+	checks []repo.NodeCheck,
 	now time.Time,
 ) error {
 	tx, err := pool.Begin(ctx)
@@ -752,9 +786,16 @@ func insertRequestGraph(
 			VALUES ($1, $2, $3, $4, $5, $6)
 		`, f.ID, f.RequestID, f.NodeID, f.Severity, f.Message, f.Ordinal)
 	}
+	// node_checks — the exact policy-rule results, reference workflow_nodes above.
+	for _, ch := range checks {
+		batch.Queue(`
+			INSERT INTO node_checks (id, request_id, node_id, label, status, detail, policy_title, ordinal)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, ch.ID, ch.RequestID, ch.NodeID, ch.Label, ch.Status, ch.Detail, ch.PolicyTitle, ch.Ordinal)
+	}
 
 	br := tx.SendBatch(ctx, batch)
-	for range len(nodes) + len(edges) + len(tasks) + len(deps) + len(flags) {
+	for range len(nodes) + len(edges) + len(tasks) + len(deps) + len(flags) + len(checks) {
 		if _, err := br.Exec(); err != nil {
 			_ = br.Close()
 			return fmt.Errorf("insert graph: %w", err)
@@ -1028,10 +1069,16 @@ func seedPolicies(ctx context.Context, pool *pgxpool.Pool, teamByName map[string
 		if !ok {
 			continue
 		}
+		rulesJSON := []byte("[]")
+		if len(p.Rules) > 0 {
+			if b, mErr := json.Marshal(p.Rules); mErr == nil {
+				rulesJSON = b
+			}
+		}
 		if _, err := pool.Exec(ctx, `
-			INSERT INTO department_policies (id, org_id, team_id, title, body)
-			VALUES ($1, $2, $3, $4, $5)
-		`, "pol_seed_"+strings.ToLower(p.Department), demoOrgID, teamID, p.Title, p.Body); err != nil {
+			INSERT INTO department_policies (id, org_id, team_id, title, body, rules)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, "pol_seed_"+strings.ToLower(p.Department), demoOrgID, teamID, p.Title, p.Body, rulesJSON); err != nil {
 			return count, fmt.Errorf("insert policy %s: %w", p.Title, err)
 		}
 		count++
