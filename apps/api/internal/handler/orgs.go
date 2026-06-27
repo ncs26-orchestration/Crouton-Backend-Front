@@ -54,6 +54,8 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	}
 
+	ctx := c.Request().Context()
+
 	var body struct {
 		Name string `json:"name"`
 		Slug string `json:"slug"`
@@ -69,7 +71,6 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 	}
 
 	orgID := fmt.Sprintf("org_%s", randomHex(8))
-	ctx := c.Request().Context()
 
 	tx, err := h.db.Begin(ctx)
 	if err != nil {
@@ -96,6 +97,12 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 		orgID, claims.UserID,
 	)
 	if err != nil {
+		// A foreign-key violation here means the token's user no longer exists
+		// (e.g. the DB was reset under an old session). Return 401 so the client
+		// signs out cleanly rather than surfacing a 500.
+		if isForeignKeyViolation(err) {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "your session is no longer valid, please sign in again"})
+		}
 		h.logger.Error("create org: add creator as admin", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -1217,6 +1224,11 @@ func handleOrgMemberErr(c echo.Context, err error) error {
 // isUniqueViolation checks if the error is a PostgreSQL unique constraint violation.
 func isUniqueViolation(err error) bool {
 	return err != nil && (containsCode(err, "23505"))
+}
+
+// isForeignKeyViolation checks if the error is a PostgreSQL foreign-key violation.
+func isForeignKeyViolation(err error) bool {
+	return err != nil && containsCode(err, "23503")
 }
 
 func containsCode(err error, code string) bool {

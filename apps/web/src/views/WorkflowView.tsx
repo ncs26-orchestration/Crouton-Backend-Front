@@ -187,9 +187,25 @@ function WorkflowCanvas({
 
   if (error || !data) {
     return (
-      <div className="flex-1 flex items-center justify-center gap-2 text-sm text-[var(--color-danger)]">
-        <AlertCircle size={16} />
-        Failed to load request
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+        <AlertCircle size={20} className="text-[var(--color-fg-subtle)]" />
+        <h2
+          className="text-lg font-medium text-[var(--color-fg)]"
+          style={{ fontFeatureSettings: '"ss01"' }}
+        >
+          This request isn't available
+        </h2>
+        <p className="text-sm text-[var(--color-fg-muted)] max-w-[45ch]">
+          It may have been removed, or it belongs to a different workspace. Pick a
+          request from the Requests tab to see its workflow.
+        </p>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-sm text-[var(--color-brand)] hover:underline mt-2"
+        >
+          <ArrowLeft size={14} />
+          Go to Requests
+        </button>
       </div>
     );
   }
