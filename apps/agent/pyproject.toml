@@ -49,6 +49,7 @@ ignore = ["ANN401"]  # allow typing.Any where pragmatic
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]
+"app/agents/diagnostic*.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.13"

@@ -51,6 +51,26 @@ curl -fsS "$API/orgs" -H "authorization: Bearer ${token}" \
   | jq -e --arg slug "$slug" '[.. | .slug? // empty] | index($slug) != null' >/dev/null \
   || fail "new org not found in list"
 
+# - F10: a fresh org comes pre-seeded with agents and policies -
+
+say "fresh org has seeded agents (F10)"
+curl -fsS "$API/orgs/${org_id}/agents" -H "authorization: Bearer ${token}" \
+  | jq -e '(.agents | length >= 5) and (.agents[0].agent_type != null)' >/dev/null \
+  || fail "new org should have >= 5 seeded agents"
+
+# F9: the roster carries a live status. Before any request runs every agent is
+# idle, and the derived activity counts are present.
+say "F9: roster carries live status (all idle before any request)"
+curl -fsS "$API/orgs/${org_id}/agents" -H "authorization: Bearer ${token}" \
+  | jq -e '([.agents[] | select(.status == "idle")] | length) == (.agents | length)
+           and (.agents[0] | has("active") and has("completed") and has("request_count"))' >/dev/null \
+  || fail "roster should expose live status, all idle before any request"
+
+say "fresh org has seeded policies (F10)"
+curl -fsS "$API/orgs/${org_id}/policies" -H "authorization: Bearer ${token}" \
+  | jq -e '(.policies | length >= 1) and (.policies[0].title != null)' >/dev/null \
+  || fail "new org should have seeded policies"
+
 # --- F1/F2: submit a request and get an auto-planned workflow graph ---
 
 say "submit a request (Open a new office in Berlin, High)"
@@ -101,6 +121,13 @@ for _ in $(seq 1 30); do
   sleep 0.5
 done
 [ -n "$blocked_seen" ] || fail "no blocked node appeared (F5)"
+
+# F9: with a node blocked and others mid-flight, the roster reflects live status
+# — at least one agent reports busy (owns an in_progress node) or blocked.
+say "F9: an agent shows non-idle live status while the request runs"
+curl -fsS "$API/orgs/${org_id}/agents" -H "authorization: Bearer ${token}" \
+  | jq -e '[.agents[] | select(.status == "busy" or .status == "blocked")] | length >= 1' >/dev/null \
+  || fail "no agent reported busy/blocked live status during the run"
 
 # F3/F7: the orchestration engine runs the review stages through their
 # department agents (deterministic with no LLM key) and then parks the request

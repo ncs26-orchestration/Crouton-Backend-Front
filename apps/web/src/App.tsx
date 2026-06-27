@@ -3,6 +3,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { HelpOverlay } from "./components/HelpOverlay";
+import { HowItWorks } from "./components/HowItWorks";
 import { ShellRail, type ShellSection } from "./components/ShellRail";
 import { ToastProvider } from "./components/Toasts";
 import { ThemeProvider } from "./lib/theme";
@@ -17,6 +18,7 @@ import { MyWorkView } from "./views/MyWorkView";
 import { RequestsView } from "./views/RequestsView";
 import { WorkflowView } from "./views/WorkflowView";
 import { AgentsView } from "./views/AgentsView";
+import { MachinesView } from "./views/MachinesView";
 import { ReportsView } from "./views/ReportsView";
 import { PoliciesView } from "./views/PoliciesView";
 import { IntegrationsView } from "./views/IntegrationsView";
@@ -32,7 +34,7 @@ interface Location {
 }
 
 const VALID_SECTIONS: ShellSection[] = [
-  "home", "my-work", "requests", "workflows", "agents",
+  "home", "my-work", "requests", "workflows", "machines", "agents",
   "reports", "policies", "integrations", "teams", "settings", "help",
 ];
 
@@ -145,6 +147,17 @@ function Shell() {
   const qc = useQueryClient();
   const [location, setLocation] = useState<Location>(loadLocation);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [howOpen, setHowOpen] = useState(false);
+
+  // Show the "How it works" explainer once on first visit so a new operator
+  // immediately understands the request pipeline and their part in it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.localStorage.getItem("aios.seen-howitworks")) {
+      setHowOpen(true);
+      window.localStorage.setItem("aios.seen-howitworks", "1");
+    }
+  }, []);
 
   // Clear cached data only when the signed-in user actually changes (account
   // switch), never on first mount. Running qc.clear() on mount races with the
@@ -196,6 +209,7 @@ function Shell() {
           orgId={activeOrg.id}
           onOpenWorkflow={navigateToWorkflow}
           onNavigate={setSection}
+          onShowHowItWorks={() => setHowOpen(true)}
         />
       )}
       {section === "my-work" && activeOrg && (
@@ -219,14 +233,23 @@ function Shell() {
         />
       )}
 
+      {section === "machines" && activeOrg && <MachinesView orgId={activeOrg.id} />}
       {section === "agents" && activeOrg && <AgentsView orgId={activeOrg.id} />}
       {section === "reports" && <ReportsView />}
-      {section === "policies" && <PoliciesView />}
+      {section === "policies" && activeOrg && <PoliciesView orgId={activeOrg.id} />}
       {section === "integrations" && <IntegrationsView />}
       {section === "teams" && <OrgView />}
       {section === "settings" && <SettingsView />}
 
-      <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <HelpOverlay
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        onHowItWorks={() => {
+          setHelpOpen(false);
+          setHowOpen(true);
+        }}
+      />
+      <HowItWorks open={howOpen} onClose={() => setHowOpen(false)} onNavigate={setSection} />
     </div>
   );
 }

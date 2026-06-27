@@ -38,8 +38,10 @@ func NewWorkHandler(logger *slog.Logger, pg *pgxpool.Pool) *WorkHandler {
 
 // ──────────────────────────────────────────────────────────────────────────
 // GET /me/work
-// Returns work_items: requests visible to the user (via org membership)
-// that are not yet completed, enriched with their current workflow stage.
+// Returns work_items from two sources:
+//   1. Workflow agent_tasks (from the request pipeline)
+//   2. Machine incident tasks (enpanne:machine:{id})
+// Each item has an asset_type so the mobile client can route correctly.
 // ──────────────────────────────────────────────────────────────────────────
 
 func (h *WorkHandler) ListMyWork(c echo.Context) error {
@@ -49,24 +51,66 @@ func (h *WorkHandler) ListMyWork(c echo.Context) error {
 	}
 	ctx := c.Request().Context()
 
-	// Fetch individual agent_tasks for orgs the user belongs to,
-	// joined through workflow_nodes and requests, so the mobile app
-	// can navigate to task detail using real task IDs.
 	rows, err := h.pg.Query(ctx, `
-		SELECT at.id, at.title, r.description, r.priority, at.status,
-		       wn.progress_percent AS progress,
-		       u.name AS requester_name,
-		       wn.status AS stage_status,
-		       r.id AS request_id,
-		       r.title AS request_title
+		-- Workflow agent_tasks (existing)
+		SELECT at.id, at.title,
+		       COALESCE(r.description, '') AS description,
+		       COALESCE(r.priority, 'medium') AS priority,
+		       at.status,
+		       COALESCE(wn.progress_percent, 0) AS progress,
+		       COALESCE(ru.name, 'System') AS requester_name,
+		       COALESCE(wn.status, 'pending') AS stage_status,
+		       COALESCE(r.id, '') AS request_id,
+		       COALESCE(r.title, '') AS request_title,
+		       'agent_task' AS asset_type,
+		       at.id AS asset_id
 		FROM agent_tasks at
-		JOIN workflow_nodes wn ON wn.id = at.node_id
-		JOIN requests r ON r.id = wn.request_id
+		LEFT JOIN workflow_nodes wn ON wn.id = at.node_id
+		LEFT JOIN requests r ON r.id = wn.request_id
+		LEFT JOIN users ru ON ru.id = r.requester_user_id
 		JOIN org_members om ON om.org_id = r.org_id AND om.user_id = $1
-		JOIN users u ON u.id = r.requester_user_id
-		WHERE at.status != 'completed'
-		  AND r.status NOT IN ('completed', 'rejected')
-		ORDER BY r.created_at DESC
+		WHERE at.node_id IS NOT NULL
+		  AND (r.status IS NULL OR r.status NOT IN ('rejected'))
+		  AND (
+		    om.role IN ('admin', 'executor')
+		    OR EXISTS (
+		      SELECT 1 FROM team_members tm
+		      JOIN teams t ON t.id = tm.team_id
+		      WHERE tm.user_id = $1
+		        AND LOWER(t.name) = LOWER(wn.department)
+		    )
+		  )
+
+		UNION ALL
+
+		-- Machine incident tasks (enpanne:machine:*)
+		SELECT at.id, at.title,
+		       COALESCE(mi.description, '') AS description,
+		       COALESCE(mi.severity, 'medium') AS priority,
+		       at.status,
+		       0 AS progress,
+		       COALESCE(mu.name, 'Technician') AS requester_name,
+		       mi.status AS stage_status,
+		       COALESCE(mi.machine_id, '') AS request_id,
+		       COALESCE(m.name, '') AS request_title,
+		       'machine_incident' AS asset_type,
+		       mi.id AS asset_id
+		FROM agent_tasks at
+		JOIN incidents mi ON mi.id = at.incident_id
+		JOIN machines m ON m.id = mi.machine_id
+		JOIN org_members om ON om.org_id = mi.org_id AND om.user_id = $1
+		LEFT JOIN users mu ON mu.id = mi.reported_by
+		WHERE at.incident_id IS NOT NULL
+		  AND mi.status NOT IN ('resolved')
+		  AND (
+		    om.role IN ('admin', 'executor')
+		    OR EXISTS (
+		      SELECT 1 FROM team_members tm
+		      WHERE tm.user_id = $1 AND tm.role = 'technician'
+		    )
+		  )
+
+		ORDER BY request_id DESC
 		LIMIT 50
 	`, claims.UserID)
 	if err != nil {
@@ -86,6 +130,8 @@ func (h *WorkHandler) ListMyWork(c echo.Context) error {
 		StageStatus   string `json:"stage_status"`
 		RequestID     string `json:"request_id"`
 		RequestTitle  string `json:"request_title"`
+		AssetType     string `json:"asset_type"`
+		AssetID       string `json:"asset_id"`
 	}
 
 	items := make([]workItem, 0)
@@ -93,7 +139,7 @@ func (h *WorkHandler) ListMyWork(c echo.Context) error {
 		var w workItem
 		if err := rows.Scan(&w.ID, &w.Title, &w.Description, &w.Priority,
 			&w.Status, &w.Progress, &w.RequesterName, &w.StageStatus,
-			&w.RequestID, &w.RequestTitle); err != nil {
+			&w.RequestID, &w.RequestTitle, &w.AssetType, &w.AssetID); err != nil {
 			h.logger.Error("list my work: scan", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}

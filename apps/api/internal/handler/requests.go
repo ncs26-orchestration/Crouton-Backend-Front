@@ -88,6 +88,8 @@ type requestResponse struct {
 	Description         string     `json:"description"`
 	RequesterUserID     int64      `json:"requester_user_id"`
 	RequesterName       string     `json:"requester_name"`
+	RequesterRole       string     `json:"requester_role"`
+	RequestType         string     `json:"request_type"`
 	Priority            string     `json:"priority"`
 	Status              string     `json:"status"`
 	Progress            int        `json:"progress"`
@@ -103,6 +105,8 @@ func toRequestResponse(r repo.Request, requesterName string) requestResponse {
 		Description:         r.Description,
 		RequesterUserID:     r.RequesterUserID,
 		RequesterName:       requesterName,
+		RequesterRole:       r.RequesterRole,
+		RequestType:         r.RequestType,
 		Priority:            r.Priority,
 		Status:              r.Status,
 		Progress:            r.Progress,
@@ -115,6 +119,54 @@ func toRequestResponse(r repo.Request, requesterName string) requestResponse {
 // request, asks the intake agent to plan a department workflow (falling
 // back to a deterministic plan when the agent is unavailable), persists
 // that graph, and moves the request to in_progress.
+// standardAgentTypes are the agent types the intake planner already knows from
+// its built-in catalog. Any other agent in the org is a custom department the
+// org created, which we surface to the planner so it can route to it.
+var standardAgentTypes = map[string]bool{
+	"finance": true, "legal": true, "it": true, "hr": true,
+	"ops": true, "planning": true, "approval": true,
+}
+
+// intakeOrgContext builds the org_context for the intake planner: the custom
+// departments this org has created (beyond the standard catalog), each with a
+// node key the planner may use. Errors are non-fatal — intake just plans from
+// the standard catalog. This is what lets a department created in the app
+// actually take part in a workflow.
+func (h *RequestsHandler) intakeOrgContext(ctx context.Context, orgID string) map[string]any {
+	rows, err := h.pg.Query(ctx, `
+		SELECT a.agent_type, COALESCE(t.name, '') AS department
+		FROM agents a LEFT JOIN teams t ON t.id = a.team_id
+		WHERE a.org_id = $1
+		ORDER BY a.created_at ASC
+	`, orgID)
+	if err != nil {
+		h.logger.Warn("intake org context: query agents", slog.String("err", err.Error()))
+		return map[string]any{}
+	}
+	defer rows.Close()
+
+	var extra []map[string]string
+	for rows.Next() {
+		var agentType, department string
+		if err := rows.Scan(&agentType, &department); err != nil {
+			h.logger.Warn("intake org context: scan", slog.String("err", err.Error()))
+			return map[string]any{}
+		}
+		if standardAgentTypes[agentType] || department == "" {
+			continue
+		}
+		extra = append(extra, map[string]string{
+			"key":        agentType + "_review",
+			"agent_type": agentType,
+			"department": department,
+		})
+	}
+	if len(extra) == 0 {
+		return map[string]any{}
+	}
+	return map[string]any{"additional_departments": extra}
+}
+
 func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	claims := middleware.UserFromCtx(c)
 	if claims == nil {
@@ -122,7 +174,8 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	}
 	orgID := c.Param("orgId")
 
-	if _, err := requireOrgMember(c, h.pg, orgID, claims.UserID); err != nil {
+	requesterRole, err := requireOrgMember(c, h.pg, orgID, claims.UserID)
+	if err != nil {
 		return handleOrgMemberErr(c, err)
 	}
 
@@ -147,6 +200,7 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 		Title:           title,
 		Description:     body.Description,
 		RequesterUserID: claims.UserID,
+		RequesterRole:   requesterRole,
 		Priority:        priority,
 		Status:          "submitted",
 	})
@@ -163,11 +217,18 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 			Description: body.Description,
 			Priority:    priority,
 		},
-		OrgContext: map[string]any{},
+		OrgContext: h.intakeOrgContext(ctx, orgID),
 	})
 	if err != nil {
 		h.logger.Warn("intake agent unavailable, using default plan", slog.String("err", err.Error()))
 		plan = agentclient.DefaultPlan()
+	}
+	if plan.RequestType != "" {
+		if err := h.requests.SetRequestType(ctx, reqID, plan.RequestType); err != nil {
+			h.logger.Warn("create request: set request_type", slog.String("err", err.Error()))
+		} else {
+			saved.RequestType = plan.RequestType
+		}
 	}
 
 	keyToNodeID := make(map[string]string, len(plan.Nodes))
@@ -453,6 +514,7 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		"description":      node.Description,
 		"progress_percent": node.ProgressPercent,
 		"status_text":      node.StatusText,
+		"decision_outcome": node.DecisionOutcome,
 		"started_at":       node.StartedAt,
 		"completed_at":     node.CompletedAt,
 	}
@@ -621,13 +683,14 @@ func (h *RequestsHandler) ListRequestAudit(c echo.Context) error {
 	eventList := make([]map[string]any, 0, len(events))
 	for _, e := range events {
 		eventList = append(eventList, map[string]any{
-			"id":         e.ID,
-			"request_id": e.RequestID,
-			"node_id":    e.NodeID,
-			"actor":      e.Actor,
-			"action":     e.Action,
-			"reason":     e.Reason,
-			"created_at": e.CreatedAt,
+			"id":          e.ID,
+			"request_id":  e.RequestID,
+			"node_id":     e.NodeID,
+			"actor":       e.Actor,
+			"action":      e.Action,
+			"reason":      e.Reason,
+			"document_id": e.DocumentID,
+			"created_at":  e.CreatedAt,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"events": eventList})
@@ -656,13 +719,14 @@ func (h *RequestsHandler) ListOrgAudit(c echo.Context) error {
 	eventList := make([]map[string]any, 0, len(events))
 	for _, e := range events {
 		eventList = append(eventList, map[string]any{
-			"id":         e.ID,
-			"request_id": e.RequestID,
-			"node_id":    e.NodeID,
-			"actor":      e.Actor,
-			"action":     e.Action,
-			"reason":     e.Reason,
-			"created_at": e.CreatedAt,
+			"id":          e.ID,
+			"request_id":  e.RequestID,
+			"node_id":     e.NodeID,
+			"actor":       e.Actor,
+			"action":      e.Action,
+			"reason":      e.Reason,
+			"document_id": e.DocumentID,
+			"created_at":  e.CreatedAt,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"events": eventList})

@@ -7,14 +7,15 @@ import json
 
 from app.agents import llm
 from app.agents.department import _parse_decision
-from app.agents.intake import _parse_plan
+from app.agents.intake import _additional_catalog, _parse_plan
 
 
-def test_llm_unavailable_without_keys(monkeypatch) -> None:
+def test_llm_available_via_ollama_fallback(monkeypatch) -> None:
     monkeypatch.setattr(llm.settings, "deepseek_api_key", None)
     monkeypatch.setattr(llm.settings, "groq_api_key", None)
     monkeypatch.setattr(llm.settings, "openai_api_key", None)
-    assert llm.llm_available() is False
+    # Ollama is always available as a local fallback provider.
+    assert llm.llm_available() is True
 
 
 def test_llm_available_with_deepseek_key(monkeypatch) -> None:
@@ -36,6 +37,45 @@ def test_parse_plan_rejects_off_catalog_keys() -> None:
         }
     )
     assert _parse_plan(bad) is None
+
+
+def test_additional_catalog_allows_custom_departments() -> None:
+    org = {
+        "additional_departments": [
+            {"key": "marketing_review", "agent_type": "marketing", "department": "Marketing"},
+        ]
+    }
+    text, keys = _additional_catalog(org)
+    assert "marketing_review" in keys
+    assert "Marketing" in text
+
+    def node(key: str, agent_type: str, dept: str) -> dict:
+        return {"key": key, "name": key, "agent_type": agent_type, "department": dept}
+
+    # A plan that uses the custom key is accepted only when that key is allowed.
+    plan = json.dumps(
+        {
+            "nodes": [
+                node("intake", "intake", "Planning"),
+                node("marketing_review", "marketing", "Marketing"),
+                node("exec_approval", "approval", "Executive"),
+                node("report", "report", "Planning"),
+            ],
+            "edges": [
+                {"from": "intake", "to": "marketing_review", "type": "sequence"},
+                {"from": "marketing_review", "to": "exec_approval", "type": "sequence"},
+                {"from": "exec_approval", "to": "report", "type": "sequence"},
+            ],
+        }
+    )
+    assert _parse_plan(plan, keys) is not None
+    # Without the custom key allowed, the same plan is rejected.
+    assert _parse_plan(plan) is None
+
+
+def test_additional_catalog_empty_without_org_context() -> None:
+    text, keys = _additional_catalog(None)
+    assert text == "" and keys == set()
 
 
 def test_parse_plan_accepts_valid_catalog_plan() -> None:
@@ -78,10 +118,11 @@ def test_parse_decision_rejects_garbage() -> None:
     assert _parse_decision('{"flags": []}') is None  # missing summary/status_text/tasks
 
 
-def test_parse_decision_accepts_valid_and_clears_blocked_on() -> None:
+def test_parse_decision_keeps_declared_block() -> None:
     raw = json.dumps(
         {
             "summary": "Budget is feasible.",
+            "outcome": "approve",
             "flags": [{"severity": "info", "message": "Within budget."}],
             "tasks": [{"title": "Assess budget", "status": "completed"}],
             "status_text": "Finance review complete.",
@@ -91,8 +132,11 @@ def test_parse_decision_accepts_valid_and_clears_blocked_on() -> None:
     d = _parse_decision(raw)
     assert d is not None
     assert d.summary == "Budget is feasible."
-    # F5 not built yet — blocked_on must be cleared so the engine never stalls.
-    assert d.blocked_on is None
+    # An agent may now declare a cross-department block (F5); a declared
+    # dependency is kept and forces the block outcome so the engine acts on it.
+    assert d.blocked_on is not None
+    assert d.blocked_on.on_department == "IT"
+    assert d.outcome == "block"
 
 
 def _valid_plan_json() -> str:

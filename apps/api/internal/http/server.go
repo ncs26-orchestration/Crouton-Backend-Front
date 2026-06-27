@@ -73,6 +73,7 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.DELETE("/:orgId/teams/:teamId", oh.DeleteTeam)
 
 	orgGroup.POST("/:orgId/members", oh.AddOrgMember)
+	orgGroup.POST("/:orgId/members/invite", oh.InviteMember)
 	orgGroup.GET("/:orgId/members", oh.ListOrgMembers)
 	orgGroup.PATCH("/:orgId/members/:userId", oh.UpdateOrgMemberRole)
 	orgGroup.DELETE("/:orgId/members/:userId", oh.RemoveOrgMember)
@@ -80,8 +81,13 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.POST("/:orgId/teams/:teamId/members", oh.AddTeamMember)
 	orgGroup.DELETE("/:orgId/teams/:teamId/members/:userId", oh.RemoveTeamMember)
 
-	// Me — current user's work items (requests they created or need to act on).
+	// Agents and policies read endpoints (F10).
+	orgGroup.GET("/:orgId/agents", oh.ListAgents)
+	orgGroup.GET("/:orgId/policies", oh.ListPolicies)
+
+	// Me — current user's profile and work items.
 	mh := handler.NewMeHandler(d.Logger, d.PgPool)
+	e.GET("/me", mh.GetMeProfile, authMiddleware)
 	e.GET("/me/work", mh.GetMyWork, authMiddleware)
 
 	// Requests — submission, listing, detail with the workflow graph, and
@@ -95,11 +101,14 @@ func NewServer(d Deps) *echo.Echo {
 	// handler (subscribes + streams to the browser).
 	eventBus := orchestrator.NewBus()
 
+	docRepo := repo.NewDocumentRepo(d.PgPool)
 	store := orchestrator.NewDBStore(
 		repo.NewRequestRepo(d.PgPool),
 		repo.NewWorkflowRepo(d.PgPool),
 		auditRepo,
 		repo.NewDependencyRepo(d.PgPool),
+		docRepo,
+		repo.NewPolicyRepo(d.PgPool),
 	)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {
@@ -121,6 +130,12 @@ func NewServer(d Deps) *echo.Echo {
 	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
 	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)
 
+	// Documents — auto-generated completion summaries and manual uploads.
+	doch := handler.NewDocumentsHandler(d.Logger, d.PgPool)
+	e.GET("/requests/:id/documents", doch.ListDocuments, authMiddleware)
+	e.POST("/requests/:id/documents", doch.UploadDocument, authMiddleware)
+	e.GET("/documents/:id/download", doch.DownloadDocument, authMiddleware)
+
 	// SSE events endpoint — authenticates via ?token= so EventSource can
 	// connect (it cannot set custom headers). The auth middleware is not
 	// used here; the handler reads the token from the query parameter.
@@ -139,6 +154,37 @@ func NewServer(d Deps) *echo.Echo {
 	e.POST("/tasks/:id/progress", wh.PostTaskProgress, authMiddleware)
 	e.POST("/tasks/:id/complete", wh.PostTaskComplete, authMiddleware)
 	e.POST("/tasks/:id/decision", wh.PostTaskDecision, authMiddleware)
+
+	// Machine registry (M-F1) — equipment owned by the org. Technician
+	// RBAC is enforced inside the handler (technician sees only assigned).
+	machH := handler.NewMachinesHandler(d.Logger, d.PgPool, d.JWTSecret)
+	orgGroup.POST("/:orgId/machines", machH.CreateMachine)
+	orgGroup.GET("/:orgId/machines", machH.ListMachines)
+	e.GET("/machines/:id", machH.GetMachine, authMiddleware)
+	e.PUT("/machines/:id", machH.UpdateMachine, authMiddleware)
+	// Telemetry webhook — no auth middleware (handler handles both JWT
+	// and machine API key auth internally).
+	e.POST("/machines/:id/telemetry", machH.PostTelemetry)
+	e.GET("/machines/:id/telemetry", machH.ListTelemetry, authMiddleware)
+
+	// Incidents (M-F6) — technician-reported problems on machines. Creating an
+	// incident auto-flips machine status to "down"; resolving flips it back.
+	incH := handler.NewIncidentsHandler(d.Logger, d.PgPool, d.JWTSecret)
+	orgGroup.GET("/:orgId/incidents", incH.ListIncidents, authMiddleware)
+	e.POST("/incidents", incH.CreateIncident, authMiddleware)
+	e.GET("/incidents/:id/messages", incH.ListMessages, authMiddleware)
+	e.POST("/incidents/:id/messages", incH.AppendMessage, authMiddleware)
+	e.POST("/incidents/:id/resolve", incH.ResolveIncident, authMiddleware)
+	e.GET("/incidents/:id/events", incH.StreamEvents)
+
+	// Diagnosis — AI-powered machine incident diagnostics. Technicians
+	// request a diagnosis and follow step-by-step repair checkpoints.
+	diagH := handler.NewDiagnosisHandler(d.Logger, d.PgPool, agentClient)
+	e.POST("/machines/:id/documents", diagH.UploadMachineDocument, authMiddleware)
+	e.GET("/machines/:id/documents", diagH.ListMachineDocuments, authMiddleware)
+	e.POST("/incidents/:id/diagnose", diagH.RequestDiagnosis, authMiddleware)
+	e.GET("/incidents/:id/diagnosis", diagH.GetDiagnosis, authMiddleware)
+	e.POST("/diagnosis/steps/:stepId/complete", diagH.CompleteStep, authMiddleware)
 
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup

@@ -25,8 +25,8 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started. Layers: **DB** schema/m
 | F6 | Traceability / audit trail | ✅ | ✅ | – | ✅ | ✅ | 🟡 |
 | F7 | Human executive approval | – | ✅ | – | ✅ | ✅ | 🟡 |
 | F8 | Execution stage & final report | – | ✅ | 🟡 | ✅ | ✅ | 🟡 |
-| F9 | Roster, Policies & Integrations views | ⬜ | ⬜ | – | ⬜ | ⬜ | ⬜ |
-| F10 | Seeding & demo data | ⬜ | ⬜ | – | – | – | ⬜ |
+| F9 | Roster, Policies & Integrations views | ✅ | ✅ | – | ✅ | ✅ | ✅ |
+| F10 | Seeding & demo data | ✅ | ✅ | – | – | – | ✅ |
 
 Groundwork already done (not features, but the platform features sit on): auth/orgs/teams/members
 foundation ✅ · Docker Compose smooth boot ✅ · CI (lint/test/race/migrations/e2e) ✅ · rebrand
@@ -123,6 +123,7 @@ the rest layer on.
 - **FE:** Agents roster grouped by team with live status; Policies read-only browser; Integrations display-only cards. (FE-9, FE-11)
 - **Link:** web → api.
 - **Done-check:** Agents shows seeded agents with status that goes busy while they own an in-progress node; Policies shows the policies agents consult; Integrations renders cleanly.
+- **Status note (Overall ✅):** F10 owns the `agents`/`department_policies` tables, the per-org seed (department teams + one agent each + starter policies, shared via `internal/orgdir`), and the base `GET /orgs/:orgId/agents` and `/policies` endpoints. F9 builds on that: it enhances `ListAgents` with a live status derived from the org's workflow nodes (busy while an agent owns an `in_progress` node, blocked while one waits on another department, else idle, plus completed/active/request counts and the latest status line) and adds an index on `workflow_nodes(agent_type)` for the polled aggregate. The frontend ships the three tabs: Agents grouped by team with the live status badge (polls every 4s), Policies as a read-only browser, Integrations display-only. The e2e smoke asserts the roster carries live status (all idle before any request) and that an agent goes non-idle during a run; all paths work with no LLM keys. `agentLiveStatus` precedence is unit-tested.
 
 ### F10 — Seeding & demo data
 *Usable from a cold start; demo-ready.*

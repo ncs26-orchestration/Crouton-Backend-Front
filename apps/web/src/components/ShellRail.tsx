@@ -16,6 +16,7 @@ import {
   Sun,
   Users,
   Workflow,
+  Wrench,
 } from "lucide-react";
 
 import { BrandMark } from "./Brand";
@@ -30,6 +31,7 @@ export type ShellSection =
   | "my-work"
   | "requests"
   | "workflows"
+  | "machines"
   | "agents"
   | "reports"
   | "policies"
@@ -59,6 +61,7 @@ const PRIMARY: Item[] = [
   { id: "my-work", icon: Inbox, label: "My Work", hint: "Tasks & approvals" },
   { id: "requests", icon: FileText, label: "Requests", hint: "Submit & track" },
   { id: "workflows", icon: Workflow, label: "Workflows", hint: "Live canvas" },
+  { id: "machines", icon: Wrench, label: "Machines", hint: "Equipment" },
   { id: "agents", icon: Bot, label: "Agents", hint: "Agent roster" },
   { id: "reports", icon: BarChart3, label: "Reports", hint: "Audit & analytics" },
   { id: "policies", icon: ScrollText, label: "Policies", hint: "Department rules" },

@@ -6,12 +6,14 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +25,17 @@ import (
 // type is a human decision point, not an agent step: the engine parks the
 // request there instead of running an agent, and a human resumes it via Approve.
 const approvalAgentType = "approval"
+
+// complianceAgentTypes own hard rules: when one of these agents returns a
+// "reject" outcome, the engine stops the request rather than carrying the
+// recommendation to the human gate. Other departments' rejections are surfaced
+// as critical flags for the executive to weigh, keeping a human in the loop.
+var complianceAgentTypes = map[string]bool{"legal": true}
+
+// errRequestRejected is returned by runNode when an agent's decision rejected
+// the request outright. The run loop treats it as a clean stop: the rejection is
+// already persisted and audited.
+var errRequestRejected = errors.New("request rejected by agent decision")
 
 // ApprovalDecision is a human's call on the executive gate.
 type ApprovalDecision string
@@ -58,6 +71,7 @@ type Store interface {
 	ListEdgesByRequest(ctx context.Context, requestID string) ([]repo.WorkflowEdge, error)
 	ListInProgressRequestIDs(ctx context.Context) ([]string, error)
 	UpdateNodeStatus(ctx context.Context, nodeID, status, statusText string, progressPercent int) error
+	UpdateNodeDecisionOutcome(ctx context.Context, nodeID, outcome string) error
 	ClearNodeTasks(ctx context.Context, nodeID string) error
 	InsertTasks(ctx context.Context, tasks []repo.AgentTask) error
 	UpdateRequestProgress(ctx context.Context, requestID, status string, progressPercent int) error
@@ -68,6 +82,10 @@ type Store interface {
 	ListUnresolvedDepsByRequest(ctx context.Context, requestID string) ([]repo.NodeDependency, error)
 	// F6: audit trail.
 	AppendAuditEvent(ctx context.Context, e repo.AuditEvent) error
+	// Documents — generated completion summaries and manual uploads.
+	CreateDocument(ctx context.Context, d *repo.Document) error
+	// Policies an agent checks a request against (F10).
+	ListPoliciesByOrg(ctx context.Context, orgID string) ([]repo.DepartmentPolicy, error)
 }
 
 // Engine advances requests on background goroutines.
@@ -146,6 +164,11 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 		return fmt.Errorf("get request: %w", err)
 	}
 
+	// Load the org's policies once and group them by department so each agent is
+	// handed only the policies it owns (F10). A failure here is non-fatal: agents
+	// fall back to reasoning without policy text.
+	policiesByDept := e.loadPoliciesByDept(ctx, req.OrgID)
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -177,12 +200,42 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			if err := e.store.UpdateRequestProgress(ctx, requestID, "completed", 100); err != nil {
 				return fmt.Errorf("update request progress: %w", err)
 			}
+
+			docID := "doc_" + shortID()
+			docBuf := new(bytes.Buffer)
+			fmt.Fprintf(docBuf, "Request: %s\n", req.Title)
+			fmt.Fprintf(docBuf, "Description: %s\n", req.Description)
+			fmt.Fprintf(docBuf, "Priority: %s\n", req.Priority)
+			fmt.Fprintf(docBuf, "Completed: %s\n\n", time.Now().Format(time.RFC1123))
+			fmt.Fprintf(docBuf, "--- Node Results ---\n")
+			for _, n := range nodes {
+				statusText := n.StatusText
+				if statusText == "" {
+					statusText = "—"
+				}
+				fmt.Fprintf(docBuf, "\n  %s (%s) [%s]\n", n.Name, n.Department, n.Status)
+				fmt.Fprintf(docBuf, "    %s\n", statusText)
+			}
+			contentText := docBuf.String()
+
+			if err := e.store.CreateDocument(ctx, &repo.Document{
+				ID:          docID,
+				RequestID:   requestID,
+				Filename:    "completion-summary.txt",
+				Mime:        "text/plain",
+				ContentText: contentText,
+			}); err != nil {
+				e.log.Warn("failed to create completion document", slog.String("request_id", requestID), slog.String("err", err.Error()))
+			}
+
+			aevID := "aev_" + shortID()
 			if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
-				ID:        "aev_" + shortID(),
-				RequestID: requestID,
-				Actor:     "engine",
-				Action:    "request.completed",
-				Reason:    "All " + fmt.Sprintf("%d", completed) + " nodes completed",
+				ID:         aevID,
+				RequestID:  requestID,
+				Actor:      "engine",
+				Action:     "request.completed",
+				Reason:     "All " + fmt.Sprintf("%d", completed) + " nodes completed",
+				DocumentID: &docID,
 			}); err != nil {
 				e.log.Warn("failed to audit request.completed", slog.String("request_id", requestID), slog.String("err", err.Error()))
 			}
@@ -218,8 +271,13 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 				gate = &node
 				continue
 			}
-			completedNow, err := e.runNode(ctx, req, eligible[i], byID, edges)
+			completedNow, err := e.runNode(ctx, req, eligible[i], byID, edges, policiesByDept)
 			if err != nil {
+				// An agent rejected the request outright: already persisted and
+				// audited, so stop the worker cleanly.
+				if errors.Is(err, errRequestRejected) {
+					return nil
+				}
 				return err
 			}
 			if completedNow {
@@ -349,7 +407,7 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 // with the agent's plain-language status. Every state change is written to the
 // audit trail (F6). Returns true if the node actually completed (not blocked)
 // so the caller can track progress accurately.
-func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.WorkflowNode, byID map[string]repo.WorkflowNode, edges []repo.WorkflowEdge) (bool, error) {
+func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.WorkflowNode, byID map[string]repo.WorkflowNode, edges []repo.WorkflowEdge, policiesByDept map[string][]repo.DepartmentPolicy) (bool, error) {
 	now := time.Now()
 	if err := e.store.UpdateNodeStatus(ctx, node.ID, "in_progress", node.Department+" reviewing the request…", 25); err != nil {
 		return false, fmt.Errorf("mark in_progress: %w", err)
@@ -376,7 +434,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			Priority:    req.Priority,
 		},
 		UpstreamContext: upstream,
-		OrgContext:      map[string]any{},
+		OrgContext:      orgContextForNode(node, policiesByDept),
 	})
 	if err != nil {
 		e.log.Warn("orchestrator: agent unavailable, using fallback decision",
@@ -438,6 +496,9 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			if err := e.store.UpdateNodeStatus(ctx, node.ID, "blocked", statusText, 50); err != nil {
 				return false, fmt.Errorf("mark blocked: %w", err)
 			}
+			if err := e.store.UpdateNodeDecisionOutcome(ctx, node.ID, "block"); err != nil {
+				e.log.Warn("failed to record block outcome", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+			}
 			return false, nil
 		}
 	}
@@ -466,6 +527,47 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 	if statusText == "" {
 		statusText = node.Name + " complete"
 	}
+
+	outcome := decision.Outcome
+	if outcome == "" {
+		outcome = "approve"
+	}
+
+	// Record the agent's outcome on the node and surface any risk it raised as
+	// audit events so the decision is traceable and visible at the gate (F6).
+	if err := e.store.UpdateNodeDecisionOutcome(ctx, node.ID, outcome); err != nil {
+		e.log.Warn("failed to record decision outcome", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+	}
+	e.auditFlags(ctx, req.ID, node, decision.Flags)
+
+	// A compliance department (e.g. Legal) that rejects stops the request
+	// outright; the rejection is audited with the agent's reasoning. Rejections
+	// from other departments fall through to completion and are carried to the
+	// executive gate as critical flags instead.
+	if outcome == "reject" && complianceAgentTypes[node.AgentType] {
+		if err := e.store.UpdateNodeStatus(ctx, node.ID, "completed", statusText, 100); err != nil {
+			return false, fmt.Errorf("mark completed: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID:        "aev_" + shortID(),
+			RequestID: req.ID,
+			NodeID:    &node.ID,
+			Actor:     node.Department,
+			Action:    "agent.rejected",
+			Reason:    statusText + " — " + decision.Summary,
+		}); err != nil {
+			e.log.Warn("failed to audit agent.rejected", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+		}
+		if err := e.store.UpdateRequestProgress(ctx, req.ID, "rejected", req.Progress); err != nil {
+			return false, fmt.Errorf("reject request: %w", err)
+		}
+		e.publishNodeEvent(req.ID, "completed", node.ID, node.Key, 100, statusText, now)
+		e.publishRequestEvent(req.ID, "rejected", req.Progress)
+		e.log.Info("orchestrator: request rejected by agent",
+			slog.String("request_id", req.ID), slog.String("department", node.Department))
+		return false, errRequestRejected
+	}
+
 	if err := e.store.UpdateNodeStatus(ctx, node.ID, "completed", statusText, 100); err != nil {
 		return false, fmt.Errorf("mark completed: %w", err)
 	}
@@ -575,6 +677,61 @@ func eligibleNodes(nodes []repo.WorkflowNode, edges []repo.WorkflowEdge, status 
 	return out
 }
 
+// auditFlags writes a node.flagged audit event for each warning/critical flag an
+// agent raised, so the risk is traceable and the executive sees it at the gate.
+// Info-level flags are skipped to keep the trail signal-heavy.
+func (e *Engine) auditFlags(ctx context.Context, requestID string, node repo.WorkflowNode, flags []agentclient.Flag) {
+	for _, f := range flags {
+		if f.Severity != "warning" && f.Severity != "critical" {
+			continue
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID:        "aev_" + shortID(),
+			RequestID: requestID,
+			NodeID:    &node.ID,
+			Actor:     node.Department,
+			Action:    "node.flagged",
+			Reason:    strings.ToUpper(f.Severity) + ": " + f.Message,
+		}); err != nil {
+			e.log.Warn("failed to audit node.flagged", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+		}
+	}
+}
+
+// loadPoliciesByDept loads the org's policies and groups them by lowercased
+// department name. Errors are logged and swallowed: missing policies just means
+// agents reason without them.
+func (e *Engine) loadPoliciesByDept(ctx context.Context, orgID string) map[string][]repo.DepartmentPolicy {
+	out := make(map[string][]repo.DepartmentPolicy)
+	policies, err := e.store.ListPoliciesByOrg(ctx, orgID)
+	if err != nil {
+		e.log.Warn("orchestrator: could not load policies, agents run without them",
+			slog.String("org_id", orgID), slog.String("err", err.Error()))
+		return out
+	}
+	for _, p := range policies {
+		key := strings.ToLower(strings.TrimSpace(p.Department))
+		out[key] = append(out[key], p)
+	}
+	return out
+}
+
+// orgContextForNode builds the org_context payload for a department agent: the
+// policies that apply to its department, so it can check the request and cite
+// them.
+func orgContextForNode(node repo.WorkflowNode, policiesByDept map[string][]repo.DepartmentPolicy) map[string]any {
+	dept := strings.ToLower(strings.TrimSpace(node.Department))
+	policies := policiesByDept[dept]
+	if len(policies) == 0 {
+		return map[string]any{}
+	}
+	items := make([]map[string]string, 0, len(policies))
+	for _, p := range policies {
+		items = append(items, map[string]string{"title": p.Title, "body": p.Body})
+	}
+	return map[string]any{"policies": items}
+}
+
 // upstreamContext gathers summaries for all completed nodes in the request,
 // not just the direct edge predecessors. This lets an agent reason over any
 // completed department's output, not just formal predecessors — essential for
@@ -598,9 +755,14 @@ func upstreamContext(nodeID string, byID map[string]repo.WorkflowNode, edges []r
 			continue
 		}
 		seen[n.ID] = true
+		outcome := n.DecisionOutcome
+		if outcome == "" || outcome == "pending" {
+			outcome = "approve"
+		}
 		out = append(out, agentclient.UpstreamItem{
 			Key:        n.Key,
 			Department: n.Department,
+			Outcome:    outcome,
 			Summary:    n.StatusText,
 		})
 	}

@@ -21,6 +21,7 @@ type fakeStore struct {
 	reqStatus   string
 	reqProgress int
 	deps        []fakeDep
+	policies    []repo.DepartmentPolicy
 }
 
 type fakeDep struct {
@@ -58,6 +59,20 @@ func (s *fakeStore) ListNodesByRequest(_ context.Context, _ string) ([]repo.Work
 
 func (s *fakeStore) ListEdgesByRequest(_ context.Context, _ string) ([]repo.WorkflowEdge, error) {
 	return s.edges, nil
+}
+
+func (s *fakeStore) UpdateNodeDecisionOutcome(_ context.Context, nodeID, outcome string) error {
+	for _, n := range s.nodes {
+		if n.ID == nodeID {
+			n.DecisionOutcome = outcome
+			return nil
+		}
+	}
+	return repo.ErrNotFound
+}
+
+func (s *fakeStore) ListPoliciesByOrg(_ context.Context, _ string) ([]repo.DepartmentPolicy, error) {
+	return s.policies, nil
 }
 
 func (s *fakeStore) UpdateNodeStatus(_ context.Context, nodeID, status, statusText string, progress int) error {
@@ -136,6 +151,10 @@ func (s *fakeStore) ListUnresolvedDepsByRequest(_ context.Context, _ string) ([]
 
 func (s *fakeStore) AppendAuditEvent(_ context.Context, e repo.AuditEvent) error {
 	s.auditEvents = append(s.auditEvents, e)
+	return nil
+}
+
+func (s *fakeStore) CreateDocument(_ context.Context, _ *repo.Document) error {
 	return nil
 }
 
@@ -577,4 +596,160 @@ func TestRunResumesUnfinishedNodeIdempotently(t *testing.T) {
 	if finTasks != 1 {
 		t.Errorf("finance has %d tasks after resume, want 1 (cleared + re-run)", finTasks)
 	}
+}
+
+// scriptedAgent returns a caller-supplied decision per agent_type, so tests can
+// exercise reject/flag outcomes deterministically.
+type scriptedAgent struct {
+	byType map[string]*agentclient.Decision
+}
+
+func (a scriptedAgent) Run(_ context.Context, rr agentclient.RunRequest) (*agentclient.Decision, error) {
+	if d, ok := a.byType[rr.AgentType]; ok {
+		return d, nil
+	}
+	return &agentclient.Decision{
+		Summary:    "ok",
+		Outcome:    "approve",
+		StatusText: rr.AgentType + " complete",
+		Tasks:      []agentclient.TaskItem{{Title: "did " + rr.AgentType, Status: "completed"}},
+	}, nil
+}
+
+func countAudit(s *fakeStore, action string) int {
+	n := 0
+	for _, e := range s.auditEvents {
+		if e.Action == action {
+			n++
+		}
+	}
+	return n
+}
+
+// A Legal rejection (a compliance department) stops the request: it is marked
+// rejected, audited, and the downstream report never runs.
+func TestAgentRejectStopsRequest(t *testing.T) {
+	store := newGraph()
+	store.nodes = []*repo.WorkflowNode{
+		{ID: "n_intake", RequestID: "req_1", Key: "intake", AgentType: "intake", Department: "Planning", Status: "pending"},
+		{ID: "n_legal", RequestID: "req_1", Key: "legal_review", AgentType: "legal", Department: "Legal", Status: "pending"},
+		{ID: "n_report", RequestID: "req_1", Key: "report", AgentType: "report", Department: "Planning", Status: "pending"},
+	}
+	store.edges = []repo.WorkflowEdge{
+		{ID: "e1", SourceNodeID: "n_intake", TargetNodeID: "n_legal"},
+		{ID: "e2", SourceNodeID: "n_legal", TargetNodeID: "n_report"},
+	}
+	agent := scriptedAgent{byType: map[string]*agentclient.Decision{
+		"legal": {
+			Summary:    "Violates GDPR data residency.",
+			Outcome:    "reject",
+			StatusText: "Legal rejected — GDPR data residency violation.",
+			Flags:      []agentclient.Flag{{Severity: "critical", Message: "GDPR: data must stay in the EU"}},
+			Tasks:      []agentclient.TaskItem{{Title: "Check GDPR", Status: "completed"}},
+		},
+	}}
+	e := quietEngine(store, agent)
+
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if store.reqStatus != "rejected" {
+		t.Errorf("request status = %q, want rejected", store.reqStatus)
+	}
+	if got := store.byID("n_legal").DecisionOutcome; got != "reject" {
+		t.Errorf("legal decision_outcome = %q, want reject", got)
+	}
+	if store.byID("n_report").Status == "completed" {
+		t.Error("report ran after a rejection; it should not")
+	}
+	if countAudit(store, "agent.rejected") != 1 {
+		t.Errorf("agent.rejected audit count = %d, want 1", countAudit(store, "agent.rejected"))
+	}
+}
+
+// A warning/critical flag is recorded as a node.flagged audit event and the node
+// still completes (the request flows on to the gate).
+func TestAgentFlagIsAuditedAndOutcomeRecorded(t *testing.T) {
+	store := newGraph()
+	agent := scriptedAgent{byType: map[string]*agentclient.Decision{
+		"finance": {
+			Summary:    "Over budget but fundable.",
+			Outcome:    "approve_with_conditions",
+			StatusText: "Finance: proceed with conditions.",
+			Flags:      []agentclient.Flag{{Severity: "warning", Message: "Spend exceeds quarterly budget"}},
+			Tasks:      []agentclient.TaskItem{{Title: "Assess budget", Status: "completed"}},
+		},
+	}}
+	e := quietEngine(store, agent)
+
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if store.reqStatus != "completed" {
+		t.Errorf("request status = %q, want completed", store.reqStatus)
+	}
+	if got := store.byID("n_fin").DecisionOutcome; got != "approve_with_conditions" {
+		t.Errorf("finance decision_outcome = %q, want approve_with_conditions", got)
+	}
+	if countAudit(store, "node.flagged") != 1 {
+		t.Errorf("node.flagged audit count = %d, want 1", countAudit(store, "node.flagged"))
+	}
+}
+
+// Policies for a node's department are passed to the agent as org_context.
+func TestPoliciesInjectedAsOrgContext(t *testing.T) {
+	store := newGraph()
+	store.policies = []repo.DepartmentPolicy{
+		{ID: "p1", Department: "Finance", Title: "Budget Cap", Body: "Spend over 50k needs CFO sign-off."},
+	}
+	seen := &capturingAgent{}
+	e := quietEngine(store, seen)
+
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	fin := seen.orgContextFor("finance")
+	if fin == nil {
+		t.Fatal("finance never ran")
+	}
+	if _, ok := fin["policies"]; !ok {
+		t.Errorf("finance org_context missing policies, got %v", fin)
+	}
+	if intake := seen.orgContextFor("intake"); intake != nil {
+		if _, ok := intake["policies"]; ok {
+			t.Error("intake (Planning) should have no policies in this org")
+		}
+	}
+}
+
+type capturingAgent struct {
+	seen []struct {
+		agentType string
+		orgCtx    map[string]any
+	}
+}
+
+func (a *capturingAgent) Run(_ context.Context, rr agentclient.RunRequest) (*agentclient.Decision, error) {
+	a.seen = append(a.seen, struct {
+		agentType string
+		orgCtx    map[string]any
+	}{rr.AgentType, rr.OrgContext})
+	return &agentclient.Decision{
+		Summary:    "ok",
+		Outcome:    "approve",
+		StatusText: rr.AgentType + " complete",
+		Tasks:      []agentclient.TaskItem{{Title: "did " + rr.AgentType, Status: "completed"}},
+	}, nil
+}
+
+func (a *capturingAgent) orgContextFor(agentType string) map[string]any {
+	for _, s := range a.seen {
+		if s.agentType == agentType {
+			return s.orgCtx
+		}
+	}
+	return nil
 }

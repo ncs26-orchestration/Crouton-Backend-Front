@@ -281,12 +281,23 @@ export interface OrgRequest {
   description: string;
   requester_user_id: number;
   requester_name: string;
+  requester_role?: string;
+  request_type?: string;
   priority: RequestPriority;
   status: RequestStatus;
   progress: number;
   estimated_completion: string | null;
   created_at: string;
 }
+
+// The call a department agent reached on a node.
+export type DecisionOutcome =
+  | "pending"
+  | "approve"
+  | "approve_with_conditions"
+  | "flag"
+  | "reject"
+  | "block";
 
 export interface WorkflowNodeData {
   id: string;
@@ -298,6 +309,7 @@ export interface WorkflowNodeData {
   description: string;
   progress_percent: number;
   status_text: string;
+  decision_outcome?: DecisionOutcome;
   started_at: string | null;
   completed_at: string | null;
   blocked_by?: { reason: string; blocked_at?: string } | null;
@@ -344,6 +356,47 @@ export interface NodeDetailResponse {
 	activity: AuditEvent[];
 }
 
+// --- Roster + Policies (F9 — supporting tabs) ---
+
+// Derived live status of a department agent: idle, busy while it owns an
+// in_progress node, or blocked while one of its nodes waits on another team.
+export type AgentStatus = "idle" | "busy" | "blocked";
+
+// One department agent in the org roster (seeded by F10), with activity
+// aggregated across all of the org's requests. The seeded fields (name, avatar,
+// team, capabilities) come from the directory; the counts and status are
+// derived live from the workflow nodes the agent owns. capabilities is a
+// comma-separated free-text list as stored by the seed.
+export interface AgentRosterEntry {
+  id: string;
+  org_id: string;
+  agent_type: string;
+  name: string;
+  avatar: string;
+  team_id: string;
+  team_name: string;
+  capabilities: string;
+  created_at: string;
+  status: AgentStatus;
+  total: number;
+  completed: number;
+  active: number;
+  blocked: number;
+  request_count: number;
+  latest_status: string;
+}
+
+// A read-only department policy agents consult while reasoning (seeded by F10).
+export interface DepartmentPolicy {
+  id: string;
+  org_id: string;
+  team_id: string;
+  team_name: string;
+  title: string;
+  body: string;
+  created_at: string;
+}
+
 // Binding state drives node color. Resolved at canvas build time
 // against the IS Registry; a task with no binding is "idle", a valid
 // binding is "ok", a binding whose id does not resolve is "error",
@@ -366,6 +419,7 @@ export interface ReportStage {
   department: string;
   status: string;
   status_text: string;
+  decision_outcome?: DecisionOutcome;
   started_at: string | null;
   completed_at: string | null;
   duration_seconds: number;
@@ -461,4 +515,54 @@ export interface WorkflowDiff {
   added: string[];
   removed: string[];
   changed: string[];
+}
+
+// --- Incidents (M-F6) ---
+
+export type IncidentSeverity = "low" | "medium" | "high" | "critical";
+export type IncidentStatus = "open" | "in_progress" | "resolved";
+
+export interface Incident {
+  id: string;
+  machine_id: string;
+  machine_name: string;
+  org_id: string;
+  reported_by: number;
+  title: string;
+  description: string;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  resolved_at: string | null;
+  resolution_notes: string;
+  created_at: string;
+}
+
+export interface IncidentMessage {
+  id: string;
+  incident_id: string;
+  sender_id: number | null;
+  sender_name: string;
+  sender_role: string;
+  content: string;
+  created_at: string;
+}
+
+// --- Machines (M-F1) ---
+
+export type MachineStatus = "operational" | "degraded" | "down" | "maintenance";
+
+export interface Machine {
+  id: string;
+  org_id: string;
+  assigned_user_id: number | null;
+  name: string;
+  machine_type: string;
+  location: string;
+  serial_number: string;
+  status: MachineStatus;
+  metadata: Record<string, unknown>;
+  last_service_at: string | null;
+  next_service_due: string | null;
+  created_at: string;
+  updated_at: string;
 }

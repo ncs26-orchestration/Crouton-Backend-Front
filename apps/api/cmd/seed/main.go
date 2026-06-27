@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,6 +25,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
@@ -45,11 +47,12 @@ type userSpec struct {
 var users = []userSpec{
 	{"founder@acme.test", "Dana Founder", "admin"},
 	{"coo@acme.test", "Omar Operations", "executor"},
-	{"finance.lead@acme.test", "Farah Finance", "employee"},
-	{"legal.lead@acme.test", "Leo Legal", "employee"},
-	{"it.lead@acme.test", "Ivy IT", "employee"},
-	{"hr.lead@acme.test", "Hana HR", "employee"},
-	{"ops.lead@acme.test", "Otto Ops", "employee"},
+	{"finance.lead@acme.test", "Farah Finance", "executor"},
+	{"legal.lead@acme.test", "Leo Legal", "executor"},
+	{"it.lead@acme.test", "Ivy IT", "executor"},
+	{"hr.lead@acme.test", "Hana HR", "executor"},
+	{"ops.lead@acme.test", "Otto Ops", "executor"},
+	{"tech.lead@acme.test", "Tara Technician", "executor"},
 }
 
 // teamSpec is a department team plus the lead's email.
@@ -66,6 +69,7 @@ var teams = []teamSpec{
 	{"team_seed_it", "IT", "Systems, security, provisioning", "it.lead@acme.test"},
 	{"team_seed_hr", "HR", "Hiring, onboarding, people ops", "hr.lead@acme.test"},
 	{"team_seed_ops", "Operations", "Execution, logistics, delivery", "ops.lead@acme.test"},
+	{"team_seed_maint", "Maintenance", "Equipment maintenance and repair", "tech.lead@acme.test"},
 }
 
 // graphProfile describes how a request's workflow graph should look: which
@@ -74,7 +78,9 @@ var teams = []teamSpec{
 type graphProfile struct {
 	completed  []string
 	inProgress map[string]string
-	blocked    map[string]string // key → reason for the blocked dependency (F5)
+	blocked    map[string]string   // key → reason for the blocked dependency (F5)
+	outcomes   map[string]string   // key → decision_outcome override (else derived from status)
+	flags      map[string][]string // key → "severity: message" flags an agent raised
 }
 
 // requestSpec is one seeded request and the shape of its workflow graph.
@@ -84,6 +90,7 @@ type requestSpec struct {
 	description string
 	priority    string
 	status      string
+	requestType string // intake classification (hiring, procurement, ...)
 	progress    int
 	requester   string // email
 	ageDays     int    // how long ago it was submitted
@@ -98,6 +105,7 @@ var requests = []requestSpec{
 		description: "Expand into the EU market with a 30-person satellite office in Berlin by Q4.",
 		priority:    "high",
 		status:      "in_progress",
+		requestType: "expansion",
 		progress:    35,
 		requester:   "founder@acme.test",
 		ageDays:     6,
@@ -119,6 +127,7 @@ var requests = []requestSpec{
 		description: "Refresh the engineering fleet with 50 new laptops ahead of the Q3 hiring wave.",
 		priority:    "medium",
 		status:      "awaiting_approval",
+		requestType: "procurement",
 		progress:    55,
 		requester:   "it.lead@acme.test",
 		ageDays:     9,
@@ -128,6 +137,12 @@ var requests = []requestSpec{
 			inProgress: map[string]string{
 				"exec_approval": "Awaiting CFO sign-off on the $92k spend",
 			},
+			outcomes: map[string]string{
+				"finance_review": "approve_with_conditions",
+			},
+			flags: map[string][]string{
+				"finance_review": {"warning: $92k exceeds the $50k single-PO limit in Finance Policy; CFO sign-off required."},
+			},
 		},
 	},
 	{
@@ -136,6 +151,7 @@ var requests = []requestSpec{
 		description: "Bring on 12 contractors for the Q3 delivery push, fully provisioned and compliant.",
 		priority:    "medium",
 		status:      "completed",
+		requestType: "hiring",
 		progress:    100,
 		requester:   "hr.lead@acme.test",
 		ageDays:     21,
@@ -145,6 +161,12 @@ var requests = []requestSpec{
 				"intake", "planning", "finance_review", "legal_review", "it_assessment",
 				"exec_approval", "hr_planning", "ops_planning", "implementation", "report",
 			},
+			outcomes: map[string]string{
+				"legal_review": "approve_with_conditions",
+			},
+			flags: map[string][]string{
+				"legal_review": {"info: Contractor agreements use the standard NDA template; IP assignment confirmed."},
+			},
 		},
 	},
 	{
@@ -153,6 +175,7 @@ var requests = []requestSpec{
 		description: "Move off the legacy CRM to a new vendor with zero data loss and minimal downtime.",
 		priority:    "urgent",
 		status:      "in_progress",
+		requestType: "infra",
 		progress:    15,
 		requester:   "coo@acme.test",
 		ageDays:     2,
@@ -165,11 +188,36 @@ var requests = []requestSpec{
 		},
 	},
 	{
+		id:          "req_seed_offshore",
+		title:       "Stand up an offshore data center",
+		description: "Host EU customer data in a new low-cost region to cut infrastructure spend.",
+		priority:    "high",
+		status:      "rejected",
+		requestType: "infra",
+		progress:    45,
+		requester:   "coo@acme.test",
+		ageDays:     4,
+		etaDays:     0,
+		profile: graphProfile{
+			completed: []string{"intake", "planning", "it_assessment", "legal_review"},
+			outcomes: map[string]string{
+				"legal_review": "reject",
+			},
+			flags: map[string][]string{
+				"it_assessment": {"warning: Region lacks our standard encryption-at-rest tier."},
+				"legal_review": {
+					"critical: Hosting EU customer data outside the EU violates GDPR data residency (Legal Policy).",
+				},
+			},
+		},
+	},
+	{
 		id:          "req_seed_policy",
 		title:       "Update remote-work policy",
 		description: "Refresh the remote-work policy to cover hybrid schedules and home-office stipends.",
 		priority:    "low",
 		status:      "submitted",
+		requestType: "policy_change",
 		progress:    0,
 		requester:   "hr.lead@acme.test",
 		ageDays:     0,
@@ -204,6 +252,10 @@ func main() {
 	log.Printf("  org          %s (slug %q)", demoOrgName, demoOrgSlug)
 	log.Printf("  users        %d", len(users))
 	log.Printf("  teams        %d", len(teams))
+	log.Printf("  agents       %d", counts.agents)
+	log.Printf("  policies     %d", counts.policies)
+	log.Printf("  machines     %d", len(machines))
+	log.Printf("  incidents    %d", counts.incidents)
 	log.Printf("  requests     %d (%d nodes, %d edges, %d tasks, %d deps, %d audit events)", len(requests), counts.nodes, counts.edges, counts.tasks, counts.deps, counts.auditEvents)
 	log.Println("  login    founder@acme.test / password  (same password for every @acme.test user)")
 }
@@ -231,15 +283,40 @@ func seed(ctx context.Context, pool *pgxpool.Pool) (seedCounts, error) {
 	if err := seedTeams(ctx, pool, userIDs); err != nil {
 		return seedCounts{}, fmt.Errorf("teams: %w", err)
 	}
+	// Department directory (agents + policies). The canonical content lives in
+	// internal/orgdir and is shared with the org-create handler; here we link it
+	// to the demo teams by name.
+	teamByName := make(map[string]string, len(teams))
+	for _, t := range teams {
+		teamByName[t.name] = t.id
+	}
+	nAgents, err := seedAgents(ctx, pool, teamByName)
+	if err != nil {
+		return seedCounts{}, fmt.Errorf("agents: %w", err)
+	}
+	nPolicies, err := seedPolicies(ctx, pool, teamByName)
+	if err != nil {
+		return seedCounts{}, fmt.Errorf("policies: %w", err)
+	}
 	counts, err := seedRequests(ctx, pool, userIDs)
 	if err != nil {
 		return seedCounts{}, fmt.Errorf("requests: %w", err)
 	}
+	if err := seedMachines(ctx, pool, userIDs); err != nil {
+		return seedCounts{}, fmt.Errorf("machines: %w", err)
+	}
+	incidentCount, err := seedIncidents(ctx, pool, userIDs)
+	if err != nil {
+		return seedCounts{}, fmt.Errorf("incidents: %w", err)
+	}
+	counts.incidents = incidentCount
 	auditCount, err := seedAuditEvents(ctx, pool, userIDs)
 	if err != nil {
 		return seedCounts{}, fmt.Errorf("audit events: %w", err)
 	}
 	counts.auditEvents = auditCount
+	counts.agents = nAgents
+	counts.policies = nPolicies
 	return counts, nil
 }
 
@@ -247,6 +324,9 @@ func seed(ctx context.Context, pool *pgxpool.Pool) (seedCounts, error) {
 // teams, requests, and workflow graph; users are removed afterwards so the
 // requests' requester FK is already gone.
 func reset(ctx context.Context, pool *pgxpool.Pool) error {
+	if _, err := pool.Exec(ctx, `DELETE FROM incidents WHERE org_id = (SELECT id FROM organizations WHERE slug = $1)`, demoOrgSlug); err != nil {
+		return fmt.Errorf("delete incidents: %w", err)
+	}
 	if _, err := pool.Exec(ctx, `DELETE FROM organizations WHERE slug = $1`, demoOrgSlug); err != nil {
 		return fmt.Errorf("delete org: %w", err)
 	}
@@ -304,6 +384,16 @@ func seedTeams(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64
 		); err != nil {
 			return fmt.Errorf("insert team lead %s: %w", t.leadEmail, err)
 		}
+		// The Maintenance team lead also needs the technician role so
+		// they can see assigned machines.
+		if t.name == "Maintenance" {
+			if _, err := pool.Exec(ctx,
+				`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'technician') ON CONFLICT (team_id, user_id) DO UPDATE SET role = 'technician'`,
+				t.id, userIDs[t.leadEmail],
+			); err != nil {
+				return fmt.Errorf("insert technician %s: %w", t.leadEmail, err)
+			}
+		}
 	}
 	return nil
 }
@@ -314,7 +404,10 @@ type seedCounts struct {
 	edges       int
 	tasks       int
 	deps        int
+	incidents   int
 	auditEvents int
+	agents      int
+	policies    int
 }
 
 func seedRequests(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) (seedCounts, error) {
@@ -410,6 +503,7 @@ func buildGraph(r requestSpec, plan *agentclient.Plan, now time.Time) ([]repo.Wo
 			n.Status = "completed"
 			n.ProgressPercent = 100
 			n.StatusText = pn.Name + " complete"
+			n.DecisionOutcome = "approve"
 			st, ct := started, completed
 			n.StartedAt, n.CompletedAt = &st, &ct
 		case r.profile.inProgress[pn.Key] != "":
@@ -422,8 +516,14 @@ func buildGraph(r requestSpec, plan *agentclient.Plan, now time.Time) ([]repo.Wo
 			n.Status = "blocked"
 			n.ProgressPercent = 50
 			n.StatusText = "Waiting for IT: " + r.profile.blocked[pn.Key]
+			n.DecisionOutcome = "block"
 			st := started
 			n.StartedAt = &st
+		}
+		// An explicit profile outcome wins (e.g. a flag or a rejection on a
+		// completed node) so the demo shows the full range of decisions.
+		if o := r.profile.outcomes[pn.Key]; o != "" {
+			n.DecisionOutcome = o
 		}
 		nodes = append(nodes, n)
 	}
@@ -506,21 +606,29 @@ func insertRequestGraph(
 	}
 	createdAt := now.AddDate(0, 0, -r.ageDays)
 
+	requestType := r.requestType
+	if requestType == "" {
+		requestType = "general"
+	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO requests
-			(id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, r.id, demoOrgID, r.title, r.description, requesterID, r.priority, r.status, r.progress, eta, createdAt); err != nil {
+			(id, org_id, title, description, requester_user_id, request_type, priority, status, progress, estimated_completion, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, r.id, demoOrgID, r.title, r.description, requesterID, requestType, r.priority, r.status, r.progress, eta, createdAt); err != nil {
 		return fmt.Errorf("insert request: %w", err)
 	}
 
 	batch := &pgx.Batch{}
 	for _, n := range nodes {
+		outcome := n.DecisionOutcome
+		if outcome == "" {
+			outcome = "pending"
+		}
 		batch.Queue(`
 			INSERT INTO workflow_nodes
-				(id, request_id, key, name, agent_type, department, status, description, progress_percent, status_text, started_at, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description, n.ProgressPercent, n.StatusText, n.StartedAt, n.CompletedAt)
+				(id, request_id, key, name, agent_type, department, status, description, progress_percent, status_text, decision_outcome, started_at, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description, n.ProgressPercent, n.StatusText, outcome, n.StartedAt, n.CompletedAt)
 	}
 	for _, e := range edges {
 		batch.Queue(`
@@ -566,9 +674,113 @@ func shortID() string {
 	return hex.EncodeToString(b)
 }
 
+// machineSpec is one machine in the demo seed.
+type machineSpec struct {
+	id            string
+	name          string
+	machineType   string
+	location      string
+	serialNumber  string
+	status        string
+	assignedEmail string
+}
+
+var machines = []machineSpec{
+	{"mach_seed_cnc", "CNC Mill #4", "CNC Mill", "Building A, Floor 1", "CNC-2024-004", "down", "tech.lead@acme.test"},
+	{"mach_seed_press", "Press Line B", "Hydraulic Press", "Building A, Floor 2", "PRS-2023-012", "operational", "tech.lead@acme.test"},
+	{"mach_seed_laser", "Laser Cutter #1", "Laser Cutter", "Building B, Workshop", "LCS-2024-007", "operational", ""},
+	{"mach_seed_server", "Server Rack A", "Server Rack", "Data Center, Rack A03", "SRV-001", "operational", ""},
+	{"mach_seed_hvac", "HVAC Unit 3", "HVAC System", "Roof, East Wing", "HVAC-2023-003", "degraded", ""},
+}
+
+func seedMachines(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) error {
+	for _, m := range machines {
+		var assignedID *int64
+		if m.assignedEmail != "" {
+			if id, ok := userIDs[m.assignedEmail]; ok {
+				assignedID = &id
+			}
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO machines (id, org_id, assigned_user_id, name, machine_type, location, serial_number, status)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT (id) DO NOTHING
+		`, m.id, demoOrgID, assignedID, m.name, m.machineType, m.location, m.serialNumber, m.status); err != nil {
+			return fmt.Errorf("insert machine %s: %w", m.name, err)
+		}
+	}
+	return nil
+}
+
 // seedAuditEvents creates believable audit events for each seeded request.
 // Completed nodes get node.started + node.completed; in_progress nodes get
 // node.started; completed requests get request.completed.
+// ────────────────────────────────────────────────────────────────────────────
+// Incidents
+// ────────────────────────────────────────────────────────────────────────────
+
+type incidentSpec struct {
+	id          string
+	machineID   string
+	title       string
+	description string
+	severity    string
+	status      string
+	reporter    string // email
+}
+
+var demoIncidents = []incidentSpec{
+	{
+		id:          "inc_seed_spindle",
+		machineID:   "mach_seed_cnc",
+		title:       "Spindle bearing failure",
+		description: "CNC Mill #4 spindle bearing overheated and seized during production run. Machine shut down automatically.",
+		severity:    "critical",
+		status:      "open",
+		reporter:    "tech.lead@acme.test",
+	},
+	{
+		id:          "inc_seed_coolant",
+		machineID:   "mach_seed_hvac",
+		title:       "Coolant leak detected",
+		description: "HVAC Unit 3 showing gradual coolant pressure loss. Compressor cycling frequently.",
+		severity:    "high",
+		status:      "in_progress",
+		reporter:    "tech.lead@acme.test",
+	},
+}
+
+func seedIncidents(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) (int, error) {
+	for _, inc := range demoIncidents {
+		reporterID, ok := userIDs[inc.reporter]
+		if !ok {
+			continue
+		}
+		// Get the machine's org_id.
+		var orgID string
+		if err := pool.QueryRow(ctx, `SELECT org_id FROM machines WHERE id = $1`, inc.machineID).Scan(&orgID); err != nil {
+			return 0, fmt.Errorf("get machine org for %s: %w", inc.machineID, err)
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO incidents (id, machine_id, org_id, reported_by, title, description, severity, status, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() - interval '2 hours')
+			ON CONFLICT (id) DO NOTHING
+		`, inc.id, inc.machineID, orgID, reporterID, inc.title, inc.description, inc.severity, inc.status); err != nil {
+			return 0, fmt.Errorf("insert incident %s: %w", inc.id, err)
+		}
+		// Create agent_task so the incident appears in the technician's work inbox.
+		taskID := "enpanne:machine:" + inc.id
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO agent_tasks (id, title, status, incident_id)
+			VALUES ($1, $2, 'pending', $3)
+			ON CONFLICT (id) DO NOTHING
+		`, taskID, inc.title, inc.id); err != nil {
+			return 0, fmt.Errorf("insert agent_task for incident %s: %w", inc.id, err)
+		}
+	}
+	return len(demoIncidents), nil
+}
+
 func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64) (int, error) {
 	now := time.Now()
 	var count int
@@ -622,8 +834,32 @@ func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64
 			}
 			count++
 
+			completedAt := submitted.Add(4 * time.Hour)
+
+			// Flags an agent raised, so the risk is traceable and visible at the gate.
+			for _, f := range r.profile.flags[n.Key] {
+				if _, err := pool.Exec(ctx, `
+					INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)
+				`, "aev_"+shortID(), r.id, &n.ID, n.Name, "node.flagged", f, completedAt); err != nil {
+					return 0, fmt.Errorf("insert audit node.flagged for %s: %w", n.ID, err)
+				}
+				count++
+			}
+
 			if n.Status == "completed" {
-				completedAt := submitted.Add(4 * time.Hour)
+				// A rejecting department records agent.rejected instead of completing clean.
+				if r.profile.outcomes[n.Key] == "reject" {
+					if _, err := pool.Exec(ctx, `
+						INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
+						VALUES ($1, $2, $3, $4, $5, $6, $7)
+					`, "aev_"+shortID(), r.id, &n.ID, n.Name, "agent.rejected",
+						n.Name+" rejected the request", completedAt); err != nil {
+						return 0, fmt.Errorf("insert audit agent.rejected for %s: %w", n.ID, err)
+					}
+					count++
+					continue
+				}
 				if _, err := pool.Exec(ctx, `
 					INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
 					VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -636,7 +872,7 @@ func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64
 		}
 
 		// request status events
-		if r.status == "completed" || r.status == "in_progress" {
+		if r.status == "completed" || r.status == "in_progress" || r.status == "rejected" {
 			if _, err := pool.Exec(ctx, `
 				INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
 				VALUES ($1, $2, NULL, $3, $4, $5, $6)
@@ -656,6 +892,47 @@ func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64
 			}
 			count++
 		}
+	}
+	return count, nil
+}
+
+// seedAgents creates one agent per department that has a seeded demo team.
+// Cross-cutting departments without a demo team (Planning, Executive) are
+// skipped. Returns the number inserted.
+func seedAgents(ctx context.Context, pool *pgxpool.Pool, teamByName map[string]string) (int, error) {
+	count := 0
+	for _, a := range orgdir.Agents {
+		teamID, ok := teamByName[a.Department]
+		if !ok {
+			continue
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, "agent_seed_"+a.AgentType, demoOrgID, teamID, a.AgentType, a.Name, a.Capabilities); err != nil {
+			return count, fmt.Errorf("insert agent %s: %w", a.AgentType, err)
+		}
+		count++
+	}
+	return count, nil
+}
+
+// seedPolicies creates the starter policies for each department that has a
+// seeded demo team. Returns the number inserted.
+func seedPolicies(ctx context.Context, pool *pgxpool.Pool, teamByName map[string]string) (int, error) {
+	count := 0
+	for _, p := range orgdir.Policies {
+		teamID, ok := teamByName[p.Department]
+		if !ok {
+			continue
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO department_policies (id, org_id, team_id, title, body)
+			VALUES ($1, $2, $3, $4, $5)
+		`, "pol_seed_"+strings.ToLower(p.Department), demoOrgID, teamID, p.Title, p.Body); err != nil {
+			return count, fmt.Errorf("insert policy %s: %w", p.Title, err)
+		}
+		count++
 	}
 	return count, nil
 }

@@ -6,12 +6,15 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9\-]*[a-z0-9]$`)
@@ -94,6 +97,61 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 	)
 	if err != nil {
 		h.logger.Error("create org: add creator as admin", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	// Seed the standard department directory (F10): one team per department, an
+	// agent per team, and the starter policies. The agent/policy content lives
+	// in internal/orgdir so this path and the demo seed share one source.
+	teamByDept := make(map[string]string, len(orgdir.Agents))
+	for _, a := range orgdir.Agents {
+		if _, ok := teamByDept[a.Department]; ok {
+			continue
+		}
+		teamID := "team_" + randomHex(8)
+		teamByDept[a.Department] = teamID
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO teams (id, org_id, name, description) VALUES ($1, $2, $3, $4)
+		`, teamID, orgID, a.Department, a.Department+" department"); err != nil {
+			h.logger.Error("create org: seed team", slog.String("name", a.Department), slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+	for _, a := range orgdir.Agents {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities) VALUES ($1, $2, $3, $4, $5, $6)
+		`, "agent_"+randomHex(8), orgID, teamByDept[a.Department], a.AgentType, a.Name, a.Capabilities); err != nil {
+			h.logger.Error("create org: seed agent", slog.String("type", a.AgentType), slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+	for _, p := range orgdir.Policies {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO department_policies (id, org_id, team_id, title, body) VALUES ($1, $2, $3, $4, $5)
+		`, "pol_"+randomHex(8), orgID, teamByDept[p.Department], p.Title, p.Body); err != nil {
+			h.logger.Error("create org: seed policy", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+	// Seed a Maintenance team so technicians have a team to belong to.
+	// Existing orgs are backfilled by the migration; new orgs get it here.
+	maintID := fmt.Sprintf("team_%s", randomHex(8))
+	_, err = tx.Exec(ctx,
+		`INSERT INTO teams (id, org_id, name, description) VALUES ($1, $2, 'Maintenance', 'Equipment maintenance and repair')`,
+		maintID, orgID,
+	)
+	if err != nil {
+		h.logger.Error("create org: seed maintenance team", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	// Add the creator as the Maintenance team lead so they can manage
+	// technicians (add members, assign machines).
+	_, err = tx.Exec(ctx,
+		`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'lead')`,
+		maintID, claims.UserID,
+	)
+	if err != nil {
+		h.logger.Error("create org: add creator as maintenance lead", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
@@ -253,10 +311,22 @@ func (h *OrgsHandler) CreateTeam(c echo.Context) error {
 	}
 
 	teamID := fmt.Sprintf("team_%s", randomHex(8))
+	agentType := slugify(body.Name)
 	ctx := c.Request().Context()
 
+	// Create the team and its department agent together so a new department is
+	// immediately a real, runnable agent the intake planner can route to — not
+	// just a label. They go in one transaction so we never leave a team without
+	// its agent.
+	tx, err := h.db.Begin(ctx)
+	if err != nil {
+		h.logger.Error("create team: begin", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var createdAt time.Time
-	err = h.db.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO teams (id, org_id, name, description) VALUES ($1, $2, $3, $4) RETURNING created_at`,
 		teamID, orgID, body.Name, body.Description,
 	).Scan(&createdAt)
@@ -268,11 +338,43 @@ func (h *OrgsHandler) CreateTeam(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
+	// agent_type is unique per org. A custom name could collide with a seeded
+	// type (e.g. "Finance"); append a short suffix so the team still gets its
+	// own agent rather than failing the whole request.
+	capabilities := body.Description
+	if capabilities == "" {
+		capabilities = body.Name + " department review"
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities) VALUES ($1, $2, $3, $4, $5, $6)`,
+		"agent_"+randomHex(8), orgID, teamID, agentType, body.Name+" Agent", capabilities,
+	); err != nil {
+		if isUniqueViolation(err) {
+			agentType = agentType + "_" + randomHex(4)
+			if _, err2 := tx.Exec(ctx,
+				`INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities) VALUES ($1, $2, $3, $4, $5, $6)`,
+				"agent_"+randomHex(8), orgID, teamID, agentType, body.Name+" Agent", capabilities,
+			); err2 != nil {
+				h.logger.Error("create team: insert agent retry", slog.String("err", err2.Error()))
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			}
+		} else {
+			h.logger.Error("create team: insert agent", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		h.logger.Error("create team: commit", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
 	return c.JSON(http.StatusCreated, map[string]any{
 		"id":          teamID,
 		"org_id":      orgID,
 		"name":        body.Name,
 		"description": body.Description,
+		"agent_type":  agentType,
 		"created_at":  createdAt,
 	})
 }
@@ -508,8 +610,8 @@ func (h *OrgsHandler) AddOrgMember(c echo.Context) error {
 	if body.Email == "" || body.Role == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email and role are required"})
 	}
-	if body.Role != "admin" && body.Role != "executor" && body.Role != "employee" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "role must be admin, executor, or employee"})
+	if !isValidRole(body.Role) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "role must be admin, executor, employee, or technician"})
 	}
 
 	ctx := c.Request().Context()
@@ -539,6 +641,133 @@ func (h *OrgsHandler) AddOrgMember(c echo.Context) error {
 	})
 }
 
+// InviteMember handles POST /orgs/:orgId/members/invite.
+// Creates a new user + adds them to the org in one call. Admin only.
+func (h *OrgsHandler) InviteMember(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	if role != "admin" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only admins can invite members"})
+	}
+
+	var body struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+
+	body.Email = strings.TrimSpace(body.Email)
+	body.Name = strings.TrimSpace(body.Name)
+
+	if body.Email == "" || body.Role == "" || body.Name == "" || body.Password == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "name, email, password, and role are required"})
+	}
+	if !isValidRole(body.Role) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "role must be admin, executor, employee, or technician"})
+	}
+	if !strings.Contains(body.Email, "@") {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid email address"})
+	}
+
+	ctx := c.Request().Context()
+
+	// Check if email already exists.
+	var existing int64
+	err = h.db.QueryRow(ctx,
+		`SELECT id FROM users WHERE email = $1 LIMIT 1`, body.Email,
+	).Scan(&existing)
+	if err == nil {
+		return c.JSON(http.StatusConflict, map[string]string{"error": "email already registered"})
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		h.logger.Error("invite: check email", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 12)
+	if err != nil {
+		h.logger.Error("invite: bcrypt", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	var userID int64
+	err = h.db.QueryRow(ctx,
+		`INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING id`,
+		body.Email, body.Name, string(hash),
+	).Scan(&userID)
+	if err != nil {
+		h.logger.Error("invite: insert user", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	orgLevelRole := orgRole(body.Role)
+	_, err = h.db.Exec(ctx,
+		`INSERT INTO org_members (org_id, user_id, role) VALUES ($1, $2, $3)
+		     ON CONFLICT (org_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+		orgID, userID, orgLevelRole,
+	)
+	if err != nil {
+		h.logger.Error("invite: insert member", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	// If the role is "technician", add as org employee + auto-provision
+	// into a Maintenance team with the technician role.
+	if body.Role == "technician" {
+		// Find the first Maintenance team in the org
+		var teamID string
+		err = h.db.QueryRow(ctx,
+			`SELECT id FROM teams WHERE org_id = $1
+			   AND (name ILIKE '%maintenance%' OR name ILIKE '%tech%')
+			 ORDER BY created_at LIMIT 1`,
+			orgID,
+		).Scan(&teamID)
+
+		if err == nil {
+			_, _ = h.db.Exec(ctx,
+				`INSERT INTO team_members (team_id, user_id, role)
+				 VALUES ($1, $2, 'technician')
+				 ON CONFLICT (team_id, user_id) DO NOTHING`,
+				teamID, userID,
+			)
+		}
+		// If no Maintenance team found, the user can be assigned manually later.
+	}
+
+	return c.JSON(http.StatusCreated, map[string]any{
+		"org_id":  orgID,
+		"user_id": userID,
+		"name":    body.Name,
+		"email":   body.Email,
+		"role":    body.Role,
+	})
+}
+
+func isValidRole(r string) bool {
+	return r == "admin" || r == "executor" || r == "employee" || r == "technician"
+}
+
+// orgRole maps a team role to the org-level role used for org_members.
+// Technicians are stored as employees at the org level.
+func orgRole(role string) string {
+	if role == "technician" {
+		return "employee"
+	}
+	return role
+}
+
 // ListOrgMembers handles GET /orgs/:orgId/members.
 func (h *OrgsHandler) ListOrgMembers(c echo.Context) error {
 	claims := middleware.UserFromCtx(c)
@@ -553,10 +782,19 @@ func (h *OrgsHandler) ListOrgMembers(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	rows, err := h.db.Query(ctx,
-		`SELECT u.id, u.email, u.name, om.role, om.joined_at
+		`SELECT u.id, u.email, u.name, om.role, om.joined_at,
+		        COALESCE(
+		          jsonb_agg(
+		            jsonb_build_object('team', t.name, 'role', tm.role)
+		          ) FILTER (WHERE tm.team_id IS NOT NULL),
+		          '[]'::jsonb
+		        ) AS team_roles
 		   FROM org_members om
 		   JOIN users u ON u.id = om.user_id
+		   LEFT JOIN team_members tm ON tm.user_id = u.id
+		   LEFT JOIN teams t ON t.id = tm.team_id AND t.org_id = om.org_id
 		  WHERE om.org_id = $1
+		  GROUP BY u.id, u.email, u.name, om.role, om.joined_at
 		  ORDER BY om.joined_at ASC`,
 		orgID,
 	)
@@ -566,17 +804,22 @@ func (h *OrgsHandler) ListOrgMembers(c echo.Context) error {
 	}
 	defer rows.Close()
 
+	type teamRoleEntry struct {
+		Team string `json:"team"`
+		Role string `json:"role"`
+	}
 	type memberItem struct {
-		ID       int64     `json:"id"`
-		Email    string    `json:"email"`
-		Name     string    `json:"name"`
-		Role     string    `json:"role"`
-		JoinedAt time.Time `json:"joined_at"`
+		ID        int64           `json:"id"`
+		Email     string          `json:"email"`
+		Name      string          `json:"name"`
+		Role      string          `json:"role"`
+		TeamRoles []teamRoleEntry `json:"team_roles"`
+		JoinedAt  time.Time       `json:"joined_at"`
 	}
 	result := make([]memberItem, 0)
 	for rows.Next() {
 		var m memberItem
-		if err := rows.Scan(&m.ID, &m.Email, &m.Name, &m.Role, &m.JoinedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Email, &m.Name, &m.Role, &m.JoinedAt, &m.TeamRoles); err != nil {
 			h.logger.Error("list org members: scan", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
@@ -708,8 +951,8 @@ func (h *OrgsHandler) AddTeamMember(c echo.Context) error {
 	if body.UserID == 0 || body.Role == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "user_id and role are required"})
 	}
-	if body.Role != "lead" && body.Role != "member" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "role must be lead or member"})
+	if body.Role != "lead" && body.Role != "member" && body.Role != "technician" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "role must be lead, member, or technician"})
 	}
 
 	ctx := c.Request().Context()
@@ -797,6 +1040,167 @@ func (h *OrgsHandler) RemoveTeamMember(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "member not found in team"})
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// ── Agent endpoints (F10 seeds the roster; F9 adds live status) ─────────────────
+
+// ListAgents handles GET /orgs/:orgId/agents. The roster is seeded by F10; F9
+// adds a live status derived from the org's workflow nodes — each agent's nodes
+// across every request in the org are aggregated into completed/active/blocked
+// counts, and the status reduces to "blocked" (a node is waiting on another
+// department), "busy" (a node is in_progress), or "idle". The aggregate is a
+// LEFT JOIN LATERAL so agents with no activity still appear (all zero).
+func (h *OrgsHandler) ListAgents(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+
+	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+
+	ctx := c.Request().Context()
+	rows, err := h.db.Query(ctx, `
+		SELECT a.id, a.org_id, a.team_id, a.agent_type, a.name, a.avatar, a.capabilities, a.created_at,
+		       COALESCE(t.name, '') AS team_name,
+		       COALESCE(agg.completed, 0), COALESCE(agg.active, 0), COALESCE(agg.blocked, 0),
+		       COALESCE(agg.total, 0), COALESCE(agg.request_count, 0), COALESCE(agg.latest_status, '')
+		FROM agents a
+		LEFT JOIN teams t ON t.id = a.team_id
+		LEFT JOIN LATERAL (
+			SELECT
+				count(*)                                          AS total,
+				count(*) FILTER (WHERE wn.status = 'completed')   AS completed,
+				count(*) FILTER (WHERE wn.status = 'in_progress') AS active,
+				count(*) FILTER (WHERE wn.status = 'blocked')     AS blocked,
+				count(DISTINCT wn.request_id)                     AS request_count,
+				(
+					SELECT wn2.status_text
+					FROM workflow_nodes wn2
+					JOIN requests rq2 ON rq2.id = wn2.request_id
+					WHERE rq2.org_id = a.org_id
+					  AND wn2.agent_type = a.agent_type
+					  AND wn2.status_text <> ''
+					ORDER BY COALESCE(wn2.completed_at, wn2.started_at, wn2.created_at) DESC
+					LIMIT 1
+				) AS latest_status
+			FROM workflow_nodes wn
+			JOIN requests rq ON rq.id = wn.request_id
+			WHERE rq.org_id = a.org_id AND wn.agent_type = a.agent_type
+		) agg ON true
+		WHERE a.org_id = $1
+		ORDER BY a.created_at ASC
+	`, orgID)
+	if err != nil {
+		h.logger.Error("list agents: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer rows.Close()
+
+	type agentItem struct {
+		ID           string    `json:"id"`
+		OrgID        string    `json:"org_id"`
+		TeamID       string    `json:"team_id"`
+		TeamName     string    `json:"team_name"`
+		AgentType    string    `json:"agent_type"`
+		Name         string    `json:"name"`
+		Avatar       string    `json:"avatar"`
+		Capabilities string    `json:"capabilities"`
+		CreatedAt    time.Time `json:"created_at"`
+		Status       string    `json:"status"`
+		Completed    int       `json:"completed"`
+		Active       int       `json:"active"`
+		Blocked      int       `json:"blocked"`
+		Total        int       `json:"total"`
+		RequestCount int       `json:"request_count"`
+		LatestStatus string    `json:"latest_status"`
+	}
+	result := make([]agentItem, 0)
+	for rows.Next() {
+		var item agentItem
+		if err := rows.Scan(
+			&item.ID, &item.OrgID, &item.TeamID, &item.AgentType, &item.Name, &item.Avatar, &item.Capabilities, &item.CreatedAt, &item.TeamName,
+			&item.Completed, &item.Active, &item.Blocked, &item.Total, &item.RequestCount, &item.LatestStatus,
+		); err != nil {
+			h.logger.Error("list agents: scan", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+		item.Status = agentLiveStatus(item.Active, item.Blocked)
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"agents": result})
+}
+
+// agentLiveStatus reduces an agent's live node counts to a single label. A
+// blocked node takes precedence (the agent is waiting on another department);
+// otherwise an in_progress node means busy; everything else is idle.
+func agentLiveStatus(active, blocked int) string {
+	switch {
+	case blocked > 0:
+		return "blocked"
+	case active > 0:
+		return "busy"
+	default:
+		return "idle"
+	}
+}
+
+// ── Policy endpoints (F10) ─────────────────────────────────────────────────────
+
+// ListPolicies handles GET /orgs/:orgId/policies.
+func (h *OrgsHandler) ListPolicies(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+
+	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+
+	ctx := c.Request().Context()
+	rows, err := h.db.Query(ctx, `
+		SELECT dp.id, dp.org_id, dp.team_id, dp.title, dp.body, dp.created_at,
+		       COALESCE(t.name, '') AS team_name
+		FROM department_policies dp
+		LEFT JOIN teams t ON t.id = dp.team_id
+		WHERE dp.org_id = $1
+		ORDER BY dp.created_at ASC
+	`, orgID)
+	if err != nil {
+		h.logger.Error("list policies: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer rows.Close()
+
+	type policyItem struct {
+		ID        string    `json:"id"`
+		OrgID     string    `json:"org_id"`
+		TeamID    string    `json:"team_id"`
+		TeamName  string    `json:"team_name"`
+		Title     string    `json:"title"`
+		Body      string    `json:"body"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+	result := make([]policyItem, 0)
+	for rows.Next() {
+		var item policyItem
+		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.Title, &item.Body, &item.CreatedAt, &item.TeamName); err != nil {
+			h.logger.Error("list policies: scan", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"policies": result})
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────

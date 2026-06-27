@@ -31,10 +31,12 @@ type PlanEdge struct {
 	EdgeType string `json:"type"`
 }
 
-// Plan is the intake agent's output: a workflow graph for a request.
+// Plan is the intake agent's output: a workflow graph for a request, plus the
+// agent's classification of the request type.
 type Plan struct {
-	Nodes []PlanNode `json:"nodes"`
-	Edges []PlanEdge `json:"edges"`
+	RequestType string     `json:"request_type"`
+	Nodes       []PlanNode `json:"nodes"`
+	Edges       []PlanEdge `json:"edges"`
 }
 
 // IntakeRequest is sent to POST /agents/intake.
@@ -115,21 +117,26 @@ type DependencyDecl struct {
 	Reason       string `json:"reason"`
 }
 
-// Decision is a department agent's output for one workflow node.
+// Decision is a department agent's output for one workflow node. Outcome is one
+// of: approve, approve_with_conditions, flag, reject, block.
 type Decision struct {
 	Summary    string          `json:"summary"`
+	Outcome    string          `json:"outcome"`
 	Flags      []Flag          `json:"flags"`
 	Tasks      []TaskItem      `json:"tasks"`
 	StatusText string          `json:"status_text"`
 	BlockedOn  *DependencyDecl `json:"blocked_on"`
 }
 
-// UpstreamItem is a completed predecessor node's summary, passed so a
-// department can reason over upstream output.
+// UpstreamItem is a completed predecessor node's decision, passed so a
+// department can reason over upstream output — including the outcome it reached
+// and the flags it raised, not just a status line.
 type UpstreamItem struct {
 	Key        string `json:"key"`
 	Department string `json:"department"`
+	Outcome    string `json:"outcome"`
 	Summary    string `json:"summary"`
+	Flags      []Flag `json:"flags"`
 }
 
 // RunRequest is sent to POST /agents/run.
@@ -168,6 +175,126 @@ func (c *Client) Run(ctx context.Context, rr RunRequest) (*Decision, error) {
 		return nil, fmt.Errorf("decode decision: %w", err)
 	}
 	return &decision, nil
+}
+
+// ── Diagnostic agent (POST /diagnostic/diagnose) ──────────────────────────────
+
+// DiagnosticStep is one step in a diagnostic procedure.
+type DiagnosticStep struct {
+	Title           string  `json:"title"`
+	Description     string  `json:"description"`
+	ActionType      string  `json:"action_type"`
+	ExpectedOutcome *string `json:"expected_outcome"`
+	Warning         *string `json:"warning"`
+}
+
+// DiagnosisResult is the diagnostic agent's output.
+type DiagnosisResult struct {
+	Summary   string           `json:"summary"`
+	RootCause *string          `json:"root_cause"`
+	Steps     []DiagnosticStep `json:"steps"`
+}
+
+// DiagnoseRequest is sent to POST /diagnostic/diagnose.
+type DiagnoseRequest struct {
+	IncidentTitle       string         `json:"incident_title"`
+	IncidentDescription string         `json:"incident_description"`
+	Severity            string         `json:"severity"`
+	MachineName         string         `json:"machine_name"`
+	MachineType         string         `json:"machine_type"`
+	ManualText          string         `json:"manual_text"`
+	Telemetry           map[string]any `json:"telemetry"`
+}
+
+// Diagnose calls POST /diagnostic/diagnose and returns the diagnostic result.
+func (c *Client) Diagnose(ctx context.Context, dr DiagnoseRequest) (*DiagnosisResult, error) {
+	body, err := json.Marshal(dr)
+	if err != nil {
+		return nil, fmt.Errorf("marshal diagnose request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/diagnostic/diagnose", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrAgentUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%w: status %d", ErrAgentUnavailable, resp.StatusCode)
+	}
+
+	var result DiagnosisResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode diagnosis result: %w", err)
+	}
+	return &result, nil
+}
+
+// DefaultDiagnosis returns a deterministic fallback diagnosis when the agent
+// service is unavailable. The steps are generic but realistic maintenance
+// procedures scaled to the incident severity.
+func DefaultDiagnosis(severity string) *DiagnosisResult {
+	rootCause := "Unable to determine root cause — diagnostic agent unavailable."
+
+	steps := []DiagnosticStep{
+		{
+			Title:       "Isolate the affected equipment",
+			Description: "Secure the area around the machine and apply lockout/tagout procedures before any inspection.",
+			ActionType:  "safety",
+		},
+		{
+			Title:       "Perform visual inspection",
+			Description: "Check for obvious signs of damage, leaks, unusual wear, or loose connections on the machine and its peripherals.",
+			ActionType:  "inspection",
+		},
+		{
+			Title:       "Review telemetry and recent logs",
+			Description: "Examine sensor readings, error codes, and operational logs from the last 24 hours to identify anomalies.",
+			ActionType:  "analysis",
+		},
+		{
+			Title:       "Execute standard diagnostic tests",
+			Description: "Run the manufacturer-recommended diagnostic routines for the machine type and record the results.",
+			ActionType:  "test",
+		},
+	}
+
+	// Add severity-specific steps.
+	switch severity {
+	case "critical", "high":
+		w := "Do not restart the machine until root cause is confirmed."
+		steps = append(steps, DiagnosticStep{
+			Title:       "Escalate to senior maintenance engineer",
+			Description: "Given the severity, escalate immediately to a senior engineer or the OEM support line for guided troubleshooting.",
+			ActionType:  "escalation",
+			Warning:     &w,
+		})
+		steps = append(steps, DiagnosticStep{
+			Title:       "Prepare contingency plan",
+			Description: "Identify backup equipment or manual workarounds to maintain production while the machine is offline.",
+			ActionType:  "planning",
+		})
+	default:
+		steps = append(steps, DiagnosticStep{
+			Title:       "Apply corrective maintenance",
+			Description: "Based on inspection findings, replace worn parts, tighten connections, or recalibrate sensors as needed.",
+			ActionType:  "repair",
+		})
+	}
+
+	summary := "Diagnostic agent unavailable — returning standard maintenance procedure for " + severity + " severity incident."
+
+	return &DiagnosisResult{
+		Summary:   summary,
+		RootCause: &rootCause,
+		Steps:     steps,
+	}
 }
 
 // defaultDecisions mirrors the Python department playbook so the engine and
@@ -210,13 +337,14 @@ func DefaultDecision(agentType string) *Decision {
 	for _, t := range spec.tasks {
 		tasks = append(tasks, TaskItem{Title: t, Status: "completed"})
 	}
-	return &Decision{Summary: spec.summary, Flags: []Flag{}, Tasks: tasks, StatusText: spec.statusText}
+	return &Decision{Summary: spec.summary, Outcome: "approve", Flags: []Flag{}, Tasks: tasks, StatusText: spec.statusText}
 }
 
 // DefaultPlan returns a deterministic fallback plan when the agent service
 // is unavailable. This ensures a request always gets a workflow graph.
 func DefaultPlan() *Plan {
 	return &Plan{
+		RequestType: "general",
 		Nodes: []PlanNode{
 			{Key: "intake", Name: "Intake & Classification", AgentType: "intake", Department: "Planning"},
 			{Key: "planning", Name: "Strategic Planning", AgentType: "planning", Department: "Planning"},

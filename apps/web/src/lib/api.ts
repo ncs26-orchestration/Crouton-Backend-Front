@@ -1,7 +1,9 @@
 import type {
+	AgentRosterEntry,
 	Attachment,
 	ApprovalDecision,
 	AuditEvent,
+	DepartmentPolicy,
 	Chat,
 	ChatMessage,
 	CompileResponse,
@@ -13,6 +15,9 @@ import type {
 	ExtractResponse,
 	FinalReport,
 	ISRegistry,
+	Incident,
+	IncidentMessage,
+	Machine,
 	OrgRequest,
 	Project,
 	NodeDetailResponse,
@@ -425,7 +430,8 @@ export const api = {
   // --- Teams ---
 
   listTeams: (orgId: string): Promise<{ teams: Array<{ id: string; name: string; description: string; created_at: string; member_count?: number }> }> =>
-    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/teams`),
+    fetchJSON<Array<{ id: string; name: string; description: string; created_at: string; member_count?: number }>>(`/api/orgs/${encodeURIComponent(orgId)}/teams`)
+      .then((arr) => ({ teams: Array.isArray(arr) ? arr : [] })),
 
   getTeam: (orgId: string, teamId: string): Promise<{
     id: string; name: string; description: string; created_at: string;
@@ -457,11 +463,18 @@ export const api = {
 
   // --- Org members ---
 
-  listOrgMembers: (orgId: string): Promise<{ members: Array<{ user_id: number; name: string; email: string; role: string; joined_at: string }> }> =>
-    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members`),
+  listOrgMembers: (orgId: string): Promise<{ members: Array<{ id: number; name: string; email: string; role: string; team_roles?: { team: string; role: string }[]; joined_at: string }> }> =>
+    fetchJSON<Array<{ id: number; name: string; email: string; role: string; team_roles?: { team: string; role: string }[]; joined_at: string }>>(`/api/orgs/${encodeURIComponent(orgId)}/members`)
+      .then((arr) => ({ members: Array.isArray(arr) ? arr : [] })),
 
   addOrgMember: (orgId: string, payload: { user_id: number; role: string }): Promise<void> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  inviteMember: (orgId: string, payload: { name: string; email: string; password: string; role: string }): Promise<{ org_id: string; user_id: number; name: string; email: string; role: string }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members/invite`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -551,4 +564,75 @@ export const api = {
 
 	getReport: (requestId: string): Promise<FinalReport> =>
 		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/report`),
+
+	// --- Roster + Policies (F9) ---
+
+	listAgents: (orgId: string): Promise<{ agents: AgentRosterEntry[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/agents`),
+
+	listPolicies: (orgId: string): Promise<{ policies: DepartmentPolicy[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies`),
+
+	// --- Machines (M-F1) ---
+
+	createMachine: (orgId: string, data: {
+		name: string;
+		machine_type: string;
+		location: string;
+		serial_number: string;
+	}): Promise<{ machine: Machine }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/machines`, {
+			method: "POST",
+			body: JSON.stringify(data),
+		}),
+
+	listMachines: (orgId: string): Promise<{ machines: Machine[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/machines`),
+
+	// --- Incidents (M-F6) ---
+
+	listIncidents: (orgId: string): Promise<{ incidents: Incident[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/incidents`),
+
+	getIncident: (incidentId: string): Promise<{ incident: Incident }> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}`),
+
+	listIncidentMessages: (incidentId: string): Promise<{ messages: IncidentMessage[] }> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/messages`),
+
+	appendIncidentMessage: (incidentId: string, content: string): Promise<{ message: IncidentMessage }> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/messages`, {
+			method: "POST",
+			body: JSON.stringify({ content }),
+		}),
+
+	resolveIncident: (incidentId: string, notes: string): Promise<{ status: string }> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/resolve`, {
+			method: "POST",
+			body: JSON.stringify({ notes }),
+		}),
+
+	requestDiagnosis: (incidentId: string): Promise<unknown> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/diagnose`, {
+			method: "POST",
+		}),
+
+	getDiagnosis: (incidentId: string): Promise<unknown> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/diagnosis`),
+
+	uploadMachineDocument: (machineId: string, file: File, docType: string): Promise<{ document: { id: string; filename: string; doc_type: string } }> => {
+		const form = new FormData();
+		form.append("file", file);
+		form.append("doc_type", docType);
+		const token = authStore.get();
+		return fetch(`/api/machines/${encodeURIComponent(machineId)}/documents`, {
+			method: "POST",
+			headers: token ? { Authorization: `Bearer ${token}` } : {},
+			body: form,
+		}).then(async (res) => {
+			const text = await res.text();
+			if (!res.ok) throw new Error(JSON.parse(text).error ?? "upload failed");
+			return JSON.parse(text);
+		});
+	},
 };

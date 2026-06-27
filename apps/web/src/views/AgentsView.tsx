@@ -1,7 +1,6 @@
 import { useMemo } from "react";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Inbox,
   Compass,
   DollarSign,
   Scale,
@@ -9,107 +8,48 @@ import {
   Users,
   Boxes,
   ShieldCheck,
-  Hammer,
-  FileText,
   Bot,
   type LucideIcon,
 } from "lucide-react";
 
 import { api } from "../lib/api";
-import { prettyLabel } from "../lib/request-format";
-import type { RequestGraph, WorkflowNodeData } from "../lib/types";
+import type { AgentRosterEntry, AgentStatus } from "../lib/types";
 
-// Reference descriptors for each agent type the system runs. Names and
-// capability blurbs are presentation only; all status and counts below come
-// from live node data aggregated across the org's requests.
-const AGENT_META: Record<string, { name: string; icon: LucideIcon; blurb: string }> = {
-  intake: {
-    name: "Intake Processor",
-    icon: Inbox,
-    blurb: "Reads each request and plans which departments and stages it needs.",
-  },
-  planning: {
-    name: "Planning Analyst",
-    icon: Compass,
-    blurb: "Breaks the request into scope and identifies the resources required.",
-  },
-  finance: {
-    name: "Finance Reviewer",
-    icon: DollarSign,
-    blurb: "Checks budget feasibility, financial impact and ROI.",
-  },
-  legal: {
-    name: "Legal Reviewer",
-    icon: Scale,
-    blurb: "Reviews compliance, regulation and contract risk.",
-  },
-  it: {
-    name: "IT Manager",
-    icon: Server,
-    blurb: "Assesses technical feasibility, infrastructure and security.",
-  },
-  hr: {
-    name: "HR Manager",
-    icon: Users,
-    blurb: "Plans staffing, hiring and policy alignment.",
-  },
-  ops: {
-    name: "Operations Manager",
-    icon: Boxes,
-    blurb: "Handles logistics, facilities and the operational timeline.",
-  },
-  approval: {
-    name: "Executive Approver",
-    icon: ShieldCheck,
-    blurb: "Makes the final approve or reject call with written justification.",
-  },
-  implementation: {
-    name: "Implementation Lead",
-    icon: Hammer,
-    blurb: "Carries out the approved work once planning clears.",
-  },
-  report: {
-    name: "Report Writer",
-    icon: FileText,
-    blurb: "Summarises what was decided, flagged and executed.",
-  },
+// Icon per agent type. Names, teams and capabilities come from the seeded
+// roster (the API); only the icon is presentation-side.
+const AGENT_ICON: Record<string, LucideIcon> = {
+  finance: DollarSign,
+  legal: Scale,
+  it: Server,
+  hr: Users,
+  ops: Boxes,
+  planning: Compass,
+  approval: ShieldCheck,
 };
 
-interface AgentRow {
-  agentType: string;
-  name: string;
+const STATUS_BADGE: Record<AgentStatus, { label: string; cls: string }> = {
+  busy: { label: "Busy", cls: "bg-[var(--color-accent-bg)] text-[var(--color-brand)]" },
+  blocked: { label: "Blocked", cls: "bg-[var(--color-danger)]/12 text-[var(--color-danger)]" },
+  idle: { label: "Idle", cls: "bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]" },
+};
+
+interface DepartmentGroup {
   department: string;
-  icon: LucideIcon;
-  blurb: string;
-  total: number;
-  completed: number;
-  active: number;
-  blocked: number;
-  requestCount: number;
-  latestStatus: string;
+  agents: AgentRosterEntry[];
 }
 
 export function AgentsView({ orgId }: { orgId: string }) {
-  const requestsQuery = useQuery({
-    queryKey: ["requests", orgId],
-    queryFn: () => api.listRequests(orgId),
-  });
-  const requestIds = (requestsQuery.data?.requests ?? []).map((r) => r.id);
-
-  const graphQueries = useQueries({
-    queries: requestIds.map((id) => ({
-      queryKey: ["request", id],
-      queryFn: () => api.getRequest(id),
-    })),
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["agents", orgId],
+    queryFn: () => api.listAgents(orgId),
+    // Poll so the live status reflects the engine as requests run. The roster
+    // is small and the query is cheap; this is the interval-poll fallback.
+    refetchInterval: 4000,
   });
 
-  const graphsLoading = graphQueries.some((q) => q.isLoading);
-  const graphs = graphQueries
-    .map((q) => q.data)
-    .filter((g): g is RequestGraph => Boolean(g));
+  const groups = useMemo(() => groupByDepartment(data?.agents ?? []), [data]);
 
-  const agents = useMemo(() => aggregateAgents(graphs), [graphs]);
-  const loading = requestsQuery.isLoading || (requestIds.length > 0 && graphsLoading && agents.length === 0);
+  const busyCount = (data?.agents ?? []).filter((a) => a.status !== "idle").length;
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)] overflow-auto nice-scroll">
@@ -118,25 +58,41 @@ export function AgentsView({ orgId }: { orgId: string }) {
           Agents
         </h1>
         <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">
-          The department agents and what they're working on across the org
+          The department agents that staff the organization, grouped by team
+          {busyCount > 0 && (
+            <span className="text-[var(--color-brand)]"> · {busyCount} working now</span>
+          )}
         </p>
       </div>
 
-      <div className="px-8 py-6 w-full">
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="px-8 py-6 w-full max-w-[1100px]">
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-32 rounded-lg bg-[var(--color-surface-2)] animate-pulse" />
+              <div key={i} className="h-40 rounded-lg bg-[var(--color-surface-2)] animate-pulse" />
             ))}
           </div>
-        ) : agents.length === 0 ? (
+        ) : isError ? (
+          <p className="text-sm text-[var(--color-danger)]">
+            Could not load the agent roster. {(error as Error)?.message}
+          </p>
+        ) : groups.length === 0 ? (
           <p className="text-sm text-[var(--color-fg-muted)]">
-            No agent activity yet. Submit a request and the agents will pick it up here.
+            No agents yet. The roster is seeded when the organization is created.
           </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {agents.map((a) => (
-              <AgentCard key={a.agentType} agent={a} />
+          <div className="flex flex-col gap-8">
+            {groups.map((g) => (
+              <section key={g.department}>
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-fg-muted)] mb-3">
+                  {g.department}
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {g.agents.map((a) => (
+                    <AgentCard key={a.id} agent={a} />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}
@@ -145,56 +101,44 @@ export function AgentsView({ orgId }: { orgId: string }) {
   );
 }
 
-function aggregateAgents(graphs: RequestGraph[]): AgentRow[] {
-  const byType = new Map<string, { nodes: WorkflowNodeData[]; requests: Set<string> }>();
-
-  for (const g of graphs) {
-    for (const n of g.nodes) {
-      const entry = byType.get(n.agent_type) ?? { nodes: [], requests: new Set<string>() };
-      entry.nodes.push(n);
-      entry.requests.add(g.request.id);
-      byType.set(n.agent_type, entry);
-    }
+// groupByDepartment keeps the canonical pipeline order within a department and
+// orders departments by where their first agent sits in that pipeline, so the
+// roster reads the way the workflow runs (Finance, Legal, IT, …).
+function groupByDepartment(agents: AgentRosterEntry[]): DepartmentGroup[] {
+  const order = Object.keys(AGENT_ICON);
+  const rank = (t: string | undefined) => {
+    const i = t ? order.indexOf(t) : -1;
+    return i === -1 ? 99 : i;
+  };
+  const byDept = new Map<string, AgentRosterEntry[]>();
+  for (const a of agents) {
+    const dept = a.team_name || "Other";
+    const list = byDept.get(dept) ?? [];
+    list.push(a);
+    byDept.set(dept, list);
   }
-
-  const rows: AgentRow[] = [];
-  for (const [agentType, { nodes, requests }] of byType) {
-    const meta = AGENT_META[agentType];
-    const latest = [...nodes]
-      .filter((n) => n.status_text)
-      .sort((a, b) => +new Date(b.completed_at ?? b.started_at ?? 0) - +new Date(a.completed_at ?? a.started_at ?? 0))[0];
-    rows.push({
-      agentType,
-      name: meta?.name ?? prettyLabel(agentType),
-      department: nodes[0]?.department || prettyLabel(agentType),
-      icon: meta?.icon ?? Bot,
-      blurb: meta?.blurb ?? "",
-      total: nodes.length,
-      completed: nodes.filter((n) => n.status === "completed").length,
-      active: nodes.filter((n) => n.status === "in_progress").length,
-      blocked: nodes.filter((n) => n.status === "blocked").length,
-      requestCount: requests.size,
-      latestStatus: latest?.status_text ?? "",
-    });
+  const groups: DepartmentGroup[] = [];
+  for (const [department, list] of byDept) {
+    list.sort((x, y) => rank(x.agent_type) - rank(y.agent_type));
+    groups.push({ department, agents: list });
   }
-
-  // Stable order: the canonical pipeline order, unknown types last.
-  const order = Object.keys(AGENT_META);
-  return rows.sort((a, b) => {
-    const ai = order.indexOf(a.agentType);
-    const bi = order.indexOf(b.agentType);
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-  });
+  groups.sort((a, b) => rank(a.agents[0]?.agent_type) - rank(b.agents[0]?.agent_type));
+  return groups;
 }
 
-function AgentCard({ agent }: { agent: AgentRow }) {
-  const { icon: Icon } = agent;
-  const state =
-    agent.blocked > 0
-      ? { label: "Blocked", cls: "bg-[var(--color-danger)]/12 text-[var(--color-danger)]" }
-      : agent.active > 0
-        ? { label: "Active", cls: "bg-[var(--color-accent-bg)] text-[var(--color-brand)]" }
-        : { label: "Idle", cls: "bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]" };
+// parseCapabilities splits the seeded comma-separated capability string into
+// individual, trimmed chips.
+function parseCapabilities(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
+function AgentCard({ agent }: { agent: AgentRosterEntry }) {
+  const Icon = AGENT_ICON[agent.agent_type] ?? Bot;
+  const badge = STATUS_BADGE[agent.status];
+  const capabilities = parseCapabilities(agent.capabilities);
 
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-stripe-ambient flex flex-col gap-3">
@@ -205,29 +149,43 @@ function AgentCard({ agent }: { agent: AgentRow }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-medium text-[var(--color-fg)] truncate">{agent.name}</h3>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${state.cls}`}>
-              {state.label}
+            <span className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>
+              {agent.status === "busy" && (
+                <span className="size-1.5 rounded-full bg-[var(--color-brand)] animate-pulse" />
+              )}
+              {badge.label}
             </span>
           </div>
           <p className="text-[11px] uppercase tracking-wide text-[var(--color-fg-muted)] mt-0.5">
-            {agent.department} Team
+            {agent.team_name ? `${agent.team_name} Team` : "Department"}
           </p>
         </div>
       </div>
 
-      {agent.blurb && <p className="text-xs text-[var(--color-fg-muted)] leading-relaxed">{agent.blurb}</p>}
+      {capabilities.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {capabilities.map((c) => (
+            <li
+              key={c}
+              className="rounded-md bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] text-[var(--color-fg-label)]"
+            >
+              {c}
+            </li>
+          ))}
+        </ul>
+      )}
 
-      {agent.latestStatus && (
-        <p className="text-xs text-[var(--color-fg-label)] leading-snug border-l-0">
+      {agent.latest_status && (
+        <p className="text-xs text-[var(--color-fg-label)] leading-snug">
           <span className="text-[var(--color-fg-muted)]">Latest: </span>
-          {agent.latestStatus}
+          {agent.latest_status}
         </p>
       )}
 
       <div className="mt-auto pt-2 border-t border-[var(--color-border)] grid grid-cols-3 gap-2 text-center">
         <Stat label="Completed" value={agent.completed} />
         <Stat label="Active" value={agent.active} />
-        <Stat label="Requests" value={agent.requestCount} />
+        <Stat label="Requests" value={agent.request_count} />
       </div>
     </div>
   );
