@@ -84,6 +84,9 @@ func NewServer(d Deps) *echo.Echo {
 	// Agents and policies read endpoints (F10).
 	orgGroup.GET("/:orgId/agents", oh.ListAgents)
 	orgGroup.GET("/:orgId/policies", oh.ListPolicies)
+	orgGroup.POST("/:orgId/policies", oh.CreatePolicy)
+	orgGroup.PATCH("/:orgId/policies/:policyId", oh.UpdatePolicy)
+	orgGroup.DELETE("/:orgId/policies/:policyId", oh.DeletePolicy)
 
 	// Me — current user's profile and work items.
 	mh := handler.NewMeHandler(d.Logger, d.PgPool)
@@ -109,6 +112,7 @@ func NewServer(d Deps) *echo.Echo {
 		repo.NewDependencyRepo(d.PgPool),
 		docRepo,
 		repo.NewPolicyRepo(d.PgPool),
+		repo.NewAssignmentRepo(d.PgPool),
 	)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {
@@ -121,11 +125,21 @@ func NewServer(d Deps) *echo.Echo {
 	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, agentClient, orchEngine)
 	orgGroup.POST("/:orgId/requests", reqh.CreateRequest)
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
+	orgGroup.GET("/:orgId/my-verifications", reqh.MyVerifications)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
 	e.GET("/requests/:id/nodes/:nodeId", reqh.GetNode, authMiddleware)
 	// Executive approval gate (F7): an approver decides a request parked at
 	// awaiting_approval; approve resumes the worker, reject stops it.
 	e.POST("/requests/:id/approve", reqh.ApproveRequest, authMiddleware)
+	// Human-in-the-loop: customize a draft (assign verifiers), launch it, and
+	// verify a node parked at awaiting_review.
+	e.POST("/requests/:id/assignments", reqh.AssignNode, authMiddleware)
+	e.DELETE("/requests/:id/assignments/:assignmentId", reqh.UnassignNode, authMiddleware)
+	e.POST("/requests/:id/launch", reqh.LaunchRequest, authMiddleware)
+	e.POST("/requests/:id/nodes/:nodeId/verify", reqh.VerifyNode, authMiddleware)
+	// Per-node verifier↔agent conversation (ask questions / request changes).
+	e.GET("/requests/:id/nodes/:nodeId/messages", reqh.ListNodeMessages, authMiddleware)
+	e.POST("/requests/:id/nodes/:nodeId/messages", reqh.PostNodeMessage, authMiddleware)
 	// Audit reads (F6).
 	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
 	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)

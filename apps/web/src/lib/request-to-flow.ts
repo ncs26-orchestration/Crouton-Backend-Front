@@ -8,16 +8,16 @@
  */
 
 import type { Node, Edge } from "@xyflow/react";
-import type { WorkflowNodeData, WorkflowEdgeData } from "./types";
+import type { WorkflowNodeData, WorkflowEdgeData, NodeAssignment } from "./types";
 import { nodeStatusToken } from "./request-format";
 
-export const NODE_WIDTH = 210;
-export const NODE_HEIGHT = 76;
-// Tighter horizontal gap keeps the (inherently wide) pipeline compact so
-// fitView can show it at a larger, more readable zoom. A roomier vertical gap
-// gives the parallel branches clear separation.
-export const X_GAP = 56;
-export const Y_GAP = 48;
+export const NODE_WIDTH = 230;
+export const NODE_HEIGHT = 78;
+// The graph flows top-to-bottom: each topological rank is a row, parallel
+// branches sit side by side within a row. X_GAP separates parallel siblings;
+// Y_GAP is the vertical space between rows for the connecting arrows.
+export const X_GAP = 40;
+export const Y_GAP = 56;
 
 export interface FlowResult {
   nodes: Node[];
@@ -27,9 +27,18 @@ export interface FlowResult {
 export function requestToFlow(
   workflowNodes: WorkflowNodeData[],
   workflowEdges: WorkflowEdgeData[],
+  assignments: NodeAssignment[] = [],
 ): FlowResult {
   if (workflowNodes.length === 0) {
     return { nodes: [], edges: [] };
+  }
+
+  // Group assignee names per node so the card can show their avatars.
+  const assigneesByNode = new Map<string, string[]>();
+  for (const a of assignments) {
+    const list = assigneesByNode.get(a.node_id) ?? [];
+    list.push(a.user_name || a.user_email);
+    assigneesByNode.set(a.node_id, list);
   }
 
   // Build adjacency and in-degree for topological ranking.
@@ -72,23 +81,23 @@ export function requestToFlow(
     ranks.push(unranked);
   }
 
-  // Position nodes. Each rank is a column; nodes in the same rank
-  // are stacked vertically, centered around the middle.
+  // Position nodes top-to-bottom. Each rank is a row going down; nodes in the
+  // same rank spread horizontally, centered around the middle.
   const nodeById = new Map(workflowNodes.map((n) => [n.id, n]));
   const positions = new Map<string, { x: number; y: number }>();
 
   const maxRankSize = Math.max(...ranks.map((r) => r.length));
-  const totalHeight = maxRankSize * (NODE_HEIGHT + Y_GAP) - Y_GAP;
+  const totalWidth = maxRankSize * (NODE_WIDTH + X_GAP) - X_GAP;
 
-  for (let col = 0; col < ranks.length; col++) {
-    const rank = ranks[col]!;
-    const rankHeight = rank.length * (NODE_HEIGHT + Y_GAP) - Y_GAP;
-    const yOffset = (totalHeight - rankHeight) / 2;
+  for (let row = 0; row < ranks.length; row++) {
+    const rank = ranks[row]!;
+    const rankWidth = rank.length * (NODE_WIDTH + X_GAP) - X_GAP;
+    const xOffset = (totalWidth - rankWidth) / 2;
 
-    for (let row = 0; row < rank.length; row++) {
-      positions.set(rank[row]!, {
-        x: col * (NODE_WIDTH + X_GAP),
-        y: yOffset + row * (NODE_HEIGHT + Y_GAP),
+    for (let col = 0; col < rank.length; col++) {
+      positions.set(rank[col]!, {
+        x: xOffset + col * (NODE_WIDTH + X_GAP),
+        y: row * (NODE_HEIGHT + Y_GAP),
       });
     }
   }
@@ -99,21 +108,34 @@ export function requestToFlow(
       id: n.id,
       type: "department",
       position: pos,
-      data: { ...n },
+      data: { ...n, assignees: assigneesByNode.get(n.id) ?? [] },
       style: { width: NODE_WIDTH, height: NODE_HEIGHT },
     };
   });
 
   const flowEdges: Edge[] = workflowEdges.map((e) => {
     const sourceNode = nodeById.get(e.source_node_id);
-    const color = sourceNode ? nodeStatusToken(sourceNode.status) : "var(--color-fg-subtle)";
+    const targetNode = nodeById.get(e.target_node_id);
+    // An edge into a not-yet-active step is dashed/muted; once the upstream step
+    // has completed the connection is solid and colored by that step's status.
+    const targetPending = !targetNode || targetNode.status === "pending";
+    const color =
+      targetPending && sourceNode?.status !== "completed"
+        ? "var(--color-border-strong)"
+        : sourceNode
+          ? nodeStatusToken(sourceNode.status)
+          : "var(--color-fg-subtle)";
     return {
       id: e.id,
       source: e.source_node_id,
       target: e.target_node_id,
       type: "smoothstep",
       animated: sourceNode?.status === "in_progress",
-      style: { stroke: color, strokeWidth: 2 },
+      style: {
+        stroke: color,
+        strokeWidth: 2,
+        strokeDasharray: targetPending ? "5 4" : undefined,
+      },
     };
   });
 

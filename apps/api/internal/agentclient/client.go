@@ -46,9 +46,10 @@ type IntakeRequest struct {
 }
 
 type IntakeRequestBody struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Priority    string `json:"priority"`
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	Priority    string         `json:"priority"`
+	Details     map[string]any `json:"details,omitempty"`
 }
 
 // Client talks to the Python agent service.
@@ -295,6 +296,49 @@ func DefaultDiagnosis(severity string) *DiagnosisResult {
 		RootCause: &rootCause,
 		Steps:     steps,
 	}
+}
+
+// ConverseRequest is sent to POST /agents/converse for the verifier↔agent chat.
+type ConverseRequest struct {
+	AgentType       string            `json:"agent_type"`
+	Request         IntakeRequestBody `json:"request"`
+	Mode            string            `json:"mode"` // answer | revise
+	Feedback        string            `json:"feedback"`
+	PriorDecision   map[string]any    `json:"prior_decision,omitempty"`
+	UpstreamContext []UpstreamItem    `json:"upstream_context"`
+	OrgContext      map[string]any    `json:"org_context"`
+}
+
+// ConverseResponse is the agent's reply; Decision is set only for a revise.
+type ConverseResponse struct {
+	Reply    string    `json:"reply"`
+	Decision *Decision `json:"decision"`
+}
+
+// Converse calls POST /agents/converse.
+func (c *Client) Converse(ctx context.Context, cr ConverseRequest) (*ConverseResponse, error) {
+	body, err := json.Marshal(cr)
+	if err != nil {
+		return nil, fmt.Errorf("marshal converse request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/agents/converse", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrAgentUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%w: status %d", ErrAgentUnavailable, resp.StatusCode)
+	}
+	var out ConverseResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode converse: %w", err)
+	}
+	return &out, nil
 }
 
 // defaultDecisions mirrors the Python department playbook so the engine and

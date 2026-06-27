@@ -165,7 +165,7 @@ export function InlineChecklist({ is, onStep }: InlineChecklistProps) {
       {!hasEngine && (
         <button
           onClick={() => onStep("engine")}
-          className="flex items-center gap-1 text-[var(--color-accent)] hover:underline"
+          className="btn-inline flex items-center gap-1 text-[var(--color-accent)] hover:underline"
         >
           <Plug size={12} /> connect engine
         </button>
@@ -173,14 +173,14 @@ export function InlineChecklist({ is, onStep }: InlineChecklistProps) {
       {!hasSystem && (
         <button
           onClick={() => onStep("system")}
-          className="flex items-center gap-1 text-[var(--color-accent)] hover:underline"
+          className="btn-inline flex items-center gap-1 text-[var(--color-accent)] hover:underline"
         >
           <Database size={12} /> declare a system
         </button>
       )}
       <button
         onClick={() => onStep("sample")}
-        className="flex items-center gap-1 text-[var(--color-accent)] hover:underline ml-auto"
+        className="btn-inline flex items-center gap-1 text-[var(--color-accent)] hover:underline ml-auto"
       >
         <FileText size={12} /> try sample
       </button>

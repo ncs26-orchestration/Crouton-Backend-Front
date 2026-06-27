@@ -62,7 +62,7 @@ export function IncidentsView({ orgId }: Props) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="shrink-0 px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+      <div className="shrink-0 px-4 md:px-6 py-4 border-b border-[var(--color-border)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1
             className="text-lg font-medium text-[var(--color-fg)]"
@@ -76,7 +76,7 @@ export function IncidentsView({ orgId }: Props) {
         </div>
       </div>
 
-      <div className="shrink-0 px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3">
+      <div className="shrink-0 px-4 md:px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3 flex-wrap">
         <label className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
           Status
           <select
@@ -93,7 +93,7 @@ export function IncidentsView({ orgId }: Props) {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className={`flex-1 overflow-auto ${selected ? "border-r border-[var(--color-border)]" : ""}`}>
+        <div className={`flex-1 overflow-auto ${selected ? "hidden md:block border-r border-[var(--color-border)]" : ""}`}>
           {isLoading && (
             <div className="flex items-center justify-center h-40">
               <div className="size-6 rounded-full border-2 border-[var(--color-brand)] border-t-transparent animate-spin" />
@@ -131,9 +131,18 @@ export function IncidentsView({ orgId }: Props) {
         </div>
 
         {selected && (
-          <div className="w-[420px] shrink-0 overflow-auto">
-            <IncidentDetail incident={selected} orgId={orgId} onBack={() => setSelected(null)} />
-          </div>
+          <>
+            {/* Mobile overlay */}
+            <div className="md:hidden fixed inset-0 z-40 bg-[var(--color-bg)] overflow-auto" onClick={() => setSelected(null)}>
+              <div className="min-h-full" onClick={(e) => e.stopPropagation()}>
+                <IncidentDetail incident={selected} orgId={orgId} onBack={() => setSelected(null)} />
+              </div>
+            </div>
+            {/* Desktop panel */}
+            <div className="hidden md:block w-[420px] shrink-0 overflow-auto">
+              <IncidentDetail incident={selected} orgId={orgId} onBack={() => setSelected(null)} />
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -280,7 +289,7 @@ function IncidentDetail({
           <div className="flex gap-2 mt-3">
             <button
               onClick={handleDiagnose}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--color-brand)] text-white text-xs font-medium hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--color-brand)] text-white text-xs font-medium hover:opacity-90 transition-opacity min-h-[44px] md:min-h-auto"
             >
               <AlertTriangle size={11} />
               Diagnose with AI
@@ -358,7 +367,7 @@ function IncidentDetail({
           <button
             onClick={sendMessage}
             disabled={!newMsg.trim() || sending}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity min-h-[44px] md:min-h-auto"
           >
             {sending ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
           </button>

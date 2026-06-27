@@ -4,7 +4,7 @@ export function InboxView() {
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)]">
       {/* Header */}
-      <div className="border-b border-[var(--color-border)] px-8 py-5">
+      <div className="border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5">
         <h1 className="text-xl font-semibold text-[var(--color-fg)]">My Work</h1>
         <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">Tasks assigned to you</p>
       </div>

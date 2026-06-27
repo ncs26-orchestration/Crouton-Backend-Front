@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/policyrules"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
@@ -81,6 +83,7 @@ type graphProfile struct {
 	blocked    map[string]string   // key → reason for the blocked dependency (F5)
 	outcomes   map[string]string   // key → decision_outcome override (else derived from status)
 	flags      map[string][]string // key → "severity: message" flags an agent raised
+	summaries  map[string]string   // key → the agent's full reasoning for the node
 }
 
 // requestSpec is one seeded request and the shape of its workflow graph.
@@ -90,7 +93,8 @@ type requestSpec struct {
 	description string
 	priority    string
 	status      string
-	requestType string // intake classification (hiring, procurement, ...)
+	requestType string         // intake classification (hiring, procurement, ...)
+	details     map[string]any // structured fields shown in the request panel
 	progress    int
 	requester   string // email
 	ageDays     int    // how long ago it was submitted
@@ -119,6 +123,10 @@ var requests = []requestSpec{
 			blocked: map[string]string{
 				"finance_review": "Need the IT security assessment and infrastructure cost estimate before the budget can be finalized.",
 			},
+			summaries: map[string]string{
+				"legal_review":  "Opening a Berlin office means a German GmbH and local employment contracts under German labor law. Workable, but needs a registered entity and a works-council-aware contract template before the first hire.",
+				"it_assessment": "Scoping office networking, a site-to-site VPN, and device provisioning for ~30 staff. Standard build; the main cost driver is the managed network and the new site's security baseline.",
+			},
 		},
 	},
 	{
@@ -128,10 +136,17 @@ var requests = []requestSpec{
 		priority:    "medium",
 		status:      "awaiting_approval",
 		requestType: "procurement",
-		progress:    55,
-		requester:   "it.lead@acme.test",
-		ageDays:     9,
-		etaDays:     8,
+		details: map[string]any{
+			"vendor":     "Dell",
+			"quantity":   50,
+			"unit_cost":  1840,
+			"total_cost": 92000,
+			"needed_by":  "2026-08-01",
+		},
+		progress:  55,
+		requester: "it.lead@acme.test",
+		ageDays:   9,
+		etaDays:   8,
 		profile: graphProfile{
 			completed: []string{"intake", "planning", "finance_review", "legal_review", "it_assessment"},
 			inProgress: map[string]string{
@@ -142,6 +157,12 @@ var requests = []requestSpec{
 			},
 			flags: map[string][]string{
 				"finance_review": {"warning: $92k exceeds the $50k single-PO limit in Finance Policy; CFO sign-off required."},
+				"it_assessment":  {"info: Standard MDM enrollment and imaging covers all 50 units; no new infra."},
+			},
+			summaries: map[string]string{
+				"finance_review": "Total spend is $92k against a $50k single-PO limit. ROI is sound (fleet is 4+ years old, rising repair costs), and funding exists in the Q3 capex line, so this is fundable but needs CFO sign-off per Finance Policy before the PO is cut.",
+				"it_assessment":  "50 units of the approved laptop SKU. Provisioning is standard: MDM enrollment, disk encryption, and the standard image. No new infrastructure or security review required.",
+				"legal_review":   "Purchase from an approved vendor on standard terms. No contract redlines or regulatory concerns; the existing MSA covers warranty and returns.",
 			},
 		},
 	},
@@ -152,10 +173,17 @@ var requests = []requestSpec{
 		priority:    "medium",
 		status:      "completed",
 		requestType: "hiring",
-		progress:    100,
-		requester:   "hr.lead@acme.test",
-		ageDays:     21,
-		etaDays:     0,
+		details: map[string]any{
+			"role":       "Delivery Contractor",
+			"headcount":  12,
+			"seniority":  "Mid",
+			"comp_band":  "$80/hr",
+			"start_date": "2026-07-15",
+		},
+		progress:  100,
+		requester: "hr.lead@acme.test",
+		ageDays:   21,
+		etaDays:   0,
 		profile: graphProfile{
 			completed: []string{
 				"intake", "planning", "finance_review", "legal_review", "it_assessment",
@@ -166,6 +194,12 @@ var requests = []requestSpec{
 			},
 			flags: map[string][]string{
 				"legal_review": {"info: Contractor agreements use the standard NDA template; IP assignment confirmed."},
+			},
+			summaries: map[string]string{
+				"finance_review": "12 contractors at ~$80/hr for the quarter lands within the approved Q3 delivery budget. Spend is variable and capped by the SOW, so no funding risk.",
+				"legal_review":   "Standard contractor agreements with the approved NDA and IP-assignment clauses. No regulatory blockers; classification reviewed and they are correctly engaged as contractors.",
+				"hr_planning":    "Onboarding for 12: equipment, system access, and compliance training scheduled in two waves so delivery isn't disrupted.",
+				"ops_planning":   "Workstreams and reporting lines mapped; each contractor is paired with an owner for the Q3 push.",
 			},
 		},
 	},
@@ -194,10 +228,15 @@ var requests = []requestSpec{
 		priority:    "high",
 		status:      "rejected",
 		requestType: "infra",
-		progress:    45,
-		requester:   "coo@acme.test",
-		ageDays:     4,
-		etaDays:     0,
+		details: map[string]any{
+			"system":      "Customer data warehouse",
+			"environment": "Production",
+			"est_cost":    4000,
+		},
+		progress:  45,
+		requester: "coo@acme.test",
+		ageDays:   4,
+		etaDays:   0,
 		profile: graphProfile{
 			completed: []string{"intake", "planning", "it_assessment", "legal_review"},
 			outcomes: map[string]string{
@@ -208,6 +247,10 @@ var requests = []requestSpec{
 				"legal_review": {
 					"critical: Hosting EU customer data outside the EU violates GDPR data residency (Legal Policy).",
 				},
+			},
+			summaries: map[string]string{
+				"it_assessment": "The target region is ~30% cheaper, but it does not offer our standard encryption-at-rest tier and would need a bespoke security review. Technically possible, with caveats.",
+				"legal_review":  "This would host EU customer personal data outside the EU. That breaches GDPR data-residency requirements in our Legal Policy and exposes the company to regulatory penalties. There is no lawful basis or transfer mechanism on file, so this cannot proceed as scoped.",
 			},
 		},
 	},
@@ -419,7 +462,9 @@ func seedRequests(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]in
 		nodes, edges := buildGraph(r, plan, now)
 		tasks := buildTasks(nodes)
 		deps := buildDeps(r, plan, nodes)
-		if err := insertRequestGraph(ctx, pool, r, userIDs[r.requester], nodes, edges, tasks, deps, now); err != nil {
+		flags := buildFlags(r, nodes)
+		checks := buildChecks(r, nodes)
+		if err := insertRequestGraph(ctx, pool, r, userIDs[r.requester], nodes, edges, tasks, deps, flags, checks, now); err != nil {
 			return seedCounts{}, fmt.Errorf("request %q: %w", r.title, err)
 		}
 		counts.nodes += len(nodes)
@@ -525,6 +570,12 @@ func buildGraph(r requestSpec, plan *agentclient.Plan, now time.Time) ([]repo.Wo
 		if o := r.profile.outcomes[pn.Key]; o != "" {
 			n.DecisionOutcome = o
 		}
+		// The agent's reasoning, shown in the node detail panel.
+		if s := r.profile.summaries[pn.Key]; s != "" {
+			n.DecisionSummary = s
+		} else if n.Status == "completed" {
+			n.DecisionSummary = pn.Name + " reviewed the request and recorded its assessment."
+		}
 		nodes = append(nodes, n)
 	}
 
@@ -544,6 +595,76 @@ func buildGraph(r requestSpec, plan *agentclient.Plan, now time.Time) ([]repo.Wo
 		})
 	}
 	return nodes, edges
+}
+
+// buildFlags turns each request's profile flags ("severity: message") into
+// node_flags rows mapped to the right node, so the demo's node panels show real
+// risks without the LLM.
+func buildFlags(r requestSpec, nodes []repo.WorkflowNode) []repo.NodeFlag {
+	if len(r.profile.flags) == 0 {
+		return nil
+	}
+	keyToNode := make(map[string]repo.WorkflowNode, len(nodes))
+	for _, n := range nodes {
+		keyToNode[n.Key] = n
+	}
+	var out []repo.NodeFlag
+	for key, msgs := range r.profile.flags {
+		n, ok := keyToNode[key]
+		if !ok {
+			continue
+		}
+		for i, raw := range msgs {
+			severity, message := "info", raw
+			if before, after, found := strings.Cut(raw, ":"); found {
+				severity = strings.TrimSpace(before)
+				message = strings.TrimSpace(after)
+			}
+			if severity != "info" && severity != "warning" && severity != "critical" {
+				severity = "info"
+			}
+			out = append(out, repo.NodeFlag{
+				ID:        "nf_" + shortID(),
+				RequestID: r.id,
+				NodeID:    n.ID,
+				Severity:  severity,
+				Message:   message,
+				Ordinal:   i,
+			})
+		}
+	}
+	return out
+}
+
+// buildChecks evaluates each department's policy rules against the request's
+// details and produces node_checks for the matching nodes, so the demo shows
+// exact pass/fail checks offline — the same evaluation the engine runs live.
+func buildChecks(r requestSpec, nodes []repo.WorkflowNode) []repo.NodeCheck {
+	if len(r.details) == 0 {
+		return nil
+	}
+	// department (lowercased) → policy from orgdir.
+	polByDept := make(map[string]orgdir.PolicySpec, len(orgdir.Policies))
+	for _, p := range orgdir.Policies {
+		polByDept[strings.ToLower(p.Department)] = p
+	}
+	var out []repo.NodeCheck
+	for _, n := range nodes {
+		if n.Status != "completed" && n.Status != "awaiting_review" {
+			continue
+		}
+		p, ok := polByDept[strings.ToLower(n.Department)]
+		if !ok || len(p.Rules) == 0 {
+			continue
+		}
+		for i, c := range policyrules.Evaluate(p.Title, p.Rules, r.details) {
+			out = append(out, repo.NodeCheck{
+				ID: "nck_" + shortID(), RequestID: r.id, NodeID: n.ID,
+				Label: c.Label, Status: c.Status, Detail: c.Detail, PolicyTitle: c.PolicyTitle, Ordinal: i,
+			})
+		}
+	}
+	return out
 }
 
 // buildDeps creates node_dependencies rows for blocked nodes in the seed (F5).
@@ -591,6 +712,8 @@ func insertRequestGraph(
 	edges []repo.WorkflowEdge,
 	tasks []repo.AgentTask,
 	deps []repo.NodeDependency,
+	flags []repo.NodeFlag,
+	checks []repo.NodeCheck,
 	now time.Time,
 ) error {
 	tx, err := pool.Begin(ctx)
@@ -610,11 +733,17 @@ func insertRequestGraph(
 	if requestType == "" {
 		requestType = "general"
 	}
+	detailsJSON := []byte("{}")
+	if len(r.details) > 0 {
+		if b, err := json.Marshal(r.details); err == nil {
+			detailsJSON = b
+		}
+	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO requests
-			(id, org_id, title, description, requester_user_id, request_type, priority, status, progress, estimated_completion, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, r.id, demoOrgID, r.title, r.description, requesterID, requestType, r.priority, r.status, r.progress, eta, createdAt); err != nil {
+			(id, org_id, title, description, requester_user_id, request_type, details, priority, status, progress, estimated_completion, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, r.id, demoOrgID, r.title, r.description, requesterID, requestType, detailsJSON, r.priority, r.status, r.progress, eta, createdAt); err != nil {
 		return fmt.Errorf("insert request: %w", err)
 	}
 
@@ -626,9 +755,9 @@ func insertRequestGraph(
 		}
 		batch.Queue(`
 			INSERT INTO workflow_nodes
-				(id, request_id, key, name, agent_type, department, status, description, progress_percent, status_text, decision_outcome, started_at, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description, n.ProgressPercent, n.StatusText, outcome, n.StartedAt, n.CompletedAt)
+				(id, request_id, key, name, agent_type, department, status, description, progress_percent, status_text, decision_outcome, decision_summary, started_at, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description, n.ProgressPercent, n.StatusText, outcome, n.DecisionSummary, n.StartedAt, n.CompletedAt)
 	}
 	for _, e := range edges {
 		batch.Queue(`
@@ -650,9 +779,23 @@ func insertRequestGraph(
 			VALUES ($1, $2, $3, $4, $5, $6)
 		`, d.ID, d.RequestID, d.DependentNodeID, d.BlockingNodeID, d.Reason, d.RunCount)
 	}
+	// node_flags — the risks agents raised, reference workflow_nodes above.
+	for _, f := range flags {
+		batch.Queue(`
+			INSERT INTO node_flags (id, request_id, node_id, severity, message, ordinal)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, f.ID, f.RequestID, f.NodeID, f.Severity, f.Message, f.Ordinal)
+	}
+	// node_checks — the exact policy-rule results, reference workflow_nodes above.
+	for _, ch := range checks {
+		batch.Queue(`
+			INSERT INTO node_checks (id, request_id, node_id, label, status, detail, policy_title, ordinal)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, ch.ID, ch.RequestID, ch.NodeID, ch.Label, ch.Status, ch.Detail, ch.PolicyTitle, ch.Ordinal)
+	}
 
 	br := tx.SendBatch(ctx, batch)
-	for range len(nodes) + len(edges) + len(tasks) + len(deps) {
+	for range len(nodes) + len(edges) + len(tasks) + len(deps) + len(flags) + len(checks) {
 		if _, err := br.Exec(); err != nil {
 			_ = br.Close()
 			return fmt.Errorf("insert graph: %w", err)
@@ -926,10 +1069,16 @@ func seedPolicies(ctx context.Context, pool *pgxpool.Pool, teamByName map[string
 		if !ok {
 			continue
 		}
+		rulesJSON := []byte("[]")
+		if len(p.Rules) > 0 {
+			if b, mErr := json.Marshal(p.Rules); mErr == nil {
+				rulesJSON = b
+			}
+		}
 		if _, err := pool.Exec(ctx, `
-			INSERT INTO department_policies (id, org_id, team_id, title, body)
-			VALUES ($1, $2, $3, $4, $5)
-		`, "pol_seed_"+strings.ToLower(p.Department), demoOrgID, teamID, p.Title, p.Body); err != nil {
+			INSERT INTO department_policies (id, org_id, team_id, title, body, rules)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, "pol_seed_"+strings.ToLower(p.Department), demoOrgID, teamID, p.Title, p.Body, rulesJSON); err != nil {
 			return count, fmt.Errorf("insert policy %s: %w", p.Title, err)
 		}
 		count++

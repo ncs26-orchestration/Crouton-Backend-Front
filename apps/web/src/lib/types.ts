@@ -260,6 +260,7 @@ export interface DeployResponse {
 export type RequestPriority = "low" | "medium" | "high" | "urgent";
 
 export type RequestStatus =
+  | "draft"
   | "submitted"
   | "in_progress"
   | "awaiting_approval"
@@ -267,7 +268,38 @@ export type RequestStatus =
   | "rejected"
   | "completed";
 
-export type NodeStatus = "pending" | "in_progress" | "completed" | "blocked";
+export type NodeStatus = "pending" | "in_progress" | "awaiting_review" | "completed" | "blocked";
+
+// One turn in a node's verifier↔agent conversation.
+export interface NodeMessage {
+  id: string;
+  node_id: string;
+  author_user_id: number | null;
+  author_name: string;
+  role: "human" | "agent" | "system";
+  body: string;
+  created_at: string;
+}
+
+// A verifier assigned to a workflow node.
+export interface NodeAssignment {
+  id: string;
+  node_id: string;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+}
+
+// A node parked at awaiting_review that the current user may sign off, with the
+// context needed to render it in their work queue.
+export interface NodeVerification {
+  node_id: string;
+  request_id: string;
+  node_name: string;
+  department: string;
+  request_title: string;
+  assigned_to_me: boolean;
+}
 
 // A human's call on the executive-approval gate (F7).
 export type ApprovalDecision = "approve" | "reject";
@@ -283,6 +315,7 @@ export interface OrgRequest {
   requester_name: string;
   requester_role?: string;
   request_type?: string;
+  details?: Record<string, string | number>;
   priority: RequestPriority;
   status: RequestStatus;
   progress: number;
@@ -310,9 +343,28 @@ export interface WorkflowNodeData {
   progress_percent: number;
   status_text: string;
   decision_outcome?: DecisionOutcome;
+  decision_summary?: string;
+  flags?: NodeFlag[];
+  checks?: NodeCheck[];
   started_at: string | null;
   completed_at: string | null;
   blocked_by?: { reason: string; blocked_at?: string } | null;
+  // UI-only: assignee display names attached when building the canvas, for avatars.
+  assignees?: string[];
+}
+
+// One policy-rule check result on a node.
+export interface NodeCheck {
+  label: string;
+  status: "pass" | "warn" | "fail";
+  detail: string;
+  policy_title: string;
+}
+
+// A risk or note an agent raised on a node (may cite a policy in the message).
+export interface NodeFlag {
+  severity: "info" | "warning" | "critical";
+  message: string;
 }
 
 export interface WorkflowEdgeData {
@@ -326,6 +378,7 @@ export interface RequestGraph {
   request: OrgRequest;
   nodes: WorkflowNodeData[];
   edges: WorkflowEdgeData[];
+  assignments?: NodeAssignment[];
 }
 
 // A unit of work a department agent reported for a node.
@@ -387,6 +440,16 @@ export interface AgentRosterEntry {
 }
 
 // A read-only department policy agents consult while reasoning (seeded by F10).
+// A typed, machine-checkable rule on a policy.
+export interface PolicyRule {
+  label: string;
+  field: string;
+  op: "lte" | "gte" | "lt" | "gt" | "eq" | "ne" | "exists";
+  value: string | number;
+  severity: "info" | "warning" | "critical";
+  message: string;
+}
+
 export interface DepartmentPolicy {
   id: string;
   org_id: string;
@@ -394,6 +457,7 @@ export interface DepartmentPolicy {
   team_name: string;
   title: string;
   body: string;
+  rules?: PolicyRule[] | null;
   created_at: string;
 }
 
@@ -420,6 +484,7 @@ export interface ReportStage {
   status: string;
   status_text: string;
   decision_outcome?: DecisionOutcome;
+  decision_summary?: string;
   started_at: string | null;
   completed_at: string | null;
   duration_seconds: number;

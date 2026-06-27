@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -54,6 +56,8 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	}
 
+	ctx := c.Request().Context()
+
 	var body struct {
 		Name string `json:"name"`
 		Slug string `json:"slug"`
@@ -69,7 +73,6 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 	}
 
 	orgID := fmt.Sprintf("org_%s", randomHex(8))
-	ctx := c.Request().Context()
 
 	tx, err := h.db.Begin(ctx)
 	if err != nil {
@@ -96,6 +99,12 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 		orgID, claims.UserID,
 	)
 	if err != nil {
+		// A foreign-key violation here means the token's user no longer exists
+		// (e.g. the DB was reset under an old session). Return 401 so the client
+		// signs out cleanly rather than surfacing a 500.
+		if isForeignKeyViolation(err) {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "your session is no longer valid, please sign in again"})
+		}
 		h.logger.Error("create org: add creator as admin", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -126,9 +135,15 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 		}
 	}
 	for _, p := range orgdir.Policies {
+		rulesJSON := []byte("[]")
+		if len(p.Rules) > 0 {
+			if b, mErr := json.Marshal(p.Rules); mErr == nil {
+				rulesJSON = b
+			}
+		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO department_policies (id, org_id, team_id, title, body) VALUES ($1, $2, $3, $4, $5)
-		`, "pol_"+randomHex(8), orgID, teamByDept[p.Department], p.Title, p.Body); err != nil {
+			INSERT INTO department_policies (id, org_id, team_id, title, body, rules) VALUES ($1, $2, $3, $4, $5, $6)
+		`, "pol_"+randomHex(8), orgID, teamByDept[p.Department], p.Title, p.Body, rulesJSON); err != nil {
 			h.logger.Error("create org: seed policy", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
@@ -1057,8 +1072,21 @@ func (h *OrgsHandler) ListAgents(c echo.Context) error {
 	}
 	orgID := c.Param("orgId")
 
-	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
 		return handleOrgMemberErr(c, err)
+	}
+
+	// Only an admin (the executive) sees the whole roster. Everyone else sees the
+	// agents that staff their own departments, plus org-wide agents that belong to
+	// no single team (intake, planning, executive approval).
+	deptFilter := ""
+	args := []any{orgID}
+	if role != "admin" {
+		deptFilter = ` AND (a.team_id IS NULL OR a.team_id IN (
+			SELECT tm.team_id FROM team_members tm WHERE tm.user_id = $2
+		))`
+		args = append(args, claims.UserID)
 	}
 
 	ctx := c.Request().Context()
@@ -1090,9 +1118,9 @@ func (h *OrgsHandler) ListAgents(c echo.Context) error {
 			JOIN requests rq ON rq.id = wn.request_id
 			WHERE rq.org_id = a.org_id AND wn.agent_type = a.agent_type
 		) agg ON true
-		WHERE a.org_id = $1
+		WHERE a.org_id = $1`+deptFilter+`
 		ORDER BY a.created_at ASC
-	`, orgID)
+	`, args...)
 	if err != nil {
 		h.logger.Error("list agents: query", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
@@ -1166,7 +1194,7 @@ func (h *OrgsHandler) ListPolicies(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	rows, err := h.db.Query(ctx, `
-		SELECT dp.id, dp.org_id, dp.team_id, dp.title, dp.body, dp.created_at,
+		SELECT dp.id, dp.org_id, dp.team_id, dp.title, dp.body, dp.rules, dp.created_at,
 		       COALESCE(t.name, '') AS team_name
 		FROM department_policies dp
 		LEFT JOIN teams t ON t.id = dp.team_id
@@ -1180,18 +1208,19 @@ func (h *OrgsHandler) ListPolicies(c echo.Context) error {
 	defer rows.Close()
 
 	type policyItem struct {
-		ID        string    `json:"id"`
-		OrgID     string    `json:"org_id"`
-		TeamID    string    `json:"team_id"`
-		TeamName  string    `json:"team_name"`
-		Title     string    `json:"title"`
-		Body      string    `json:"body"`
-		CreatedAt time.Time `json:"created_at"`
+		ID        string          `json:"id"`
+		OrgID     string          `json:"org_id"`
+		TeamID    string          `json:"team_id"`
+		TeamName  string          `json:"team_name"`
+		Title     string          `json:"title"`
+		Body      string          `json:"body"`
+		Rules     json.RawMessage `json:"rules"`
+		CreatedAt time.Time       `json:"created_at"`
 	}
 	result := make([]policyItem, 0)
 	for rows.Next() {
 		var item policyItem
-		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.Title, &item.Body, &item.CreatedAt, &item.TeamName); err != nil {
+		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.Title, &item.Body, &item.Rules, &item.CreatedAt, &item.TeamName); err != nil {
 			h.logger.Error("list policies: scan", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
@@ -1201,6 +1230,88 @@ func (h *OrgsHandler) ListPolicies(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"policies": result})
+}
+
+// policyBody is the create/update payload. rules is the typed-rule array as JSON.
+type policyBody struct {
+	TeamID string          `json:"team_id"`
+	Title  string          `json:"title"`
+	Body   string          `json:"body"`
+	Rules  json.RawMessage `json:"rules"`
+}
+
+// CreatePolicy handles POST /orgs/:orgId/policies. Admin or executor only.
+func (h *OrgsHandler) CreatePolicy(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	if role != "admin" && role != "executor" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only admins and executors can manage policies"})
+	}
+	var body policyBody
+	if err := c.Bind(&body); err != nil || body.TeamID == "" || strings.TrimSpace(body.Title) == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "team_id and title are required"})
+	}
+	policies := repo.NewPolicyRepo(h.db)
+	if err := policies.Create(c.Request().Context(), "pol_"+randomHex(8), orgID, body.TeamID, strings.TrimSpace(body.Title), body.Body, body.Rules); err != nil {
+		h.logger.Error("create policy", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"status": "ok"})
+}
+
+// UpdatePolicy handles PATCH /orgs/:orgId/policies/:policyId. Admin or executor.
+func (h *OrgsHandler) UpdatePolicy(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	if role != "admin" && role != "executor" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only admins and executors can manage policies"})
+	}
+	var body policyBody
+	if err := c.Bind(&body); err != nil || strings.TrimSpace(body.Title) == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "title is required"})
+	}
+	policies := repo.NewPolicyRepo(h.db)
+	if err := policies.Update(c.Request().Context(), orgID, c.Param("policyId"), strings.TrimSpace(body.Title), body.Body, body.Rules); err != nil {
+		h.logger.Error("update policy", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// DeletePolicy handles DELETE /orgs/:orgId/policies/:policyId. Admin or executor.
+func (h *OrgsHandler) DeletePolicy(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	if role != "admin" && role != "executor" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only admins and executors can manage policies"})
+	}
+	policies := repo.NewPolicyRepo(h.db)
+	if err := policies.Delete(c.Request().Context(), orgID, c.Param("policyId")); err != nil {
+		h.logger.Error("delete policy", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -1217,6 +1328,11 @@ func handleOrgMemberErr(c echo.Context, err error) error {
 // isUniqueViolation checks if the error is a PostgreSQL unique constraint violation.
 func isUniqueViolation(err error) bool {
 	return err != nil && (containsCode(err, "23505"))
+}
+
+// isForeignKeyViolation checks if the error is a PostgreSQL foreign-key violation.
+func isForeignKeyViolation(err error) bool {
+	return err != nil && containsCode(err, "23503")
 }
 
 func containsCode(err error, code string) bool {

@@ -33,7 +33,7 @@ export function LoginView({ onGoRegister }: Props) {
       className="h-screen w-screen flex items-center justify-center bg-[var(--color-bg)]"
     >
       <div
-        className="w-full max-w-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8 shadow-lg flex flex-col gap-6"
+        className="w-full max-w-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 md:p-8 shadow-lg flex flex-col gap-6 mx-4"
       >
         {/* Brand */}
         <div className="flex flex-col items-center gap-2">
@@ -95,7 +95,7 @@ export function LoginView({ onGoRegister }: Props) {
           Don&apos;t have an account?{" "}
           <button
             onClick={onGoRegister}
-            className="text-[var(--color-brand)] hover:underline font-medium"
+            className="btn-inline text-[var(--color-brand)] hover:underline font-medium"
           >
             Create one
           </button>

@@ -352,7 +352,7 @@ export function ChatView({ chatId }: Props) {
                   onClick={() => setThreadCollapsed(false)}
                   title="Open thread (⌘\\)"
                   aria-label="Open thread"
-                  className="size-8 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
+                  className="btn-sm size-8 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
                 >
                   <PanelLeftOpen size={15} />
                 </button>
@@ -366,7 +366,7 @@ export function ChatView({ chatId }: Props) {
                   onClick={() => setThreadCollapsed(false)}
                   title="Expand to compose"
                   aria-label="Expand to compose"
-                  className="size-8 flex items-center justify-center rounded-md text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] transition-colors"
+                  className="btn-sm size-8 flex items-center justify-center rounded-md text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] transition-colors"
                 >
                   <ChevronRight size={15} />
                 </button>
@@ -392,7 +392,7 @@ export function ChatView({ chatId }: Props) {
                     onClick={() => setThreadCollapsed(true)}
                     title="Collapse thread (⌘\\)"
                     aria-label="Collapse thread"
-                    className="size-6 flex items-center justify-center rounded text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
+                    className="btn-sm size-6 flex items-center justify-center rounded text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
                   >
                     <PanelLeftClose size={13} />
                   </button>
@@ -491,7 +491,7 @@ export function ChatView({ chatId }: Props) {
                         onClick={() => fileInputRef.current?.click()}
                         title="Attach a file (PDF, TXT)"
                         aria-label="Attach file"
-                        className="shrink-0 size-7 flex items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] transition-colors"
+                        className="btn-sm shrink-0 size-7 flex items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] transition-colors"
                       >
                         <Paperclip size={13} />
                       </button>
@@ -1153,7 +1153,7 @@ function AttachmentChip({
             onRemove();
           }}
           aria-label={`Remove ${att.filename}`}
-          className="ml-0.5 shrink-0 size-3.5 flex items-center justify-center rounded hover:bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+          className="btn-sm ml-0.5 shrink-0 size-3.5 flex items-center justify-center rounded hover:bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
         >
           <X size={9} />
         </button>
@@ -1351,7 +1351,7 @@ function DiffOverlay({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md hover:bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)]"
+            className="btn-sm p-1 rounded-md hover:bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)]"
           >
             <X size={16} />
           </button>

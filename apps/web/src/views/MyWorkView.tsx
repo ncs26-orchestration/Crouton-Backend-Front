@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Inbox, Loader2, ShieldCheck, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Inbox, Loader2, ShieldCheck, UserCheck, X } from "lucide-react";
 
 import { api } from "../lib/api";
 import { useToasts } from "../components/Toasts";
 import { prettyLabel, priorityTextClass, statusBadgeClass } from "../lib/request-format";
 import { PageHeader, StatCard, EmptyState as UIEmptyState } from "../components/ui";
+import { departmentColor } from "../lib/department";
 import type { ApprovalDecision, OrgRequest } from "../lib/types";
 
 const MAX_JUSTIFICATION_LEN = 2000;
@@ -15,7 +16,7 @@ interface Props {
   orgId: string;
   /** The caller's role in the org. Only an approver (admin) may decide. */
   role: string;
-  onOpenWorkflow: (requestId: string) => void;
+  onOpenWorkflow: (requestId: string, nodeId?: string) => void;
 }
 
 export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
@@ -29,6 +30,16 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
     queryFn: () => api.listRequests(orgId),
     refetchInterval: 4000,
   });
+
+  // Department nodes parked at awaiting_review that this user can sign off. This
+  // is the real human-in-the-loop queue: it shows a Finance lead the Finance
+  // steps waiting on them, not just the executive's final gate.
+  const { data: verifData } = useQuery({
+    queryKey: ["my-verifications", orgId],
+    queryFn: () => api.listMyVerifications(orgId),
+    refetchInterval: 4000,
+  });
+  const verifications = useMemo(() => verifData?.verifications ?? [], [verifData]);
 
   const requests = useMemo(() => data?.requests ?? [], [data]);
   const pending = useMemo(
@@ -48,7 +59,7 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
     <div className="flex-1 flex flex-col overflow-hidden">
       <PageHeader title="My Work" subtitle="Approvals, work in flight, and recent decisions" />
 
-      <div className="flex-1 overflow-auto px-8 py-6">
+      <div className="flex-1 overflow-auto px-4 md:px-8 py-4 md:py-6">
         {isLoading && (
           <div className="flex items-center justify-center h-40">
             <div className="size-6 rounded-full border-2 border-[var(--color-brand)] border-t-transparent animate-spin" />
@@ -65,22 +76,61 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
         {!isLoading && !error && (
           <div className="flex flex-col gap-8 w-full">
             {/* Summary */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <StatCard icon={UserCheck} label="Waiting on you" value={verifications.length} tone={verifications.length ? "warning" : "neutral"} />
               <StatCard icon={ShieldCheck} label="Pending approvals" value={pending.length} tone={pending.length ? "warning" : "neutral"} />
               <StatCard icon={Loader2} label="In progress" value={active.length} tone="brand" />
               <StatCard icon={CheckCircle2} label="Recently decided" value={decided.length} tone="success" />
             </div>
 
+            {/* Department verifications: the human-in-the-loop sign-offs this user
+                is responsible for. Shown to everyone, not just admins. */}
             <section className="flex flex-col gap-3">
               <SectionHeader
-                icon={<ShieldCheck size={14} className="text-[var(--color-brand)]" />}
-                title="Pending approvals"
-                count={pending.length}
+                icon={<UserCheck size={14} className="text-[var(--color-warning-fg)]" />}
+                title="Waiting on your verification"
+                count={verifications.length}
               />
-
-              {pending.length === 0 ? (
-                <UIEmptyState icon={Inbox} title="Nothing waiting on you" hint="Requests reaching the executive gate appear here." />
+              {verifications.length === 0 ? (
+                <UIEmptyState icon={Inbox} title="No steps waiting on you" hint="Department steps assigned to you (or your team) appear here when an agent finishes." />
               ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {verifications.map((v) => (
+                    <button
+                      key={v.node_id}
+                      type="button"
+                      onClick={() => onOpenWorkflow(v.request_id, v.node_id)}
+                      className="text-left rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-surface)] p-4 shadow-stripe-ambient hover:bg-[var(--color-surface-2)] transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="size-2 rounded-full shrink-0" style={{ background: departmentColor(v.department) }} />
+                        <span className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)]">{v.department}</span>
+                        {v.assigned_to_me && (
+                          <span className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-[var(--color-accent-bg)] text-[var(--color-brand)]">
+                            Assigned to you
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-[var(--color-fg)] truncate" style={{ fontFeatureSettings: '"ss01"' }}>
+                        {v.node_name}
+                      </p>
+                      <p className="text-xs text-[var(--color-fg-muted)] mt-0.5 truncate">{v.request_title}</p>
+                      <span className="inline-flex items-center gap-1 text-xs text-[var(--color-warning-fg)] mt-2">
+                        <UserCheck size={12} /> Review and sign off
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {pending.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <SectionHeader
+                  icon={<ShieldCheck size={14} className="text-[var(--color-brand)]" />}
+                  title="Pending approvals"
+                  count={pending.length}
+                />
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {pending.map((r) => (
                     <PendingCard
@@ -92,8 +142,8 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
                     />
                   ))}
                 </div>
-              )}
-            </section>
+              </section>
+            )}
 
             {active.length > 0 && (
               <section className="flex flex-col gap-3">
@@ -246,7 +296,7 @@ function PendingCard({
           <button
             type="button"
             onClick={onDecide}
-            className="px-3 py-1.5 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+            className="px-3 py-1.5 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             Review &amp; decide
@@ -353,7 +403,7 @@ function ApprovalModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="approval-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)]"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-4 md:p-6 border border-[var(--color-border)] mx-4 md:mx-0"
       >
         <div className="flex items-start justify-between mb-1">
           <h2
@@ -367,7 +417,7 @@ function ApprovalModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
           >
             <X size={18} />
           </button>
@@ -408,7 +458,7 @@ function ApprovalModal({
             type="button"
             onClick={() => decide("approve")}
             disabled={!canDecide}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50 min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             {submitting === "approve" && <Loader2 size={13} className="animate-spin" />}

@@ -121,7 +121,7 @@ export function HowItWorks({ open, onClose, onNavigate }: Props) {
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="size-7 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)]"
+                className="btn-sm size-7 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)]"
               >
                 <X size={15} />
               </button>
@@ -197,7 +197,7 @@ export function HowItWorks({ open, onClose, onNavigate }: Props) {
                   onNavigate("requests");
                   onClose();
                 }}
-                className="flex items-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)]"
+                className="flex items-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)] min-h-[44px] md:min-h-auto"
               >
                 Submit a request <ArrowRight size={14} />
               </button>

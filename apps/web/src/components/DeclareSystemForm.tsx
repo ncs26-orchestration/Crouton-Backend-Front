@@ -64,7 +64,7 @@ export function DeclareSystemForm({ onClose, onDeclared }: Props) {
       <button
         type="button"
         onClick={onClose}
-        className="absolute top-1.5 right-1.5 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+        className="btn-sm absolute top-1.5 right-1.5 text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
         aria-label="close"
       >
         <X size={12} />

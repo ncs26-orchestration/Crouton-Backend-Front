@@ -1,5 +1,5 @@
-import { useMemo, useCallback, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ReactFlow,
   Background,
@@ -17,12 +17,17 @@ import {
   AlertCircle,
   ArrowLeft,
   Bot,
+  Check,
   CheckCircle2,
   Clock,
   Loader2,
   Maximize2,
+  Play,
+  Plus,
   RotateCcw,
   ShieldAlert,
+  UserCheck,
+  X,
 } from "lucide-react";
 
 import { api } from "../lib/api";
@@ -35,14 +40,21 @@ import {
 import {
   decisionOutcomeBadgeClass,
   decisionOutcomeLabel,
+  flagSeverityDot,
+  flagSeverityText,
   isNotableOutcome,
   nodeStatusColorClass,
   prettyLabel,
   requestStatusTextClass,
 } from "../lib/request-format";
+import { detailLabel } from "../lib/request-templates";
 import { useRequestStream } from "../lib/sse";
+import { useAuth } from "../contexts/AuthContext";
+import { useToasts } from "../components/Toasts";
+import { Avatar } from "../components/Avatar";
+import { NodeChat } from "../components/NodeChat";
 import { DepartmentNode } from "../components/DepartmentNode";
-import type { AuditEvent, WorkflowNodeData } from "../lib/types";
+import type { AuditEvent, NodeAssignment, OrgRequest, WorkflowNodeData } from "../lib/types";
 
 const nodeTypes: NodeTypes = {
   department: DepartmentNode,
@@ -70,7 +82,7 @@ export function WorkflowView({ requestId, selectedNodeId, onSelectNode, onBack }
         </p>
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-[var(--color-brand)] hover:underline mt-2"
+          className="btn-inline flex items-center gap-1.5 text-sm text-[var(--color-brand)] hover:underline mt-2"
         >
           <ArrowLeft size={14} />
           Go to Requests
@@ -100,6 +112,14 @@ function WorkflowCanvas({
       query.state.data?.request.status === "in_progress" ? 4000 : false,
   });
 
+  const qc = useQueryClient();
+  const toasts = useToasts();
+  const launch = useMutation({
+    mutationFn: () => api.launchRequest(requestId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["request", requestId] }),
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+  });
+
   // Live updates patch this query's cache entry directly. Open the stream only
   // once the base graph has loaded, so patchCache has an entry to update.
   useRequestStream(requestId, !!data);
@@ -116,7 +136,7 @@ function WorkflowCanvas({
   // flipped get a one-shot pulse so live progress is visible.
   useEffect(() => {
     if (!data) return;
-    const layout = requestToFlow(data.nodes, data.edges);
+    const layout = requestToFlow(data.nodes, data.edges, data.assignments);
     const persisted = loadNodePositions(requestId);
     const changed = new Set<string>();
     for (const n of data.nodes) {
@@ -136,14 +156,16 @@ function WorkflowCanvas({
     setEdges(layout.edges);
   }, [data, selectedNodeId, requestId, setNodes, setEdges]);
 
-  // Fit the view once, after the first nodes have landed. Not on every update,
-  // so the user's panned/dragged view is left alone.
+  // Responsive fit-view padding: tighter on mobile so the graph fills more
+  // of the viewport; roomier on desktop for context around the edges.
+  const fitPadding = typeof window !== "undefined" && window.innerWidth < 768 ? 0.08 : 0.16;
+
   useEffect(() => {
     if (!didFit.current && nodes.length > 0) {
       didFit.current = true;
-      requestAnimationFrame(() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 }));
+      requestAnimationFrame(() => fitView({ padding: fitPadding, maxZoom: 1.15, duration: 300 }));
     }
-  }, [nodes.length, fitView]);
+  }, [nodes.length, fitView, fitPadding]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId || !data) return null;
@@ -169,10 +191,10 @@ function WorkflowCanvas({
   const resetLayout = useCallback(() => {
     if (!data) return;
     clearNodePositions(requestId);
-    const layout = requestToFlow(data.nodes, data.edges);
+    const layout = requestToFlow(data.nodes, data.edges, data.assignments);
     setNodes(layout.nodes.map((n) => ({ ...n, selected: n.id === selectedNodeId })));
-    requestAnimationFrame(() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 }));
-  }, [requestId, data, selectedNodeId, setNodes, fitView]);
+    requestAnimationFrame(() => fitView({ padding: fitPadding, maxZoom: 1.15, duration: 300 }));
+  }, [requestId, data, selectedNodeId, setNodes, fitView, fitPadding]);
 
   if (isLoading) {
     return (
@@ -184,9 +206,25 @@ function WorkflowCanvas({
 
   if (error || !data) {
     return (
-      <div className="flex-1 flex items-center justify-center gap-2 text-sm text-[var(--color-danger)]">
-        <AlertCircle size={16} />
-        Failed to load request
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+        <AlertCircle size={20} className="text-[var(--color-fg-subtle)]" />
+        <h2
+          className="text-lg font-medium text-[var(--color-fg)]"
+          style={{ fontFeatureSettings: '"ss01"' }}
+        >
+          This request isn't available
+        </h2>
+        <p className="text-sm text-[var(--color-fg-muted)] max-w-[45ch]">
+          It may have been removed, or it belongs to a different workspace. Pick a
+          request from the Requests tab to see its workflow.
+        </p>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-sm text-[var(--color-brand)] hover:underline mt-2"
+        >
+          <ArrowLeft size={14} />
+          Go to Requests
+        </button>
       </div>
     );
   }
@@ -195,8 +233,21 @@ function WorkflowCanvas({
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Left panel — Request Overview */}
-      <div className="w-64 shrink-0 border-r border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
+      {/* Mobile floating header */}
+      <div className="md:hidden absolute top-0 left-0 right-0 z-10 flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)]/90 backdrop-blur-sm border-b border-[var(--color-border)]">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+        >
+          <ArrowLeft size={14} />
+        </button>
+        <h2 className="text-sm font-medium text-[var(--color-fg)] truncate flex-1" style={{ fontFeatureSettings: '"ss01"' }}>
+          {req.title}
+        </h2>
+      </div>
+
+      {/* Left panel — Request Overview (hidden on mobile) */}
+      <div className="hidden md:flex w-64 shrink-0 border-r border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
         <div className="px-4 py-3 border-b border-[var(--color-border)]">
           <button
             onClick={onBack}
@@ -222,6 +273,10 @@ function WorkflowCanvas({
           {req.request_type && req.request_type !== "general" && (
             <InfoRow label="Type" value={prettyLabel(req.request_type)} />
           )}
+          {req.details &&
+            Object.entries(req.details).map(([k, v]) => (
+              <InfoRow key={k} label={detailLabel(k)} value={String(v)} />
+            ))}
           <InfoRow label="Priority" value={prettyLabel(req.priority)} />
           <InfoRow label="Status">
             <span className={`font-medium ${requestStatusTextClass(req.status)}`}>
@@ -243,6 +298,25 @@ function WorkflowCanvas({
             </div>
           </div>
         </div>
+
+        {/* Draft: assign verifiers, then launch */}
+        {req.status === "draft" && (
+          <div className="px-4 pb-3">
+            <div className="rounded-md border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3">
+              <p className="text-[11px] text-[var(--color-fg-muted)] leading-snug mb-2">
+                This request is a draft. Click a step to assign a verifier who must sign off on the
+                agent's work, then launch. Unassigned steps run automatically.
+              </p>
+              <button
+                onClick={() => launch.mutate()}
+                disabled={launch.isPending}
+                className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)] disabled:opacity-50"
+              >
+                <Play size={14} /> {launch.isPending ? "Launching…" : "Launch workflow"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Participating agents */}
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
@@ -284,16 +358,19 @@ function WorkflowCanvas({
           nodesConnectable={false}
           elementsSelectable
           panOnScroll
-          selectionOnDrag
+          panOnDrag={[1, 2]}
+          panActivationKeyCode=""
         >
           <Background gap={16} size={1} color="var(--color-border)" />
           <Controls
             showInteractive={false}
             className="!bg-[var(--color-surface)] !border-[var(--color-border)] !rounded-md !shadow-stripe"
           />
-          <Panel position="top-right" className="flex gap-1.5">
+
+          {/* Desktop controls — top-right */}
+          <Panel position="top-right" className="hidden md:flex gap-1.5 mt-2">
             <button
-              onClick={() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 })}
+              onClick={() => fitView({ padding: fitPadding, maxZoom: 1.15, duration: 300 })}
               title="Fit to view"
               className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
             >
@@ -307,23 +384,62 @@ function WorkflowCanvas({
               <RotateCcw size={13} /> Reset layout
             </button>
           </Panel>
+
+          {/*
+            Mobile controls — bottom-center so they're within thumb reach
+            and clear the bottom nav (mb-16 = 64px ≈ bottom nav height).
+          */}
+          <Panel position="bottom-center" className="md:hidden flex gap-1.5 mb-16 px-2">
+            <button
+              onClick={() => fitView({ padding: 0.08, maxZoom: 1.15, duration: 300 })}
+              title="Fit to view"
+              className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
+            >
+              <Maximize2 size={13} /> Fit
+            </button>
+            <button
+              onClick={resetLayout}
+              title="Reset node layout"
+              className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
+            >
+              <RotateCcw size={13} /> Reset
+            </button>
+          </Panel>
         </ReactFlow>
 
-        {/* Legend */}
-        <div className="absolute bottom-4 left-4 flex items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-1.5 text-[10px] text-[var(--color-fg-muted)]"
+        {/* Legend (hidden on mobile) */}
+        <div className="hidden md:flex absolute bottom-4 left-4 items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-1.5 text-[10px] text-[var(--color-fg-muted)]"
           style={{ boxShadow: "0 2px 5px rgba(50,50,93,0.1), 0 1px 2px rgba(0,0,0,0.08)" }}
         >
           <LegendItem color="var(--color-fg-subtle)" label="Pending" />
           <LegendItem color="var(--color-brand)" label="In Progress" />
+          <LegendItem color="var(--color-warning)" label="Needs review" />
           <LegendItem color="var(--color-success)" label="Completed" />
           <LegendItem color="var(--color-danger)" label="Blocked" />
         </div>
       </div>
 
-      {/* Right panel — Node Detail */}
-      <div className="w-72 shrink-0 border-l border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
+      {/* Right panel — Node Detail (hidden on mobile, shown as overlay when selected) */}
+      {selectedNode && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/30" onClick={() => onSelectNode(null)} />
+      )}
+      <div className={`${selectedNode ? "fixed inset-x-0 bottom-0 z-50 md:relative md:inset-auto md:bottom-auto" : "hidden md:flex"} md:w-72 md:shrink-0 border-l border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)] max-h-[80vh] md:max-h-none rounded-t-xl md:rounded-none`}>
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
+          <span className="text-xs font-medium text-[var(--color-fg-muted)]">Node Details</span>
+          <button
+            onClick={() => onSelectNode(null)}
+            className="btn-sm size-7 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)] transition-colors"
+          >
+            <X size={15} />
+          </button>
+        </div>
         {selectedNode ? (
-          <NodeDetail requestId={requestId} node={selectedNode} />
+          <NodeDetail
+            requestId={requestId}
+            node={selectedNode}
+            request={req}
+            assignments={(data.assignments ?? []).filter((a) => a.node_id === selectedNode.id)}
+          />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
             <div className="size-8 rounded-lg bg-[var(--color-surface-2)] flex items-center justify-center">
@@ -339,10 +455,21 @@ function WorkflowCanvas({
   );
 }
 
-function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNodeData }) {
+function NodeDetail({
+  requestId,
+  node,
+  request,
+  assignments,
+}: {
+  requestId: string;
+  node: WorkflowNodeData;
+  request: OrgRequest;
+  assignments: NodeAssignment[];
+}) {
   const config = {
     pending: { icon: Clock, color: "text-[var(--color-fg-subtle)]" },
     in_progress: { icon: Loader2, color: "text-[var(--color-brand)]" },
+    awaiting_review: { icon: UserCheck, color: "text-[var(--color-warning-fg)]" },
     completed: { icon: CheckCircle2, color: "text-[var(--color-success)]" },
     blocked: { icon: ShieldAlert, color: "text-[var(--color-danger)]" },
   }[node.status] ?? { icon: Clock, color: "text-[var(--color-fg-subtle)]" };
@@ -360,6 +487,58 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
 	});
 	const tasks = tasksQuery.data?.tasks ?? [];
 	const activity = tasksQuery.data?.activity ?? [];
+	// The per-node fetch carries the reasoning + flags the graph list omits, so
+	// prefer it once loaded and fall back to the graph node before then.
+	const n = tasksQuery.data?.node ?? node;
+	const flags = n.flags ?? [];
+
+	const qc = useQueryClient();
+	const toasts = useToasts();
+	const { user } = useAuth();
+	const [pickUser, setPickUser] = useState("");
+
+	// Members power the assignment picker (people in this node's department) and
+	// the RBAC gate (whether the current user may verify this node).
+	// Shares the ["org-members", orgId] cache with OrgView, so it must store the
+	// same shape (the array, not the {members} wrapper) or one view poisons the
+	// other's cache until a hard refresh.
+	const membersQuery = useQuery({
+		queryKey: ["org-members", request.org_id],
+		queryFn: () => api.listOrgMembers(request.org_id).then((r) => r.members),
+	});
+	const members = membersQuery.data ?? [];
+	const dept = node.department.toLowerCase();
+	const inDept = (m: { team_roles?: { team: string }[] }) =>
+		(m.team_roles ?? []).some((tr) => tr.team.toLowerCase() === dept);
+	const me = members.find((m) => m.id === user?.id);
+	// Only an admin (the executive) overrides department boundaries. Verifying a
+	// node otherwise requires being in that node's department or assigned to it,
+	// so a Finance person can't sign off a Legal node. Assigning verifiers and
+	// launching is a workflow-management action, open to admin/executor/requester.
+	const isAdmin = me?.role === "admin";
+	const isExec = me?.role === "admin" || me?.role === "executor";
+	const canVerify = isAdmin || (me ? inDept(me) : false) || assignments.some((a) => a.user_id === user?.id);
+	const canAssign = isExec || request.requester_user_id === user?.id;
+
+	const refresh = () => {
+		qc.invalidateQueries({ queryKey: ["request", requestId] });
+		qc.invalidateQueries({ queryKey: ["node", requestId, node.id] });
+	};
+	const assign = useMutation({
+		mutationFn: (userId: number) => api.assignNode(requestId, { node_id: node.id, user_id: userId }),
+		onSuccess: () => { setPickUser(""); refresh(); },
+		onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+	});
+	const unassign = useMutation({
+		mutationFn: (assignmentId: string) => api.unassignNode(requestId, assignmentId),
+		onSuccess: refresh,
+		onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+	});
+	const verify = useMutation({
+		mutationFn: (decision: "approve" | "reject") => api.verifyNode(requestId, node.id, { decision }),
+		onSuccess: refresh,
+		onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+	});
 
 	return (
 		<div className="flex flex-col">
@@ -385,12 +564,12 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
             {prettyLabel(node.status)}
           </span>
         </InfoRow>
-        {isNotableOutcome(node.decision_outcome) && node.decision_outcome && (
+        {isNotableOutcome(n.decision_outcome) && n.decision_outcome && (
           <InfoRow label="Decision">
             <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${decisionOutcomeBadgeClass(node.decision_outcome)}`}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${decisionOutcomeBadgeClass(n.decision_outcome)}`}
             >
-              {decisionOutcomeLabel(node.decision_outcome)}
+              {decisionOutcomeLabel(n.decision_outcome)}
             </span>
           </InfoRow>
         )}
@@ -399,6 +578,98 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
         {node.started_at && <InfoRow label="Started" value={new Date(node.started_at).toLocaleString()} />}
         {node.completed_at && <InfoRow label="Completed" value={new Date(node.completed_at).toLocaleString()} />}
       </div>
+
+      {/* Awaiting review: the verifier (or an exec) signs off here. */}
+      {node.status === "awaiting_review" && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-warning)]/5">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-warning-fg)] mb-1.5 flex items-center gap-1">
+            <UserCheck size={11} /> Awaiting your verification
+          </h4>
+          <p className="text-xs text-[var(--color-fg-muted)] leading-snug mb-2">
+            The agent finished. Review its work below, then sign off or send it back.
+          </p>
+          {canVerify ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => verify.mutate("approve")}
+                disabled={verify.isPending}
+                className="flex-1 flex items-center justify-center gap-1 rounded-md bg-[var(--color-success)] px-2 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+              >
+                <Check size={13} /> Approve
+              </button>
+              <button
+                onClick={() => verify.mutate("reject")}
+                disabled={verify.isPending}
+                className="flex-1 flex items-center justify-center gap-1 rounded-md border border-[var(--color-danger)] px-2 py-1.5 text-xs font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:opacity-50"
+              >
+                <X size={13} /> Send back
+              </button>
+            </div>
+          ) : (
+            <p className="text-[11px] text-[var(--color-fg-subtle)]">
+              Only the {node.department} team or an executive can verify this step.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Verifiers: assignable while the request is a draft. */}
+      {(request.status === "draft" || assignments.length > 0) && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            Verifiers
+          </h4>
+          {assignments.length === 0 && request.status !== "draft" && (
+            <p className="text-[11px] text-[var(--color-fg-subtle)]">No verifier — runs automatically.</p>
+          )}
+          <ul className="flex flex-col gap-1.5">
+            {assignments.map((a) => (
+              <li key={a.id} className="flex items-center gap-2">
+                <Avatar name={a.user_name || a.user_email} size={18} />
+                <span className="text-xs text-[var(--color-fg)] truncate flex-1">{a.user_name || a.user_email}</span>
+                {request.status === "draft" && canAssign && (
+                  <button
+                    onClick={() => unassign.mutate(a.id)}
+                    className="text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
+                    title="Remove"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {request.status === "draft" && canAssign && (
+            <div className="flex gap-1.5 mt-2">
+              <select
+                value={pickUser}
+                onChange={(e) => setPickUser(e.target.value)}
+                className="flex-1 min-w-0 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+              >
+                <option value="">
+                  {members.length === 0 ? "No org members yet" : "Assign a verifier…"}
+                </option>
+                {[...members]
+                  .filter((m) => !assignments.some((a) => a.user_id === m.id))
+                  .sort((a, b) => Number(inDept(b)) - Number(inDept(a)))
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name || m.email}
+                      {inDept(m) ? "" : ` · ${(m.team_roles ?? [])[0]?.team ?? "no team"}`}
+                    </option>
+                  ))}
+              </select>
+              <button
+                onClick={() => pickUser && assign.mutate(Number(pickUser))}
+                disabled={!pickUser || assign.isPending}
+                className="shrink-0 flex items-center gap-1 rounded bg-[var(--color-brand)] px-2 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-40"
+              >
+                <Plus size={12} /> Add
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {node.status === "blocked" && node.blocked_by && (
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
@@ -412,15 +683,69 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
         </div>
       )}
 
-      {node.status_text && node.status !== "blocked" && (
+      {/* The agent's reasoning — the "why" behind the decision. */}
+      {(n.decision_summary || (n.status_text && node.status !== "blocked")) && (
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
           <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-1.5">
-            Latest Status
+            {n.decision_summary ? "Assessment" : "Latest status"}
           </h4>
           <p className="text-xs text-[var(--color-fg)] leading-relaxed">
-            {node.status_text}
+            {n.decision_summary || n.status_text}
           </p>
         </div>
+      )}
+
+      {(n.checks ?? []).length > 0 && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            Policy checks
+          </h4>
+          <ul className="flex flex-col gap-1.5">
+            {(n.checks ?? []).map((c, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs">
+                {c.status === "pass" ? (
+                  <CheckCircle2 size={13} className="text-[var(--color-success)] shrink-0 mt-0.5" />
+                ) : c.status === "fail" ? (
+                  <X size={13} className="text-[var(--color-danger)] shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle size={13} className="text-[var(--color-warning-fg)] shrink-0 mt-0.5" />
+                )}
+                <span className="leading-snug min-w-0">
+                  <span className="text-[var(--color-fg)] font-medium">{c.label}</span>
+                  {c.detail && <span className="text-[var(--color-fg-muted)]"> — {c.detail}</span>}
+                  {c.policy_title && (
+                    <span className="block text-[10px] text-[var(--color-fg-subtle)]">{c.policy_title}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {flags.length > 0 && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            {n.decision_outcome === "approve_with_conditions" ? "Conditions & flags" : "Flags"}
+          </h4>
+          <ul className="flex flex-col gap-2">
+            {flags.map((f, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs">
+                <span className={`mt-1 size-1.5 rounded-full shrink-0 ${flagSeverityDot(f.severity)}`} />
+                <span className="leading-snug">
+                  <span className={`uppercase text-[9px] font-semibold tracking-wide mr-1.5 ${flagSeverityText(f.severity)}`}>
+                    {f.severity}
+                  </span>
+                  <span className="text-[var(--color-fg)]">{f.message}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(node.status === "awaiting_review" || node.status === "completed") && (
+        <NodeChat requestId={requestId} nodeId={node.id} canPost={canVerify} />
       )}
 
       {tasks.length > 0 && (

@@ -12,6 +12,7 @@ import { LoginView } from "./views/LoginView";
 import { RegisterView } from "./views/RegisterView";
 import { OrgSetupView } from "./views/OrgSetupView";
 import { OrgView } from "./views/OrgView";
+import { PeopleView } from "./views/PeopleView";
 import { SettingsView } from "./views/SettingsView";
 import { HomeView } from "./views/HomeView";
 import { MyWorkView } from "./views/MyWorkView";
@@ -35,7 +36,7 @@ interface Location {
 
 const VALID_SECTIONS: ShellSection[] = [
   "home", "my-work", "requests", "workflows", "machines", "agents",
-  "reports", "policies", "integrations", "teams", "settings", "help",
+  "reports", "policies", "integrations", "teams", "people", "settings", "help",
 ];
 
 function loadLocation(): Location {
@@ -185,8 +186,8 @@ function Shell() {
     setLocation((prev) => ({ ...prev, section }));
   };
 
-  const navigateToWorkflow = (requestId: string) => {
-    setLocation({ section: "workflows", requestId, nodeId: null });
+  const navigateToWorkflow = (requestId: string, nodeId: string | null = null) => {
+    setLocation({ section: "workflows", requestId, nodeId });
   };
 
   const selectNode = (nodeId: string | null) => {
@@ -196,7 +197,7 @@ function Shell() {
   const section = location.section;
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex bg-[var(--color-bg)] text-[var(--color-fg)]">
+    <div className="h-screen w-screen overflow-hidden flex bg-[var(--color-bg)] text-[var(--color-fg)] md:pb-0 pb-16">
       <ShellRail
         active={section}
         onSelect={setSection}
@@ -234,11 +235,12 @@ function Shell() {
       )}
 
       {section === "machines" && activeOrg && <MachinesView orgId={activeOrg.id} />}
-      {section === "agents" && activeOrg && <AgentsView orgId={activeOrg.id} />}
+      {section === "agents" && activeOrg && <AgentsView orgId={activeOrg.id} role={activeOrg.role} />}
       {section === "reports" && <ReportsView />}
-      {section === "policies" && activeOrg && <PoliciesView orgId={activeOrg.id} />}
+      {section === "policies" && activeOrg && <PoliciesView orgId={activeOrg.id} role={activeOrg.role} />}
       {section === "integrations" && <IntegrationsView />}
       {section === "teams" && <OrgView />}
+      {section === "people" && activeOrg && <PeopleView orgId={activeOrg.id} role={activeOrg.role} />}
       {section === "settings" && <SettingsView />}
 
       <HelpOverlay

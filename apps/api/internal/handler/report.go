@@ -42,6 +42,7 @@ type reportStage struct {
 	Status          string           `json:"status"`
 	StatusText      string           `json:"status_text"`
 	DecisionOutcome string           `json:"decision_outcome"`
+	DecisionSummary string           `json:"decision_summary"`
 	StartedAt       *time.Time       `json:"started_at"`
 	CompletedAt     *time.Time       `json:"completed_at"`
 	DurationSeconds int64            `json:"duration_seconds"`
@@ -178,6 +179,7 @@ func (h *ReportHandler) GetReport(c echo.Context) error {
 			Status:          n.Status,
 			StatusText:      n.StatusText,
 			DecisionOutcome: n.DecisionOutcome,
+			DecisionSummary: n.DecisionSummary,
 			StartedAt:       n.StartedAt,
 			CompletedAt:     n.CompletedAt,
 			DurationSeconds: int64(dur.Seconds()),
@@ -230,7 +232,7 @@ func (h *ReportHandler) GetReport(c echo.Context) error {
 	// Extract approval info from audit events.
 	var approval *reportApproval
 	for _, ae := range auditEvents {
-		if ae.Action == "approval.granted" {
+		if ae.Action == "approval.granted" || ae.Action == "approval.auto" {
 			app := &reportApproval{
 				Decision:      "approve",
 				Justification: ae.Reason,

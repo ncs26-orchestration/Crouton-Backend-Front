@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -21,11 +22,37 @@ type Request struct {
 	RequesterUserID     int64
 	RequesterRole       string
 	RequestType         string
+	Details             map[string]any
 	Priority            string
 	Status              string
 	Progress            int
 	EstimatedCompletion *time.Time
 	CreatedAt           time.Time
+}
+
+// detailsParam encodes a details map for a jsonb insert, defaulting to an empty
+// object so the column is never null.
+func detailsParam(d map[string]any) []byte {
+	if len(d) == 0 {
+		return []byte("{}")
+	}
+	b, err := json.Marshal(d)
+	if err != nil {
+		return []byte("{}")
+	}
+	return b
+}
+
+// scanDetails unmarshals a jsonb details column into a map.
+func scanDetails(raw []byte) map[string]any {
+	if len(raw) == 0 {
+		return map[string]any{}
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil || m == nil {
+		return map[string]any{}
+	}
+	return m
 }
 
 type RequestRepo struct {
@@ -41,18 +68,20 @@ func NewRequestRepo(pg *pgxpool.Pool) *RequestRepo {
 // need a follow-up read. The ID is caller-supplied so the handler can
 // generate a friendly prefixed id.
 func (r *RequestRepo) Create(ctx context.Context, req Request) (*Request, error) {
+	var detailsRaw []byte
 	row := r.pg.QueryRow(ctx, `
-		INSERT INTO requests (id, org_id, title, description, requester_user_id, requester_role, priority, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at
-	`, req.ID, req.OrgID, req.Title, req.Description, req.RequesterUserID, req.RequesterRole, req.Priority, req.Status)
+		INSERT INTO requests (id, org_id, title, description, requester_user_id, requester_role, priority, status, details)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at, details
+	`, req.ID, req.OrgID, req.Title, req.Description, req.RequesterUserID, req.RequesterRole, req.Priority, req.Status, detailsParam(req.Details))
 	var out Request
 	if err := row.Scan(
 		&out.ID, &out.OrgID, &out.Title, &out.Description, &out.RequesterUserID, &out.RequesterRole,
-		&out.RequestType, &out.Priority, &out.Status, &out.Progress, &out.EstimatedCompletion, &out.CreatedAt,
+		&out.RequestType, &out.Priority, &out.Status, &out.Progress, &out.EstimatedCompletion, &out.CreatedAt, &detailsRaw,
 	); err != nil {
 		return nil, err
 	}
+	out.Details = scanDetails(detailsRaw)
 	return &out, nil
 }
 
@@ -65,20 +94,22 @@ func (r *RequestRepo) SetRequestType(ctx context.Context, id, requestType string
 // GetByID returns a single request or ErrNotFound.
 func (r *RequestRepo) GetByID(ctx context.Context, id string) (*Request, error) {
 	row := r.pg.QueryRow(ctx, `
-		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at
+		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at, details
 		FROM requests
 		WHERE id = $1
 	`, id)
 	var req Request
+	var detailsRaw []byte
 	if err := row.Scan(
 		&req.ID, &req.OrgID, &req.Title, &req.Description, &req.RequesterUserID, &req.RequesterRole,
-		&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt,
+		&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt, &detailsRaw,
 	); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
+	req.Details = scanDetails(detailsRaw)
 	return &req, nil
 }
 
@@ -87,7 +118,7 @@ func (r *RequestRepo) GetByID(ctx context.Context, id string) (*Request, error) 
 // requests pile up; cursor pagination can layer on later.
 func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([]Request, error) {
 	rows, err := r.pg.Query(ctx, `
-		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at
+		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at, details
 		FROM requests
 		WHERE org_id = $1
 		ORDER BY created_at DESC
@@ -101,12 +132,14 @@ func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([
 	out := make([]Request, 0)
 	for rows.Next() {
 		var req Request
+		var detailsRaw []byte
 		if err := rows.Scan(
 			&req.ID, &req.OrgID, &req.Title, &req.Description, &req.RequesterUserID, &req.RequesterRole,
-			&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt,
+			&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt, &detailsRaw,
 		); err != nil {
 			return nil, err
 		}
+		req.Details = scanDetails(detailsRaw)
 		out = append(out, req)
 	}
 	return out, rows.Err()

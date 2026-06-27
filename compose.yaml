@@ -91,6 +91,17 @@ services:
       AGENT_EXTRACTOR_MODEL: ${AGENT_EXTRACTOR_MODEL:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       APP_ENV: ${APP_ENV:-production}
+    # Liveness probe so `docker compose up --wait` (CI + deploy) only succeeds
+    # once the agent is actually serving HTTP. Without this the orchestrator
+    # silently falls back to deterministic decisions for every stage. The
+    # runtime image is python-slim (no curl), so probe with urllib. The long
+    # start_period covers model-client init on first boot.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

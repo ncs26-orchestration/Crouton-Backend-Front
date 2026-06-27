@@ -114,7 +114,7 @@ export function DiagnosticsBar({ diagnostics, error, workflow, onSelectTask, onO
         </nav>
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="text-[10px] text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] font-mono"
+          className="btn-inline text-[10px] text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] font-mono"
           style={{ fontWeight: 400 }}
         >
           {expanded ? "collapse" : "expand"}
