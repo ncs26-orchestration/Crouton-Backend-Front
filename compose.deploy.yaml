@@ -103,6 +103,15 @@ services:
       APP_ENV: ${APP_ENV:-production}
     ports:
       - "8000:8000"
+    # Liveness probe so the deploy's `up -d --wait` fails loudly if the agent
+    # isn't actually serving, instead of silently shipping a fallback-only
+    # stack. Image is python-slim (no curl), so probe with urllib.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
