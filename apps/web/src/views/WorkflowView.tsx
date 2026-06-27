@@ -35,6 +35,8 @@ import {
 import {
   decisionOutcomeBadgeClass,
   decisionOutcomeLabel,
+  flagSeverityDot,
+  flagSeverityText,
   isNotableOutcome,
   nodeStatusColorClass,
   prettyLabel,
@@ -360,6 +362,10 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
 	});
 	const tasks = tasksQuery.data?.tasks ?? [];
 	const activity = tasksQuery.data?.activity ?? [];
+	// The per-node fetch carries the reasoning + flags the graph list omits, so
+	// prefer it once loaded and fall back to the graph node before then.
+	const n = tasksQuery.data?.node ?? node;
+	const flags = n.flags ?? [];
 
 	return (
 		<div className="flex flex-col">
@@ -385,12 +391,12 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
             {prettyLabel(node.status)}
           </span>
         </InfoRow>
-        {isNotableOutcome(node.decision_outcome) && node.decision_outcome && (
+        {isNotableOutcome(n.decision_outcome) && n.decision_outcome && (
           <InfoRow label="Decision">
             <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${decisionOutcomeBadgeClass(node.decision_outcome)}`}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${decisionOutcomeBadgeClass(n.decision_outcome)}`}
             >
-              {decisionOutcomeLabel(node.decision_outcome)}
+              {decisionOutcomeLabel(n.decision_outcome)}
             </span>
           </InfoRow>
         )}
@@ -412,14 +418,36 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
         </div>
       )}
 
-      {node.status_text && node.status !== "blocked" && (
+      {/* The agent's reasoning — the "why" behind the decision. */}
+      {(n.decision_summary || (n.status_text && node.status !== "blocked")) && (
         <div className="px-4 py-3 border-t border-[var(--color-border)]">
           <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-1.5">
-            Latest Status
+            {n.decision_summary ? "Assessment" : "Latest status"}
           </h4>
           <p className="text-xs text-[var(--color-fg)] leading-relaxed">
-            {node.status_text}
+            {n.decision_summary || n.status_text}
           </p>
+        </div>
+      )}
+
+      {flags.length > 0 && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            {n.decision_outcome === "approve_with_conditions" ? "Conditions & flags" : "Flags"}
+          </h4>
+          <ul className="flex flex-col gap-2">
+            {flags.map((f, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs">
+                <span className={`mt-1 size-1.5 rounded-full shrink-0 ${flagSeverityDot(f.severity)}`} />
+                <span className="leading-snug">
+                  <span className={`uppercase text-[9px] font-semibold tracking-wide mr-1.5 ${flagSeverityText(f.severity)}`}>
+                    {f.severity}
+                  </span>
+                  <span className="text-[var(--color-fg)]">{f.message}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

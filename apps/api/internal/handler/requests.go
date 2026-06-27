@@ -492,6 +492,19 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		})
 	}
 
+	flags, err := h.workflow.ListFlagsByNode(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("get node: flags", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	flagList := make([]map[string]any, 0, len(flags))
+	for _, f := range flags {
+		flagList = append(flagList, map[string]any{
+			"severity": f.Severity,
+			"message":  f.Message,
+		})
+	}
+
 	// F5: include dependency info for blocked nodes.
 	var blockedBy map[string]any
 	if node.Status == "blocked" {
@@ -515,6 +528,8 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		"progress_percent": node.ProgressPercent,
 		"status_text":      node.StatusText,
 		"decision_outcome": node.DecisionOutcome,
+		"decision_summary": node.DecisionSummary,
+		"flags":            flagList,
 		"started_at":       node.StartedAt,
 		"completed_at":     node.CompletedAt,
 	}
