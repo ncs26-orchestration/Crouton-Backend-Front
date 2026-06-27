@@ -430,6 +430,8 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 			"description":      n.Description,
 			"progress_percent": n.ProgressPercent,
 			"status_text":      n.StatusText,
+			"decision_outcome": n.DecisionOutcome,
+			"decision_summary": n.DecisionSummary,
 			"started_at":       n.StartedAt,
 			"completed_at":     n.CompletedAt,
 		}
