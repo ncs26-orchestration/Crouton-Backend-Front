@@ -29,6 +29,7 @@ type RequestsHandler struct {
 	deps        *repo.DependencyRepo
 	audit       *repo.AuditRepo
 	assignments *repo.AssignmentRepo
+	messages    *repo.NodeMessageRepo
 	agent       *agentclient.Client
 	engine      *orchestrator.Engine
 }
@@ -42,6 +43,7 @@ func NewRequestsHandler(logger *slog.Logger, pg *pgxpool.Pool, agent *agentclien
 		deps:        repo.NewDependencyRepo(pg),
 		audit:       repo.NewAuditRepo(pg),
 		assignments: repo.NewAssignmentRepo(pg),
+		messages:    repo.NewNodeMessageRepo(pg),
 		agent:       agent,
 		engine:      engine,
 	}
@@ -893,6 +895,174 @@ func (h *RequestsHandler) VerifyNode(c echo.Context) error {
 		h.engine.Start(id)
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// userCanActOnNode reports whether the caller may verify or chat on a node:
+// org admin/executor, a member of the node's department, or an assigned verifier.
+func (h *RequestsHandler) userCanActOnNode(ctx context.Context, orgID, role string, userID int64, node *repo.WorkflowNode) bool {
+	if role == "admin" || role == "executor" {
+		return true
+	}
+	if inDept, err := h.assignments.UserInDepartment(ctx, orgID, userID, node.Department); err == nil && inDept {
+		return true
+	}
+	if asg, err := h.assignments.IsAssigned(ctx, node.ID, userID); err == nil && asg {
+		return true
+	}
+	return false
+}
+
+// ListNodeMessages handles GET /requests/:id/nodes/:nodeId/messages.
+func (h *RequestsHandler) ListNodeMessages(c echo.Context) error {
+	id := c.Param("id")
+	nodeID := c.Param("nodeId")
+	if _, _, done := h.loadRequestForMember(c, id); done != nil {
+		return done
+	}
+	ctx := c.Request().Context()
+	msgs, err := h.messages.ListByNode(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("list node messages", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"messages": msgs})
+}
+
+// PostNodeMessage handles POST /requests/:id/nodes/:nodeId/messages — the
+// verifier asks a question or requests changes; the department agent replies, and
+// on a change request it revises its decision on the node.
+func (h *RequestsHandler) PostNodeMessage(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	id := c.Param("id")
+	nodeID := c.Param("nodeId")
+	req, role, done := h.loadRequestForMember(c, id)
+	if done != nil {
+		return done
+	}
+	ctx := c.Request().Context()
+	node, err := h.workflow.GetNode(ctx, nodeID)
+	if errors.Is(err, repo.ErrNotFound) || (node != nil && node.RequestID != id) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "node not found"})
+	}
+	if err != nil {
+		h.logger.Error("post node message: get node", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if !h.userCanActOnNode(ctx, req.OrgID, role, claims.UserID, node) {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the " + node.Department + " team or an executive can discuss this step"})
+	}
+
+	var body struct {
+		Body   string `json:"body"`
+		Intent string `json:"intent"` // question | request_changes
+	}
+	if err := c.Bind(&body); err != nil || strings.TrimSpace(body.Body) == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "message body is required"})
+	}
+	text := strings.TrimSpace(body.Body)
+
+	uid := claims.UserID
+	if err := h.messages.Create(ctx, repo.NodeMessage{
+		ID: "nmsg_" + randomHex(8), RequestID: id, NodeID: nodeID,
+		AuthorUserID: &uid, AuthorName: claims.Name, Role: "human", Body: text,
+	}); err != nil {
+		h.logger.Error("post node message: store human", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	mode := "answer"
+	if body.Intent == "request_changes" {
+		mode = "revise"
+	}
+	resp, cerr := h.agent.Converse(ctx, agentclient.ConverseRequest{
+		AgentType: node.AgentType,
+		Request: agentclient.IntakeRequestBody{
+			Title: req.Title, Description: req.Description, Priority: req.Priority, Details: req.Details,
+		},
+		Mode:     mode,
+		Feedback: text,
+		PriorDecision: map[string]any{
+			"summary": node.DecisionSummary, "outcome": node.DecisionOutcome, "status_text": node.StatusText,
+		},
+	})
+	if cerr != nil {
+		_ = h.messages.Create(ctx, repo.NodeMessage{
+			ID: "nmsg_" + randomHex(8), RequestID: id, NodeID: nodeID,
+			AuthorName: node.Department + " Agent", Role: "system",
+			Body: "The agent is offline right now, so it couldn't respond. Your note was saved.",
+		})
+		msgs, _ := h.messages.ListByNode(ctx, nodeID)
+		return c.JSON(http.StatusOK, map[string]any{"messages": msgs})
+	}
+
+	reply := resp.Reply
+	if reply == "" {
+		reply = "Noted."
+	}
+	if err := h.messages.Create(ctx, repo.NodeMessage{
+		ID: "nmsg_" + randomHex(8), RequestID: id, NodeID: nodeID,
+		AuthorName: node.Department + " Agent", Role: "agent", Body: reply,
+	}); err != nil {
+		h.logger.Error("post node message: store agent", slog.String("err", err.Error()))
+	}
+
+	// A change request revises the node's decision in place; it stays awaiting
+	// review for the verifier to approve the revised version.
+	if mode == "revise" && resp.Decision != nil {
+		h.applyRevisedDecision(ctx, id, node, resp.Decision, claims.Name)
+	}
+
+	msgs, _ := h.messages.ListByNode(ctx, nodeID)
+	return c.JSON(http.StatusOK, map[string]any{"messages": msgs})
+}
+
+// applyRevisedDecision persists an agent's revised decision on a node (summary,
+// outcome, flags, tasks, status), keeping it at awaiting_review.
+func (h *RequestsHandler) applyRevisedDecision(ctx context.Context, requestID string, node *repo.WorkflowNode, d *agentclient.Decision, verifier string) {
+	now := time.Now()
+	if d.Summary != "" {
+		_ = h.workflow.SetNodeDecisionSummary(ctx, node.ID, d.Summary)
+	}
+	outcome := d.Outcome
+	if outcome == "" {
+		outcome = "approve"
+	}
+	_ = h.workflow.UpdateNodeDecisionOutcome(ctx, node.ID, outcome)
+
+	tasks := make([]repo.AgentTask, 0, len(d.Tasks))
+	for i, t := range d.Tasks {
+		started, completed := now, now
+		tasks = append(tasks, repo.AgentTask{
+			ID: "at_" + randomHex(8), NodeID: node.ID, Title: t.Title, Status: "completed",
+			Ordinal: i, StartedAt: &started, CompletedAt: &completed,
+		})
+	}
+	_ = h.workflow.DeleteTasksByNode(ctx, node.ID)
+	_ = h.workflow.InsertTasks(ctx, tasks)
+
+	_ = h.workflow.DeleteFlagsByNode(ctx, node.ID)
+	flags := make([]repo.NodeFlag, 0, len(d.Flags))
+	for i, f := range d.Flags {
+		sev := f.Severity
+		if sev != "info" && sev != "warning" && sev != "critical" {
+			sev = "info"
+		}
+		flags = append(flags, repo.NodeFlag{
+			ID: "nf_" + randomHex(8), RequestID: requestID, NodeID: node.ID,
+			Severity: sev, Message: f.Message, Ordinal: i,
+		})
+	}
+	_ = h.workflow.InsertFlags(ctx, flags)
+
+	statusText := d.StatusText
+	if statusText == "" {
+		statusText = node.Name + " revised — awaiting verification."
+	}
+	_ = h.workflow.UpdateNodeStatus(ctx, node.ID, "awaiting_review", statusText, 90)
+	_ = h.audit.Append(ctx, repo.AuditEvent{
+		ID: "aev_" + randomHex(8), RequestID: requestID, NodeID: &node.ID,
+		Actor: node.Department, Action: "node.revised", Reason: "Revised after " + verifier + "'s feedback",
+	})
 }
 
 // ListRequestAudit handles GET /requests/:id/audit, returning all audit

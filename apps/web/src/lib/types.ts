@@ -270,6 +270,17 @@ export type RequestStatus =
 
 export type NodeStatus = "pending" | "in_progress" | "awaiting_review" | "completed" | "blocked";
 
+// One turn in a node's verifier↔agent conversation.
+export interface NodeMessage {
+  id: string;
+  node_id: string;
+  author_user_id: number | null;
+  author_name: string;
+  role: "human" | "agent" | "system";
+  body: string;
+  created_at: string;
+}
+
 // A verifier assigned to a workflow node.
 export interface NodeAssignment {
   id: string;
