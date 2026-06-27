@@ -41,6 +41,36 @@ func NewPolicyRepo(pg *pgxpool.Pool) *PolicyRepo {
 	return &PolicyRepo{pg: pg}
 }
 
+// Create inserts a policy and returns its id. rules is raw JSON ("[]" if none).
+func (r *PolicyRepo) Create(ctx context.Context, id, orgID, teamID, title, body string, rules []byte) error {
+	if len(rules) == 0 {
+		rules = []byte("[]")
+	}
+	_, err := r.pg.Exec(ctx, `
+		INSERT INTO department_policies (id, org_id, team_id, title, body, rules)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, id, orgID, teamID, title, body, rules)
+	return err
+}
+
+// Update changes a policy's title, body, and rules, scoped to its org.
+func (r *PolicyRepo) Update(ctx context.Context, orgID, id, title, body string, rules []byte) error {
+	if len(rules) == 0 {
+		rules = []byte("[]")
+	}
+	_, err := r.pg.Exec(ctx, `
+		UPDATE department_policies SET title = $3, body = $4, rules = $5
+		WHERE id = $1 AND org_id = $2
+	`, id, orgID, title, body, rules)
+	return err
+}
+
+// Delete removes a policy scoped to its org.
+func (r *PolicyRepo) Delete(ctx context.Context, orgID, id string) error {
+	_, err := r.pg.Exec(ctx, `DELETE FROM department_policies WHERE id = $1 AND org_id = $2`, id, orgID)
+	return err
+}
+
 // ListByOrg returns every department policy in an org, joined to the owning
 // team's name so callers can group by department.
 func (r *PolicyRepo) ListByOrg(ctx context.Context, orgID string) ([]DepartmentPolicy, error) {

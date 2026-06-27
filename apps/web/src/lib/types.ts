@@ -429,6 +429,16 @@ export interface AgentRosterEntry {
 }
 
 // A read-only department policy agents consult while reasoning (seeded by F10).
+// A typed, machine-checkable rule on a policy.
+export interface PolicyRule {
+  label: string;
+  field: string;
+  op: "lte" | "gte" | "lt" | "gt" | "eq" | "ne" | "exists";
+  value: string | number;
+  severity: "info" | "warning" | "critical";
+  message: string;
+}
+
 export interface DepartmentPolicy {
   id: string;
   org_id: string;
@@ -436,6 +446,7 @@ export interface DepartmentPolicy {
   team_name: string;
   title: string;
   body: string;
+  rules?: PolicyRule[] | null;
   created_at: string;
 }
 
