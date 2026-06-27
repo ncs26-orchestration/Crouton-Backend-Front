@@ -41,6 +41,7 @@ type reportStage struct {
 	Department      string           `json:"department"`
 	Status          string           `json:"status"`
 	StatusText      string           `json:"status_text"`
+	DecisionOutcome string           `json:"decision_outcome"`
 	StartedAt       *time.Time       `json:"started_at"`
 	CompletedAt     *time.Time       `json:"completed_at"`
 	DurationSeconds int64            `json:"duration_seconds"`
@@ -176,6 +177,7 @@ func (h *ReportHandler) GetReport(c echo.Context) error {
 			Department:      n.Department,
 			Status:          n.Status,
 			StatusText:      n.StatusText,
+			DecisionOutcome: n.DecisionOutcome,
 			StartedAt:       n.StartedAt,
 			CompletedAt:     n.CompletedAt,
 			DurationSeconds: int64(dur.Seconds()),

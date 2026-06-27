@@ -21,7 +21,13 @@ import {
 
 import { api } from "../lib/api";
 import { useOrg } from "../contexts/OrgContext";
-import { relativeTime, humanizeDuration } from "../lib/request-format";
+import {
+  relativeTime,
+  humanizeDuration,
+  decisionOutcomeBadgeClass,
+  decisionOutcomeLabel,
+  isNotableOutcome,
+} from "../lib/request-format";
 import type { AuditEvent, FinalReport, ReportStage } from "../lib/types";
 
 export function ReportsView() {
@@ -451,6 +457,11 @@ function StageRow({ stage }: { stage: ReportStage }) {
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-[var(--color-fg)]">{stage.name}</span>
           <span className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)]">{stage.department}</span>
+          {isNotableOutcome(stage.decision_outcome) && stage.decision_outcome && (
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${decisionOutcomeBadgeClass(stage.decision_outcome)}`}>
+              {decisionOutcomeLabel(stage.decision_outcome)}
+            </span>
+          )}
           {stage.duration_seconds > 0 && (
             <span className="text-[10px] text-[var(--color-fg-subtle)] ml-auto tnum">
               {humanizeDuration(stage.duration_seconds)}
