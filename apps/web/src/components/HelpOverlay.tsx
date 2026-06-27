@@ -77,7 +77,7 @@ export function HelpOverlay({ open, onClose, onHowItWorks }: Props) {
               </div>
               <button
                 onClick={onClose}
-                className="size-7 flex items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)]"
+                className="btn-sm size-7 flex items-center justify-center rounded-md text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)]"
                 aria-label="close help"
               >
                 <X size={15} />

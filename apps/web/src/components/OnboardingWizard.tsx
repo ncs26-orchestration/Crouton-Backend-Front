@@ -503,7 +503,7 @@ function ChipInput({ values, onChange, placeholder, singleLine }: ChipInputProps
           {val}
           <button
             onClick={() => onChange(values.filter((v) => v !== val))}
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
           >
             <X size={10} />
           </button>

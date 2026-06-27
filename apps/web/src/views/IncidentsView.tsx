@@ -289,7 +289,7 @@ function IncidentDetail({
           <div className="flex gap-2 mt-3">
             <button
               onClick={handleDiagnose}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--color-brand)] text-white text-xs font-medium hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--color-brand)] text-white text-xs font-medium hover:opacity-90 transition-opacity min-h-[44px] md:min-h-auto"
             >
               <AlertTriangle size={11} />
               Diagnose with AI
@@ -367,7 +367,7 @@ function IncidentDetail({
           <button
             onClick={sendMessage}
             disabled={!newMsg.trim() || sending}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity min-h-[44px] md:min-h-auto"
           >
             {sending ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
           </button>

@@ -246,7 +246,7 @@ function PendingCard({
           <button
             type="button"
             onClick={onDecide}
-            className="px-3 py-1.5 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+            className="px-3 py-1.5 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             Review &amp; decide
@@ -367,7 +367,7 @@ function ApprovalModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
           >
             <X size={18} />
           </button>
@@ -408,7 +408,7 @@ function ApprovalModal({
             type="button"
             onClick={() => decide("approve")}
             disabled={!canDecide}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50 min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             {submitting === "approve" && <Loader2 size={13} className="animate-spin" />}

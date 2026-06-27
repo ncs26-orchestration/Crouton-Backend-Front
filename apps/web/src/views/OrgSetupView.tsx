@@ -473,7 +473,7 @@ export function OrgSetupView({ onDone }: Props) {
                         <button
                           type="button"
                           onClick={() => removeInvite(email)}
-                          className="text-[var(--color-fg-muted)] hover:text-red-500 transition-colors"
+                          className="btn-sm text-[var(--color-fg-muted)] hover:text-red-500 transition-colors"
                         >
                           <X size={13} />
                         </button>
@@ -565,7 +565,7 @@ export function OrgSetupView({ onDone }: Props) {
                         }} />
                       {machineFileName && (
                         <button type="button" onClick={() => { setMachineFile(null); setMachineFileName(""); }}
-                          className="text-[var(--color-fg-muted)] hover:text-red-500 transition-colors">
+                          className="btn-sm text-[var(--color-fg-muted)] hover:text-red-500 transition-colors">
                           <X size={13} />
                         </button>
                       )}
@@ -587,7 +587,7 @@ export function OrgSetupView({ onDone }: Props) {
                         <span className="text-[10px] text-[var(--color-fg-muted)]">{m.machine_type}</span>
                         {m.fileName && <FileText size={11} className="text-[var(--color-fg-muted)]" />}
                         <button type="button" onClick={() => removeMachine(i)}
-                          className="text-[var(--color-fg-muted)] hover:text-red-500 transition-colors">
+                          className="btn-sm text-[var(--color-fg-muted)] hover:text-red-500 transition-colors">
                           <Trash2 size={12} />
                         </button>
                       </li>

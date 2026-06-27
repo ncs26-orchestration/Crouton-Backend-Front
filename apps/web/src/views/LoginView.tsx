@@ -95,7 +95,7 @@ export function LoginView({ onGoRegister }: Props) {
           Don&apos;t have an account?{" "}
           <button
             onClick={onGoRegister}
-            className="text-[var(--color-brand)] hover:underline font-medium"
+            className="btn-inline text-[var(--color-brand)] hover:underline font-medium"
           >
             Create one
           </button>

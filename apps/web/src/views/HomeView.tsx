@@ -71,7 +71,7 @@ export function HomeView({ orgId, onOpenWorkflow, onNavigate, onShowHowItWorks }
             </button>
             <button
               onClick={() => onNavigate("requests")}
-              className="flex items-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)]"
+              className="flex items-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)] min-h-[44px] md:min-h-auto"
             >
               <Plus size={15} /> New request
             </button>
@@ -122,7 +122,7 @@ export function HomeView({ orgId, onOpenWorkflow, onNavigate, onShowHowItWorks }
             className="lg:col-span-3"
             bodyClassName=""
             action={
-              <button onClick={() => onNavigate("requests")} className="flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline">
+              <button onClick={() => onNavigate("requests")} className="btn-inline flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline">
                 View all <ArrowRight size={12} />
               </button>
             }

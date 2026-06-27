@@ -134,8 +134,8 @@ export function ISPanel({
           <button
             onClick={onRefresh}
             disabled={loading}
-            title="Refresh projection"
-            className="size-7 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] disabled:text-[var(--color-fg-faint)] transition-colors"
+title="Refresh projection"
+             className="btn-sm size-7 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] disabled:text-[var(--color-fg-faint)] transition-colors"
           >
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           </button>
@@ -143,7 +143,7 @@ export function ISPanel({
             <button
               onClick={onToggleCollapsed}
               title="Collapse panel"
-              className="size-7 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
+              className="btn-sm size-7 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
             >
               <ChevronLeft size={13} />
             </button>

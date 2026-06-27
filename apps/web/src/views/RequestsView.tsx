@@ -67,7 +67,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors min-h-[44px] md:min-h-auto"
           style={{ fontFeatureSettings: '"ss01"' }}
         >
           <Plus size={14} strokeWidth={2} />
@@ -117,7 +117,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
             {requests.length === 0 && (
               <button
                 onClick={() => setModalOpen(true)}
-                className="text-sm text-[var(--color-brand)] hover:underline"
+                className="btn-inline text-sm text-[var(--color-brand)] hover:underline"
               >
                 Submit your first request
               </button>
@@ -334,7 +334,7 @@ function NewRequestModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
           >
             <X size={18} />
           </button>
@@ -391,7 +391,7 @@ function NewRequestModal({
           <button
             onClick={() => mutation.mutate()}
             disabled={!title.trim() || mutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50 min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             {mutation.isPending && <Loader2 size={13} className="animate-spin" />}

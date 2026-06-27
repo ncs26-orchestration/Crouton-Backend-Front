@@ -98,7 +98,7 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
               href={toast.action.href}
               target="_blank"
               rel="noreferrer"
-              className="text-[12px] font-medium text-[var(--color-accent)] hover:underline"
+              className="btn-inline text-[12px] font-medium text-[var(--color-accent)] hover:underline"
             >
               {toast.action.label} →
             </a>

@@ -129,7 +129,7 @@ export function RegisterView({ onGoLogin }: Props) {
           Already have an account?{" "}
           <button
             onClick={onGoLogin}
-            className="text-[var(--color-brand)] hover:underline font-medium"
+            className="btn-inline text-[var(--color-brand)] hover:underline font-medium"
           >
             Sign in
           </button>

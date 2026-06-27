@@ -71,7 +71,7 @@ export function WorkflowView({ requestId, selectedNodeId, onSelectNode, onBack }
         </p>
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-[var(--color-brand)] hover:underline mt-2"
+          className="btn-inline flex items-center gap-1.5 text-sm text-[var(--color-brand)] hover:underline mt-2"
         >
           <ArrowLeft size={14} />
           Go to Requests
@@ -137,14 +137,16 @@ function WorkflowCanvas({
     setEdges(layout.edges);
   }, [data, selectedNodeId, requestId, setNodes, setEdges]);
 
-  // Fit the view once, after the first nodes have landed. Not on every update,
-  // so the user's panned/dragged view is left alone.
+  // Responsive fit-view padding: tighter on mobile so the graph fills more
+  // of the viewport; roomier on desktop for context around the edges.
+  const fitPadding = typeof window !== "undefined" && window.innerWidth < 768 ? 0.08 : 0.16;
+
   useEffect(() => {
     if (!didFit.current && nodes.length > 0) {
       didFit.current = true;
-      requestAnimationFrame(() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 }));
+      requestAnimationFrame(() => fitView({ padding: fitPadding, maxZoom: 1.15, duration: 300 }));
     }
-  }, [nodes.length, fitView]);
+  }, [nodes.length, fitView, fitPadding]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId || !data) return null;
@@ -172,8 +174,8 @@ function WorkflowCanvas({
     clearNodePositions(requestId);
     const layout = requestToFlow(data.nodes, data.edges);
     setNodes(layout.nodes.map((n) => ({ ...n, selected: n.id === selectedNodeId })));
-    requestAnimationFrame(() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 }));
-  }, [requestId, data, selectedNodeId, setNodes, fitView]);
+    requestAnimationFrame(() => fitView({ padding: fitPadding, maxZoom: 1.15, duration: 300 }));
+  }, [requestId, data, selectedNodeId, setNodes, fitView, fitPadding]);
 
   if (isLoading) {
     return (
@@ -298,16 +300,19 @@ function WorkflowCanvas({
           nodesConnectable={false}
           elementsSelectable
           panOnScroll
-          selectionOnDrag
+          panOnDrag={[1, 2]}
+          panActivationKeyCode=""
         >
           <Background gap={16} size={1} color="var(--color-border)" />
           <Controls
             showInteractive={false}
             className="!bg-[var(--color-surface)] !border-[var(--color-border)] !rounded-md !shadow-stripe"
           />
-          <Panel position="top-right" className="flex gap-1.5">
+
+          {/* Desktop controls — top-right */}
+          <Panel position="top-right" className="hidden md:flex gap-1.5 mt-2">
             <button
-              onClick={() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 })}
+              onClick={() => fitView({ padding: fitPadding, maxZoom: 1.15, duration: 300 })}
               title="Fit to view"
               className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
             >
@@ -319,6 +324,27 @@ function WorkflowCanvas({
               className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
             >
               <RotateCcw size={13} /> Reset layout
+            </button>
+          </Panel>
+
+          {/*
+            Mobile controls — bottom-center so they're within thumb reach
+            and clear the bottom nav (mb-16 = 64px ≈ bottom nav height).
+          */}
+          <Panel position="bottom-center" className="md:hidden flex gap-1.5 mb-16 px-2">
+            <button
+              onClick={() => fitView({ padding: 0.08, maxZoom: 1.15, duration: 300 })}
+              title="Fit to view"
+              className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
+            >
+              <Maximize2 size={13} /> Fit
+            </button>
+            <button
+              onClick={resetLayout}
+              title="Reset node layout"
+              className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
+            >
+              <RotateCcw size={13} /> Reset
             </button>
           </Panel>
         </ReactFlow>
@@ -343,7 +369,7 @@ function WorkflowCanvas({
           <span className="text-xs font-medium text-[var(--color-fg-muted)]">Node Details</span>
           <button
             onClick={() => onSelectNode(null)}
-            className="size-7 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)] transition-colors"
+            className="btn-sm size-7 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)] transition-colors"
           >
             <X size={15} />
           </button>

@@ -123,7 +123,7 @@ function AllProjects({ onOpenProject }: { onOpenProject: (id: string) => void })
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.92 }}
           onClick={() => setShowForm((v) => !v)}
-          className="size-7 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
+          className="btn-sm size-7 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
           title="New project"
         >
           <FolderPlus size={13} />
@@ -372,7 +372,7 @@ function ScopedToProject({
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.92 }}
                 onClick={onOrganisationSettings}
-                className="size-6 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] transition-colors"
+                className="btn-sm size-6 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] transition-colors"
                 title="Organisation settings"
               >
                 <Building2 size={12} />
@@ -383,7 +383,7 @@ function ScopedToProject({
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.92 }}
                 onClick={() => setProjectMenuOpen((v) => !v)}
-                className="size-6 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
+                className="btn-sm size-6 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface-2)] transition-colors"
                 title="Project options"
               >
                 <MoreHorizontal size={13} />
@@ -454,7 +454,7 @@ function ScopedToProject({
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.92 }}
           onClick={() => setShowNewChat((v) => !v)}
-          className="size-6 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] transition-colors"
+          className="btn-sm size-6 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] transition-colors"
           title="New chat"
         >
           <MessageSquarePlus size={11} />
@@ -494,7 +494,7 @@ function ScopedToProject({
         {!projectQuery.isLoading && chats.length === 0 && !showNewChat && (
           <button
             onClick={() => setShowNewChat(true)}
-            className="w-full text-left text-[12px] text-[var(--color-brand)] hover:underline px-3 py-2"
+            className="btn-inline w-full text-left text-[12px] text-[var(--color-brand)] hover:underline px-3 py-2"
           >
             + Start your first chat
           </button>

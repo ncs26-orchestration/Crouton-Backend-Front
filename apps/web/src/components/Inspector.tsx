@@ -53,7 +53,7 @@ export function Inspector({ workflow, selectedTaskId, is, onClose }: Props) {
             <div className="text-sm font-medium text-[var(--color-fg)] truncate">{task.name}</div>
           </div>
         </div>
-        <button onClick={onClose} className="text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]" aria-label="close inspector">
+        <button onClick={onClose} className="btn-sm text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]" aria-label="close inspector">
           <X size={14} />
         </button>
       </div>

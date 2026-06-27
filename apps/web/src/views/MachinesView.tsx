@@ -74,7 +74,7 @@ export function MachinesView({ orgId }: Props) {
         </div>
         <button
           onClick={() => setAddModal(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors min-h-[44px] md:min-h-auto"
           style={{ fontFeatureSettings: '"ss01"' }}
         >
           <Plus size={14} strokeWidth={2} />
@@ -129,7 +129,7 @@ export function MachinesView({ orgId }: Props) {
             {machines.length === 0 && (
               <button
                 onClick={() => setAddModal(true)}
-                className="text-sm text-[var(--color-brand)] hover:underline"
+                className="btn-inline text-sm text-[var(--color-brand)] hover:underline"
               >
                 Register your first machine
               </button>
@@ -372,7 +372,7 @@ function DocumentUploadModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
           >
             <X size={18} />
           </button>
@@ -415,7 +415,7 @@ function DocumentUploadModal({
                 <button
                   type="button"
                   onClick={() => setFile(null)}
-                  className="text-[var(--color-fg-muted)] hover:text-red-500 transition-colors"
+                  className="btn-sm text-[var(--color-fg-muted)] hover:text-red-500 transition-colors"
                 >
                   <X size={16} />
                 </button>
@@ -441,7 +441,7 @@ function DocumentUploadModal({
           <button
             onClick={() => mutation.mutate()}
             disabled={!file || mutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50 min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             {mutation.isPending && (
@@ -538,7 +538,7 @@ function AddMachineModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
           >
             <X size={18} />
           </button>
@@ -617,7 +617,7 @@ function AddMachineModal({
           <button
             onClick={() => mutation.mutate()}
             disabled={!name.trim() || mutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50 min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             {mutation.isPending && (

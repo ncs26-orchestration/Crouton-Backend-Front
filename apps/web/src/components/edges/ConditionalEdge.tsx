@@ -120,7 +120,7 @@ export function ConditionalEdge(props: EdgeProps) {
                     setDraft("");
                     setEditing(false);
                   }}
-                  className="text-[var(--color-fg-subtle)] hover:text-rose-500"
+                  className="btn-sm text-[var(--color-fg-subtle)] hover:text-rose-500"
                   title="Remove condition"
                   tabIndex={-1}
                 >
@@ -143,7 +143,7 @@ export function ConditionalEdge(props: EdgeProps) {
           ) : (
             <button
               onClick={() => setEditing(true)}
-              className="inline-flex items-center gap-1 bg-[var(--color-surface)] border border-dashed border-[var(--color-border)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)] rounded-full px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)] transition-colors"
+              className="btn-sm inline-flex items-center gap-1 bg-[var(--color-surface)] border border-dashed border-[var(--color-border)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)] rounded-full px-1.5 py-0.5 text-[10px] text-[var(--color-fg-subtle)] transition-colors"
               title="Add a condition"
             >
               <Plus size={9} /> condition

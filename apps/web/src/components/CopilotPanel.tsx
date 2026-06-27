@@ -240,7 +240,7 @@ export function CopilotPanel({
             </div>
             <button
               onClick={onClose}
-              className="text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+              className="btn-sm text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
               aria-label="close copilot"
             >
               <X size={14} />
@@ -428,7 +428,7 @@ export function CopilotPanel({
                 <button
                   type="submit"
                   disabled={!workflow || !input.trim() || askMut.isPending}
-                  className="shrink-0 size-8 inline-flex items-center justify-center rounded-md bg-[var(--color-brand)] text-white hover:brightness-110 disabled:opacity-40"
+                  className="btn-sm shrink-0 size-8 inline-flex items-center justify-center rounded-md bg-[var(--color-brand)] text-white hover:brightness-110 disabled:opacity-40"
                   aria-label="Send"
                 >
                   {askMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}

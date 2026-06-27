@@ -25,7 +25,8 @@ import { useTheme } from "../lib/theme";
 import { useAuth } from "../contexts/AuthContext";
 
 // ShellRail — the left navigation. On desktop it's a collapsible sidebar;
-// on mobile (<768px) it becomes a bottom navigation bar.
+// on mobile (<768px) it becomes a bottom navigation bar with a user menu
+// that includes the logout action.
 
 export type ShellSection =
   | "home"
@@ -74,12 +75,10 @@ const UTILITY: Item[] = [
   { id: "help", icon: HelpCircle, label: "Help", hint: "Shortcuts" },
 ];
 
-// Items shown on the mobile bottom nav (most frequently used)
 const MOBILE_NAV_ITEMS: Item[] = [
   { id: "home", icon: Home, label: "Home" },
   { id: "my-work", icon: Inbox, label: "My Work" },
   { id: "requests", icon: FileText, label: "Requests" },
-  { id: "workflows", icon: Workflow, label: "Workflows" },
 ];
 
 const STORAGE_KEY = "aios.sidebar";
@@ -92,7 +91,7 @@ export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(STORAGE_KEY) !== "collapsed";
   });
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, expanded ? "expanded" : "collapsed");
@@ -104,7 +103,6 @@ export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props
 
   return (
     <>
-      {/* Desktop sidebar — hidden on mobile */}
       <nav
         className={`hidden md:flex shrink-0 flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)] transition-[width] duration-200 ease-out ${
           expanded ? "w-56" : "w-14"
@@ -193,7 +191,7 @@ export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props
         </div>
       </nav>
 
-      {/* Mobile bottom nav — visible only on small screens */}
+      {/* Mobile bottom nav — Home, My Work, Requests, User menu */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[var(--color-surface)] border-t border-[var(--color-border)] flex items-center justify-around px-1 safe-area-bottom">
         {MOBILE_NAV_ITEMS.map((it) => {
           const Icon = it.icon;
@@ -213,66 +211,82 @@ export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props
             </button>
           );
         })}
+
+        {/* User avatar button */}
         <button
-          onClick={() => setMobileMoreOpen(!mobileMoreOpen)}
+          onClick={() => setUserMenuOpen(!userMenuOpen)}
           className={`flex flex-col items-center gap-0.5 py-2 px-2 min-w-0 flex-1 transition-colors ${
-            mobileMoreOpen ? "text-[var(--color-brand)]" : "text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+            userMenuOpen ? "text-[var(--color-brand)]" : "text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
           }`}
         >
-          <ChevronDown size={20} strokeWidth={1.75} className={`transition-transform ${mobileMoreOpen ? "rotate-180" : ""}`} />
-          <span className="text-[10px] font-medium">More</span>
+          <span className="size-6 flex items-center justify-center rounded-full bg-[var(--color-accent-bg)] text-[var(--color-brand)] text-[9px] font-bold">
+            {initials}
+          </span>
+          <span className="text-[10px] font-medium truncate w-full text-center">Account</span>
         </button>
       </nav>
 
-      {/* Mobile more drawer */}
-      {mobileMoreOpen && (
-        <div className="md:hidden fixed bottom-14 left-0 right-0 z-40 bg-[var(--color-surface)] border-t border-[var(--color-border)] shadow-stripe-elevated max-h-[50vh] overflow-y-auto nice-scroll">
-          <div className="grid grid-cols-4 gap-1 p-3">
-            {[...PRIMARY, ...UTILITY].filter(
-              (it) => !MOBILE_NAV_ITEMS.some((m) => m.id === it.id)
-            ).map((it) => {
-              const Icon = it.icon;
-              const isActive = active === it.id;
-              return (
-                <button
-                  key={it.id}
-                  onClick={() => { onSelect(it.id); setMobileMoreOpen(false); }}
-                  className={`flex flex-col items-center gap-1 py-3 px-1 rounded-lg transition-colors ${
-                    isActive
-                      ? "bg-[var(--color-accent-bg)] text-[var(--color-brand)]"
-                      : "text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)]"
-                  }`}
-                >
-                  <Icon size={18} strokeWidth={isActive ? 2.25 : 1.75} />
-                  <span className="text-[9px] font-medium text-center truncate w-full">{it.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-2 border-t border-[var(--color-border)] px-4 py-2">
-            {user && (
-              <button
-                onClick={onUserClick}
-                className="flex items-center gap-2 flex-1 min-w-0"
-              >
-                <span className="size-7 shrink-0 flex items-center justify-center rounded-full bg-[var(--color-accent-bg)] text-[var(--color-brand)] text-[10px] font-bold">
+      {/* Mobile user menu drawer — always shows logout */}
+      {userMenuOpen && (
+        <>
+          <div className="md:hidden fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
+          <div className="md:hidden fixed bottom-16 left-2 right-2 z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-elevated overflow-hidden">
+            {/* User info + logout row */}
+            <div className="p-4 border-b border-[var(--color-border)]">
+              <div className="flex items-center gap-3">
+                <span className="size-10 flex items-center justify-center rounded-full bg-[var(--color-accent-bg)] text-[var(--color-brand)] text-sm font-bold">
                   {initials}
                 </span>
-                <span className="flex-1 min-w-0 text-left">
-                  <span className="block text-xs font-medium text-[var(--color-fg)] truncate">{user.name}</span>
-                  <span className="block text-[10px] text-[var(--color-fg-muted)]">Sign out</span>
-                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--color-fg)] truncate">{user?.name}</p>
+                  <p className="text-xs text-[var(--color-fg-muted)] truncate">{user?.email}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Secondary nav items */}
+            <div className="grid grid-cols-4 gap-1 p-3">
+              {[...PRIMARY, ...UTILITY].filter(
+                (it) => !MOBILE_NAV_ITEMS.some((m) => m.id === it.id)
+              ).map((it) => {
+                const Icon = it.icon;
+                const isActive = active === it.id;
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() => { onSelect(it.id); setUserMenuOpen(false); }}
+                    className={`flex flex-col items-center gap-1 py-3 px-1 rounded-lg transition-colors min-h-[56px] ${
+                      isActive
+                        ? "bg-[var(--color-accent-bg)] text-[var(--color-brand)]"
+                        : "text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)]"
+                    }`}
+                  >
+                    <Icon size={18} strokeWidth={isActive ? 2.25 : 1.75} />
+                    <span className="text-[9px] font-medium text-center truncate w-full">{it.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Actions: theme toggle + sign out */}
+            <div className="flex items-center gap-2 border-t border-[var(--color-border)] px-4 py-3">
+              <button
+                onClick={toggle}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)] transition-colors"
+              >
+                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+                {theme === "dark" ? "Light mode" : "Dark mode"}
               </button>
-            )}
-            <button
-              onClick={toggle}
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              className="size-9 shrink-0 flex items-center justify-center rounded-lg text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)] transition-colors"
-            >
-              {theme === "dark" ? <Sun size={15} strokeWidth={1.75} /> : <Moon size={15} strokeWidth={1.75} />}
-            </button>
+              <button
+                onClick={onUserClick}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--color-danger)] hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors ml-auto"
+              >
+                <LogOut size={15} />
+                Sign out
+              </button>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </>
   );

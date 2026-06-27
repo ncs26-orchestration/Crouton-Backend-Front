@@ -140,7 +140,7 @@ function TeamsTab({ orgId }: { orgId: string }) {
           <div className="flex gap-2 justify-end">
             <button
               onClick={() => setShowCreate(false)}
-              className="px-3 py-1.5 rounded-lg text-sm text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] transition-colors"
+              className="btn-sm px-3 py-1.5 rounded-lg text-sm text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] transition-colors"
             >
               Cancel
             </button>
@@ -273,7 +273,7 @@ function TeamCard({ team, orgId, orgMembers, expanded, onToggle, onDelete, delet
         <button
           onClick={onDelete}
           disabled={deleting}
-          className="shrink-0 size-7 flex items-center justify-center rounded-lg text-[var(--color-fg-muted)] hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-950/40 disabled:opacity-40 transition-colors"
+          className="btn-sm shrink-0 size-7 flex items-center justify-center rounded-lg text-[var(--color-fg-muted)] hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-950/40 disabled:opacity-40 transition-colors"
         >
           {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
         </button>
@@ -528,7 +528,7 @@ function MembersTab({ orgId }: { orgId: string }) {
           </select>
           <button
             onClick={() => removeMut.mutate(m.id)}
-            className="shrink-0 text-[var(--color-fg-muted)] hover:text-red-500 transition-colors"
+            className="btn-sm shrink-0 text-[var(--color-fg-muted)] hover:text-red-500 transition-colors"
           >
             <X size={14} />
           </button>

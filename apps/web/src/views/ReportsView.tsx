@@ -279,7 +279,7 @@ function ReportModal({
               type="button"
               onClick={onClose}
               aria-label="Close report"
-              className="size-7 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]"
+              className="btn-sm size-7 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]"
             >
               <X size={15} />
             </button>
