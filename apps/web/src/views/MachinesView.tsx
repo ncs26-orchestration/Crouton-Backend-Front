@@ -354,7 +354,7 @@ function DocumentUploadModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="upload-doc-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-sm p-6 border border-[var(--color-border)]"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-sm p-6 border border-[var(--color-border)] mx-4 md:mx-0"
       >
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -525,7 +525,7 @@ function AddMachineModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-machine-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)]"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)] mx-4 md:mx-0"
       >
         <div className="flex items-start justify-between mb-4">
           <h2

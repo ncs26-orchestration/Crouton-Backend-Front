@@ -167,7 +167,7 @@ export function OnboardingWizard({ onComplete, onSkip }: Props) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 10, scale: 0.99 }}
         transition={{ type: "spring", stiffness: 300, damping: 26 }}
-        className="relative max-w-lg w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-deep overflow-hidden"
+        className="relative max-w-lg w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-deep overflow-hidden mx-4"
       >
         <button
           onClick={handleSkip}

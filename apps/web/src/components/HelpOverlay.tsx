@@ -61,7 +61,7 @@ export function HelpOverlay({ open, onClose, onHowItWorks }: Props) {
             exit={{ y: 6, opacity: 0 }}
             transition={{ type: "spring", stiffness: 360, damping: 30 }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="w-full max-w-[640px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-deep overflow-hidden"
+            className="w-full max-w-[640px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-deep overflow-hidden mx-4"
           >
             <header className="px-5 h-14 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
