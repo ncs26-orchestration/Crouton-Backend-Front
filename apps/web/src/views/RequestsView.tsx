@@ -53,7 +53,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+      <div className="shrink-0 px-4 md:px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between gap-3">
         <div>
           <h1
             className="text-lg font-medium text-[var(--color-fg)]"
@@ -76,7 +76,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
       </div>
 
       {/* Filters */}
-      <div className="shrink-0 px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3">
+      <div className="shrink-0 px-4 md:px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3 flex-wrap">
         <FilterSelect
           label="Status"
           value={statusFilter}
@@ -126,22 +126,55 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
         )}
 
         {filtered.length > 0 && (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-[var(--color-fg-muted)] border-b border-[var(--color-border)]">
-                <th className="px-6 py-2.5 font-medium">Title</th>
-                <th className="px-4 py-2.5 font-medium">Requester</th>
-                <th className="px-4 py-2.5 font-medium">Priority</th>
-                <th className="px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5 font-medium text-right">Progress</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop table */}
+            <table className="w-full text-sm hidden md:table">
+              <thead>
+                <tr className="text-left text-xs text-[var(--color-fg-muted)] border-b border-[var(--color-border)]">
+                  <th className="px-6 py-2.5 font-medium">Title</th>
+                  <th className="px-4 py-2.5 font-medium">Requester</th>
+                  <th className="px-4 py-2.5 font-medium">Priority</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Progress</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <RequestRow key={r.id} request={r} onClick={() => onOpenWorkflow(r.id)} />
+                ))}
+              </tbody>
+            </table>
+
+            {/* Mobile cards */}
+            <div className="md:hidden flex flex-col gap-2 p-4">
               {filtered.map((r) => (
-                <RequestRow key={r.id} request={r} onClick={() => onOpenWorkflow(r.id)} />
+                <button
+                  key={r.id}
+                  onClick={() => onOpenWorkflow(r.id)}
+                  className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-left shadow-stripe-ambient hover:border-[var(--color-border-strong)] transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-[var(--color-fg)] truncate" style={{ fontFeatureSettings: '"ss01"' }}>
+                      {r.title}
+                    </p>
+                    <p className="text-xs text-[var(--color-fg-muted)] mt-0.5 truncate">
+                      {r.requester_name}
+                      {r.request_type && r.request_type !== "general" && (
+                        <> · <span className="rounded bg-[var(--color-surface-3)] px-1 py-0.5 text-[10px]">{prettyLabel(r.request_type)}</span></>
+                      )}
+                      <> · <span className={`capitalize ${priorityTextClass(r.priority)}`}>{r.priority}</span></>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="tnum text-xs text-[var(--color-fg-muted)]">{r.progress}%</span>
+                    <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${statusBadgeClass(r.status)}`}>
+                      {prettyLabel(r.status)}
+                    </span>
+                  </div>
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </div>
 
