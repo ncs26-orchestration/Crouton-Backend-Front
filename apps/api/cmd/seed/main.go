@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -91,7 +92,8 @@ type requestSpec struct {
 	description string
 	priority    string
 	status      string
-	requestType string // intake classification (hiring, procurement, ...)
+	requestType string         // intake classification (hiring, procurement, ...)
+	details     map[string]any // structured fields shown in the request panel
 	progress    int
 	requester   string // email
 	ageDays     int    // how long ago it was submitted
@@ -129,10 +131,17 @@ var requests = []requestSpec{
 		priority:    "medium",
 		status:      "awaiting_approval",
 		requestType: "procurement",
-		progress:    55,
-		requester:   "it.lead@acme.test",
-		ageDays:     9,
-		etaDays:     8,
+		details: map[string]any{
+			"vendor":     "Dell",
+			"quantity":   50,
+			"unit_cost":  1840,
+			"total_cost": 92000,
+			"needed_by":  "2026-08-01",
+		},
+		progress:  55,
+		requester: "it.lead@acme.test",
+		ageDays:   9,
+		etaDays:   8,
 		profile: graphProfile{
 			completed: []string{"intake", "planning", "finance_review", "legal_review", "it_assessment"},
 			inProgress: map[string]string{
@@ -159,10 +168,17 @@ var requests = []requestSpec{
 		priority:    "medium",
 		status:      "completed",
 		requestType: "hiring",
-		progress:    100,
-		requester:   "hr.lead@acme.test",
-		ageDays:     21,
-		etaDays:     0,
+		details: map[string]any{
+			"role":       "Delivery Contractor",
+			"headcount":  12,
+			"seniority":  "Mid",
+			"comp_band":  "$80/hr",
+			"start_date": "2026-07-15",
+		},
+		progress:  100,
+		requester: "hr.lead@acme.test",
+		ageDays:   21,
+		etaDays:   0,
 		profile: graphProfile{
 			completed: []string{
 				"intake", "planning", "finance_review", "legal_review", "it_assessment",
@@ -201,10 +217,15 @@ var requests = []requestSpec{
 		priority:    "high",
 		status:      "rejected",
 		requestType: "infra",
-		progress:    45,
-		requester:   "coo@acme.test",
-		ageDays:     4,
-		etaDays:     0,
+		details: map[string]any{
+			"system":      "Customer data warehouse",
+			"environment": "Production",
+			"est_cost":    4000,
+		},
+		progress:  45,
+		requester: "coo@acme.test",
+		ageDays:   4,
+		etaDays:   0,
 		profile: graphProfile{
 			completed: []string{"intake", "planning", "it_assessment", "legal_review"},
 			outcomes: map[string]string{
@@ -668,11 +689,17 @@ func insertRequestGraph(
 	if requestType == "" {
 		requestType = "general"
 	}
+	detailsJSON := []byte("{}")
+	if len(r.details) > 0 {
+		if b, err := json.Marshal(r.details); err == nil {
+			detailsJSON = b
+		}
+	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO requests
-			(id, org_id, title, description, requester_user_id, request_type, priority, status, progress, estimated_completion, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, r.id, demoOrgID, r.title, r.description, requesterID, requestType, r.priority, r.status, r.progress, eta, createdAt); err != nil {
+			(id, org_id, title, description, requester_user_id, request_type, details, priority, status, progress, estimated_completion, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, r.id, demoOrgID, r.title, r.description, requesterID, requestType, detailsJSON, r.priority, r.status, r.progress, eta, createdAt); err != nil {
 		return fmt.Errorf("insert request: %w", err)
 	}
 

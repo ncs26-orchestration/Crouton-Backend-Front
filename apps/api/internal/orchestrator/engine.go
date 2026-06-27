@@ -435,6 +435,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			Title:       req.Title,
 			Description: req.Description,
 			Priority:    req.Priority,
+			Details:     req.Details,
 		},
 		UpstreamContext: upstream,
 		OrgContext:      orgContextForNode(node, policiesByDept),
