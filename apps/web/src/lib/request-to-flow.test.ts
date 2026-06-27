@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { requestToFlow, NODE_WIDTH, X_GAP } from "./request-to-flow";
+import { requestToFlow, NODE_HEIGHT, Y_GAP } from "./request-to-flow";
 import { nodeStatusToken } from "./request-format";
 import type { NodeStatus, WorkflowEdgeData, WorkflowNodeData } from "./types";
 
@@ -29,19 +29,21 @@ describe("requestToFlow", () => {
     expect(requestToFlow([], [])).toEqual({ nodes: [], edges: [] });
   });
 
-  it("ranks nodes into columns by depth", () => {
+  it("ranks nodes into rows by depth (top to bottom)", () => {
     // a -> b -> c
     const { nodes } = requestToFlow(
       [node("a"), node("b"), node("c")],
       [edge("e1", "a", "b"), edge("e2", "b", "c")],
     );
     const posOf = (id: string) => nodes.find((n) => n.id === id)!.position;
-    expect(posOf("a").x).toBe(0);
-    expect(posOf("b").x).toBe(NODE_WIDTH + X_GAP);
-    expect(posOf("c").x).toBe(2 * (NODE_WIDTH + X_GAP));
+    expect(posOf("a").y).toBe(0);
+    expect(posOf("b").y).toBe(NODE_HEIGHT + Y_GAP);
+    expect(posOf("c").y).toBe(2 * (NODE_HEIGHT + Y_GAP));
+    // A linear chain shares one column.
+    expect(posOf("a").x).toBe(posOf("b").x);
   });
 
-  it("places parallel branches in the same column at different rows", () => {
+  it("places parallel branches in the same row at different columns", () => {
     // a -> b, a -> c  (b and c are parallel, same rank)
     const { nodes } = requestToFlow(
       [node("a"), node("b"), node("c")],
@@ -49,8 +51,8 @@ describe("requestToFlow", () => {
     );
     const b = nodes.find((n) => n.id === "b")!.position;
     const c = nodes.find((n) => n.id === "c")!.position;
-    expect(b.x).toBe(c.x); // same column
-    expect(b.y).not.toBe(c.y); // different rows
+    expect(b.y).toBe(c.y); // same row
+    expect(b.x).not.toBe(c.x); // different columns
   });
 
   it("colors an edge by its source node status", () => {

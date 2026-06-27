@@ -85,8 +85,8 @@ function DepartmentNodeInner({ data, selected }: NodeProps) {
         fontFeatureSettings: '"ss01"',
       }}
     >
-      <Handle type="target" position={Position.Left} className="!bg-[var(--color-border-strong)] !w-2 !h-2" />
-      <Handle type="source" position={Position.Right} className="!bg-[var(--color-border-strong)] !w-2 !h-2" />
+      <Handle type="target" position={Position.Top} className="!bg-[var(--color-border-strong)] !w-2 !h-2" />
+      <Handle type="source" position={Position.Bottom} className="!bg-[var(--color-border-strong)] !w-2 !h-2" />
 
       <div className="flex items-center gap-1.5">
         <span
