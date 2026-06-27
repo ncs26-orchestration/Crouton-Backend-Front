@@ -31,7 +31,7 @@ export function OrgView() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-bg)]">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-[var(--color-border)] shrink-0">
+      <div className="px-4 md:px-8 py-4 md:py-5 border-b border-[var(--color-border)] shrink-0">
         <h1 className="text-xl font-medium text-[var(--color-fg)]" style={{ fontFeatureSettings: '"ss01"' }}>
           {activeOrg.name}
         </h1>
@@ -40,7 +40,7 @@ export function OrgView() {
         </p>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-4">
+        <div className="flex gap-1 mt-4 overflow-x-auto nice-scroll">
           {(["teams", "members"] as const).map((t) => (
             <button
               key={t}
@@ -58,7 +58,7 @@ export function OrgView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6">
         {tab === "teams"   && <TeamsTab   orgId={activeOrg.id} />}
         {tab === "members" && <MembersTab orgId={activeOrg.id} />}
       </div>
@@ -315,7 +315,7 @@ function TeamCard({ team, orgId, orgMembers, expanded, onToggle, onDelete, delet
 
           {/* Add member row */}
           {available.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col sm:flex-row gap-2">
               <select
                 value={selectedUserId}
                 onChange={(e) => setSelectedUserId(e.target.value === "" ? "" : Number(e.target.value))}
@@ -438,7 +438,7 @@ function MembersTab({ orgId }: { orgId: string }) {
       {/* Inline invite form */}
       {showAdd && (
         <div className="rounded-xl border border-[var(--color-brand)] bg-[var(--color-accent-bg)] p-4 flex flex-col gap-3">
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               ref={nameRef}
               type="text"
@@ -458,7 +458,7 @@ function MembersTab({ orgId }: { orgId: string }) {
               <option value="technician">Technician</option>
             </select>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="email"
               value={inviteEmail}
