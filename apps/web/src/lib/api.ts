@@ -22,6 +22,9 @@ import type {
 	NodeMessage,
 	NodeVerification,
 	OrgRequest,
+	WorkflowDef,
+	WorkflowInput,
+	WorkflowRunSummary,
 	PolicyRule,
 	Project,
 	NodeDetailResponse,
@@ -539,6 +542,41 @@ export const api = {
   // all for an admin). Powers the "Waiting on you" queue in My Work.
   listMyVerifications: (orgId: string): Promise<{ verifications: NodeVerification[] }> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/my-verifications`),
+
+  // --- Workflows (reusable internal processes) ---
+
+  listWorkflows: (orgId: string): Promise<{ workflows: WorkflowDef[] }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/workflows`),
+
+  createWorkflow: (orgId: string, payload: WorkflowInput): Promise<{ workflow: WorkflowDef }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/workflows`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateWorkflow: (orgId: string, id: string, payload: WorkflowInput): Promise<{ workflow: WorkflowDef }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/workflows/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteWorkflow: (orgId: string, id: string): Promise<void> => {
+    const token = authStore.get();
+    return fetch(`/api/orgs/${encodeURIComponent(orgId)}/workflows/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((r) => {
+      if (!r.ok && r.status !== 204) throw new Error(`DELETE /workflows ${r.status}`);
+    });
+  },
+
+  runWorkflow: (orgId: string, id: string): Promise<{ request: OrgRequest }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/workflows/${encodeURIComponent(id)}/run`, {
+      method: "POST",
+    }),
+
+  listWorkflowRuns: (orgId: string, id: string): Promise<{ runs: WorkflowRunSummary[] }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/workflows/${encodeURIComponent(id)}/runs`),
 
   createRequest: (
     orgId: string,
