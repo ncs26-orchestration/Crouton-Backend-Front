@@ -252,7 +252,7 @@ function ReportModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:p-8 overflow-auto anim-fade-in"
-      data-print-hide
+      data-print-overlay
       onClick={onClose}
     >
       <div
