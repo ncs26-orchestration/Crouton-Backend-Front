@@ -122,6 +122,10 @@ var requests = []requestSpec{
 			blocked: map[string]string{
 				"finance_review": "Need the IT security assessment and infrastructure cost estimate before the budget can be finalized.",
 			},
+			summaries: map[string]string{
+				"legal_review":  "Opening a Berlin office means a German GmbH and local employment contracts under German labor law. Workable, but needs a registered entity and a works-council-aware contract template before the first hire.",
+				"it_assessment": "Scoping office networking, a site-to-site VPN, and device provisioning for ~30 staff. Standard build; the main cost driver is the managed network and the new site's security baseline.",
+			},
 		},
 	},
 	{
@@ -189,6 +193,12 @@ var requests = []requestSpec{
 			},
 			flags: map[string][]string{
 				"legal_review": {"info: Contractor agreements use the standard NDA template; IP assignment confirmed."},
+			},
+			summaries: map[string]string{
+				"finance_review": "12 contractors at ~$80/hr for the quarter lands within the approved Q3 delivery budget. Spend is variable and capped by the SOW, so no funding risk.",
+				"legal_review":   "Standard contractor agreements with the approved NDA and IP-assignment clauses. No regulatory blockers; classification reviewed and they are correctly engaged as contractors.",
+				"hr_planning":    "Onboarding for 12: equipment, system access, and compliance training scheduled in two waves so delivery isn't disrupted.",
+				"ops_planning":   "Workstreams and reporting lines mapped; each contractor is paired with an owner for the Q3 push.",
 			},
 		},
 	},

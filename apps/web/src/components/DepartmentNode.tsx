@@ -1,9 +1,37 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Bot, CheckCircle2, Clock, Loader2, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, ShieldAlert } from "lucide-react";
 
 import type { NodeStatus, WorkflowNodeData } from "../lib/types";
 import { decisionOutcomeBadgeClass, decisionOutcomeLabel, isNotableOutcome } from "../lib/request-format";
+
+// Stable per-department accent so each agent reads as a distinct identity on the
+// canvas. Known departments get a fixed hue; anything else is hashed to one.
+const DEPT_COLORS: Record<string, string> = {
+  planning: "#6366f1",
+  finance: "#0ea5e9",
+  legal: "#8b5cf6",
+  it: "#14b8a6",
+  hr: "#ec4899",
+  operations: "#f59e0b",
+  executive: "#64748b",
+};
+const DEPT_FALLBACK = ["#6366f1", "#0ea5e9", "#14b8a6", "#f59e0b", "#ec4899", "#8b5cf6", "#ef4444"];
+
+function departmentColor(department: string): string {
+  const key = department.trim().toLowerCase();
+  if (DEPT_COLORS[key]) return DEPT_COLORS[key];
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  return DEPT_FALLBACK[Math.abs(hash) % DEPT_FALLBACK.length]!;
+}
+
+function departmentInitials(department: string): string {
+  const words = department.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
+  return (words[0]![0]! + words[1]![0]!).toUpperCase();
+}
 
 const STATUS_CONFIG: Record<NodeStatus, { bg: string; border: string; icon: typeof Clock; label: string }> = {
   pending: {
@@ -54,7 +82,13 @@ function DepartmentNodeInner({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Right} className="!bg-[var(--color-border-strong)] !w-2 !h-2" />
 
       <div className="flex items-center gap-1.5">
-        <Bot size={12} className="text-[var(--color-fg-muted)] shrink-0" />
+        <span
+          className="size-4 shrink-0 rounded-[5px] flex items-center justify-center text-[8px] font-semibold text-white"
+          style={{ background: departmentColor(d.department) }}
+          title={d.department}
+        >
+          {departmentInitials(d.department)}
+        </span>
         <span className="text-[10px] text-[var(--color-fg-muted)] uppercase tracking-wide truncate">
           {d.department}
         </span>
