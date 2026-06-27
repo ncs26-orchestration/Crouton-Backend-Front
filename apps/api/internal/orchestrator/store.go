@@ -82,6 +82,18 @@ func (s *dbStore) UpdateNodeDecisionOutcome(ctx context.Context, nodeID, outcome
 	return s.workflow.UpdateNodeDecisionOutcome(ctx, nodeID, outcome)
 }
 
+func (s *dbStore) SetNodeDecisionSummary(ctx context.Context, nodeID, summary string) error {
+	return s.workflow.SetNodeDecisionSummary(ctx, nodeID, summary)
+}
+
+func (s *dbStore) ClearNodeFlags(ctx context.Context, nodeID string) error {
+	return s.workflow.DeleteFlagsByNode(ctx, nodeID)
+}
+
+func (s *dbStore) InsertFlags(ctx context.Context, flags []repo.NodeFlag) error {
+	return s.workflow.InsertFlags(ctx, flags)
+}
+
 func (s *dbStore) ListPoliciesByOrg(ctx context.Context, orgID string) ([]repo.DepartmentPolicy, error) {
 	return s.policies.ListByOrg(ctx, orgID)
 }

@@ -72,8 +72,11 @@ type Store interface {
 	ListInProgressRequestIDs(ctx context.Context) ([]string, error)
 	UpdateNodeStatus(ctx context.Context, nodeID, status, statusText string, progressPercent int) error
 	UpdateNodeDecisionOutcome(ctx context.Context, nodeID, outcome string) error
+	SetNodeDecisionSummary(ctx context.Context, nodeID, summary string) error
 	ClearNodeTasks(ctx context.Context, nodeID string) error
 	InsertTasks(ctx context.Context, tasks []repo.AgentTask) error
+	ClearNodeFlags(ctx context.Context, nodeID string) error
+	InsertFlags(ctx context.Context, flags []repo.NodeFlag) error
 	UpdateRequestProgress(ctx context.Context, requestID, status string, progressPercent int) error
 	// F5: cross-department dependencies.
 	InsertDependency(ctx context.Context, dep repo.NodeDependency) error
@@ -499,6 +502,12 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			if err := e.store.UpdateNodeDecisionOutcome(ctx, node.ID, "block"); err != nil {
 				e.log.Warn("failed to record block outcome", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 			}
+			if decision.Summary != "" {
+				if err := e.store.SetNodeDecisionSummary(ctx, node.ID, decision.Summary); err != nil {
+					e.log.Warn("failed to record block summary", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+				}
+			}
+			e.persistFlags(ctx, req.ID, node.ID, decision.Flags)
 			return false, nil
 		}
 	}
@@ -533,11 +542,18 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		outcome = "approve"
 	}
 
-	// Record the agent's outcome on the node and surface any risk it raised as
-	// audit events so the decision is traceable and visible at the gate (F6).
+	// Record the agent's outcome, reasoning, and flags on the node so the UI can
+	// show why a department decided what it did, and surface the risks as audit
+	// events so the decision is traceable and visible at the gate (F6).
 	if err := e.store.UpdateNodeDecisionOutcome(ctx, node.ID, outcome); err != nil {
 		e.log.Warn("failed to record decision outcome", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 	}
+	if decision.Summary != "" {
+		if err := e.store.SetNodeDecisionSummary(ctx, node.ID, decision.Summary); err != nil {
+			e.log.Warn("failed to record decision summary", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+		}
+	}
+	e.persistFlags(ctx, req.ID, node.ID, decision.Flags)
 	e.auditFlags(ctx, req.ID, node, decision.Flags)
 
 	// A compliance department (e.g. Legal) that rejects stops the request
@@ -675,6 +691,36 @@ func eligibleNodes(nodes []repo.WorkflowNode, edges []repo.WorkflowEdge, status 
 		}
 	}
 	return out
+}
+
+// persistFlags replaces a node's stored flags with the agent's latest set, so a
+// re-run is idempotent and the node detail panel can show them.
+func (e *Engine) persistFlags(ctx context.Context, requestID, nodeID string, flags []agentclient.Flag) {
+	if err := e.store.ClearNodeFlags(ctx, nodeID); err != nil {
+		e.log.Warn("failed to clear node flags", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+		return
+	}
+	if len(flags) == 0 {
+		return
+	}
+	rows := make([]repo.NodeFlag, 0, len(flags))
+	for i, f := range flags {
+		sev := f.Severity
+		if sev != "info" && sev != "warning" && sev != "critical" {
+			sev = "info"
+		}
+		rows = append(rows, repo.NodeFlag{
+			ID:        "nf_" + shortID(),
+			RequestID: requestID,
+			NodeID:    nodeID,
+			Severity:  sev,
+			Message:   f.Message,
+			Ordinal:   i,
+		})
+	}
+	if err := e.store.InsertFlags(ctx, rows); err != nil {
+		e.log.Warn("failed to insert node flags", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+	}
 }
 
 // auditFlags writes a node.flagged audit event for each warning/critical flag an

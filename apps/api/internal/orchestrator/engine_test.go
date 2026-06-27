@@ -22,6 +22,7 @@ type fakeStore struct {
 	reqProgress int
 	deps        []fakeDep
 	policies    []repo.DepartmentPolicy
+	flags       []repo.NodeFlag
 }
 
 type fakeDep struct {
@@ -73,6 +74,32 @@ func (s *fakeStore) UpdateNodeDecisionOutcome(_ context.Context, nodeID, outcome
 
 func (s *fakeStore) ListPoliciesByOrg(_ context.Context, _ string) ([]repo.DepartmentPolicy, error) {
 	return s.policies, nil
+}
+
+func (s *fakeStore) SetNodeDecisionSummary(_ context.Context, nodeID, summary string) error {
+	for _, n := range s.nodes {
+		if n.ID == nodeID {
+			n.DecisionSummary = summary
+			return nil
+		}
+	}
+	return repo.ErrNotFound
+}
+
+func (s *fakeStore) ClearNodeFlags(_ context.Context, nodeID string) error {
+	kept := s.flags[:0]
+	for _, f := range s.flags {
+		if f.NodeID != nodeID {
+			kept = append(kept, f)
+		}
+	}
+	s.flags = kept
+	return nil
+}
+
+func (s *fakeStore) InsertFlags(_ context.Context, flags []repo.NodeFlag) error {
+	s.flags = append(s.flags, flags...)
+	return nil
 }
 
 func (s *fakeStore) UpdateNodeStatus(_ context.Context, nodeID, status, statusText string, progress int) error {
@@ -695,6 +722,19 @@ func TestAgentFlagIsAuditedAndOutcomeRecorded(t *testing.T) {
 	}
 	if countAudit(store, "node.flagged") != 1 {
 		t.Errorf("node.flagged audit count = %d, want 1", countAudit(store, "node.flagged"))
+	}
+	// The reasoning and the flag are persisted on the node, not just audited.
+	if store.byID("n_fin").DecisionSummary != "Over budget but fundable." {
+		t.Errorf("finance decision_summary not persisted, got %q", store.byID("n_fin").DecisionSummary)
+	}
+	finFlags := 0
+	for _, f := range store.flags {
+		if f.NodeID == "n_fin" {
+			finFlags++
+		}
+	}
+	if finFlags != 1 {
+		t.Errorf("finance persisted flags = %d, want 1", finFlags)
 	}
 }
 
