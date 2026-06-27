@@ -77,9 +77,12 @@ business request into a department workflow graph.
 
 Return ONLY a JSON object of this shape:
 {
+  "request_type": "hiring | procurement | policy_change | budget | infra | general",
   "nodes": [{"key": str, "name": str, "agent_type": str, "department": str}],
   "edges": [{"from": str, "to": str, "type": "sequence"}]
 }
+
+Set request_type to the category that best fits the request.
 
 Choose node "key" values ONLY from this fixed set (omit stages the request does \
 not need, but keep the flow sensible):
@@ -94,23 +97,64 @@ not need, but keep the flow sensible):
   implementation (agent_type implementation, dept Operations)
   report (agent_type report, dept Planning)
 
-Rules: always include intake, exec_approval, and report. The department reviews \
-(finance_review, legal_review, it_assessment) run in parallel after planning and \
-all feed exec_approval. After approval, hr_planning and ops_planning run, then \
-implementation, then report. Connect every node with edges so the graph flows \
-from intake to report. Output JSON only, no prose."""
+Pick the departments the request actually needs — do not include every stage by \
+reflex. Guidance:
+  finance_review — any spend, budget, pricing, or funding implication.
+  legal_review — contracts, regulation, compliance, data/privacy, hiring abroad.
+  it_assessment — software, infrastructure, security, data, or systems work.
+  hr_planning — hiring, headcount, staffing, or onboarding.
+  ops_planning — facilities, logistics, vendors, or physical operations.
+A small software tweak may need only it_assessment; a hire needs hr_planning and \
+legal_review; a pure policy change may need only legal_review. Include planning and \
+implementation when the work is cross-department or needs execution.
+
+Rules: always include intake, exec_approval, and report. The department reviews you \
+choose run in parallel after planning and all feed exec_approval. After approval, \
+any post-approval stages (hr_planning, ops_planning, implementation) run, then \
+report. Connect every node with edges so the graph flows from intake to report. \
+Output JSON only, no prose."""
 
 
-def _parse_plan(raw: str | None) -> Plan | None:
-    """Validate an LLM JSON plan against the fixed catalog, or return None."""
+def _additional_catalog(org_context: dict[str, Any] | None) -> tuple[str, set[str]]:
+    """Render any custom departments the org created for the prompt, and return
+    their allowed node keys. These let a department added in the app take part in
+    a workflow instead of being limited to the built-in catalog.
+    """
+    if not org_context:
+        return "", set()
+    extra = org_context.get("additional_departments") or []
+    lines: list[str] = []
+    keys: set[str] = set()
+    for d in extra:
+        if not isinstance(d, dict):
+            continue
+        key = str(d.get("key", "")).strip()
+        agent_type = str(d.get("agent_type", "")).strip()
+        department = str(d.get("department", "")).strip()
+        if not key or not agent_type or not department:
+            continue
+        keys.add(key)
+        lines.append(f"  {key} (agent_type {agent_type}, dept {department})")
+    if not lines:
+        return "", set()
+    text = (
+        "\n\nThis org also has these custom departments — include any that are "
+        "relevant, wired between planning and exec_approval:\n" + "\n".join(lines)
+    )
+    return text, keys
+
+
+def _parse_plan(raw: str | None, allowed_keys: set[str] | None = None) -> Plan | None:
+    """Validate an LLM JSON plan against the catalog, or return None."""
     if not raw:
         return None
+    allowed = _ALLOWED_KEYS | (allowed_keys or set())
     try:
         plan = Plan.model_validate_json(raw)
     except Exception:  # noqa: BLE001 — malformed output falls back to default
         return None
     keys = {n.key for n in plan.nodes}
-    if not keys or not keys.issubset(_ALLOWED_KEYS):
+    if not keys or not keys.issubset(allowed):
         return None
     if not _REQUIRED_KEYS.issubset(keys):
         return None
@@ -157,11 +201,12 @@ async def run_intake(
     or the model output fails validation.
     """
     if llm_available():
+        extra_text, extra_keys = _additional_catalog(org_context)
         raw = await complete_json(
-            _INTAKE_SYSTEM,
+            _INTAKE_SYSTEM + extra_text,
             f"Request title: {title}\nDescription: {description}\nPriority: {priority}",
         )
-        plan = _parse_plan(raw)
+        plan = _parse_plan(raw, extra_keys)
         if plan is not None:
             logger.info("Intake plan from LLM (%d nodes)", len(plan.nodes))
             return plan

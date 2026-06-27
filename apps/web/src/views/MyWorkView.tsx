@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2, Inbox, Loader2, ShieldCheck, X } from "lucid
 import { api } from "../lib/api";
 import { useToasts } from "../components/Toasts";
 import { prettyLabel, priorityTextClass, statusBadgeClass } from "../lib/request-format";
+import { PageHeader, StatCard, EmptyState as UIEmptyState } from "../components/ui";
 import type { ApprovalDecision, OrgRequest } from "../lib/types";
 
 const MAX_JUSTIFICATION_LEN = 2000;
@@ -45,19 +46,9 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="shrink-0 px-6 py-4 border-b border-[var(--color-border)]">
-        <h1
-          className="text-lg font-medium text-[var(--color-fg)]"
-          style={{ fontFeatureSettings: '"ss01"' }}
-        >
-          My Work
-        </h1>
-        <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
-          Approvals, work in flight, and recent decisions
-        </p>
-      </div>
+      <PageHeader title="My Work" subtitle="Approvals, work in flight, and recent decisions" />
 
-      <div className="flex-1 overflow-auto px-6 py-5">
+      <div className="flex-1 overflow-auto px-8 py-6">
         {isLoading && (
           <div className="flex items-center justify-center h-40">
             <div className="size-6 rounded-full border-2 border-[var(--color-brand)] border-t-transparent animate-spin" />
@@ -75,9 +66,9 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
           <div className="flex flex-col gap-8 w-full">
             {/* Summary */}
             <div className="grid grid-cols-3 gap-3">
-              <SummaryStat label="Pending approvals" value={pending.length} tone="brand" />
-              <SummaryStat label="In progress" value={active.length} tone="neutral" />
-              <SummaryStat label="Recently decided" value={decided.length} tone="success" />
+              <StatCard icon={ShieldCheck} label="Pending approvals" value={pending.length} tone={pending.length ? "warning" : "neutral"} />
+              <StatCard icon={Loader2} label="In progress" value={active.length} tone="brand" />
+              <StatCard icon={CheckCircle2} label="Recently decided" value={decided.length} tone="success" />
             </div>
 
             <section className="flex flex-col gap-3">
@@ -88,7 +79,7 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
               />
 
               {pending.length === 0 ? (
-                <EmptyState />
+                <UIEmptyState icon={Inbox} title="Nothing waiting on you" hint="Requests reaching the executive gate appear here." />
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {pending.map((r) => (
@@ -185,29 +176,6 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
   );
 }
 
-function SummaryStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "brand" | "neutral" | "success";
-}) {
-  const toneClass =
-    tone === "brand"
-      ? "text-[var(--color-brand)]"
-      : tone === "success"
-        ? "text-[var(--color-success)]"
-        : "text-[var(--color-fg)]";
-  return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-stripe-ambient">
-      <p className="text-[11px] uppercase tracking-wide text-[var(--color-fg-muted)]">{label}</p>
-      <p className={`mt-1 text-2xl font-light tnum ${toneClass}`}>{value}</p>
-    </div>
-  );
-}
-
 function SectionHeader({
   icon,
   title,
@@ -226,20 +194,6 @@ function SectionHeader({
   );
 }
 
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[var(--color-border)] py-12 text-center">
-      <div className="size-10 rounded-lg bg-[var(--color-surface-2)] flex items-center justify-center">
-        <Inbox size={20} className="text-[var(--color-fg-subtle)]" />
-      </div>
-      <p className="text-sm text-[var(--color-fg-muted)]">Nothing waiting on you</p>
-      <p className="text-xs text-[var(--color-fg-subtle)]">
-        Requests reaching the executive gate appear here.
-      </p>
-    </div>
-  );
-}
-
 function PendingCard({
   request: r,
   isApprover,
@@ -251,16 +205,25 @@ function PendingCard({
   onOpen: () => void;
   onDecide: () => void;
 }) {
+  const urgent = r.priority === "urgent" || r.priority === "high";
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+    <div
+      className={`rounded-lg border bg-[var(--color-surface)] p-4 shadow-stripe-ambient ${
+        urgent ? "border-[var(--color-warning)]/40" : "border-[var(--color-border)]"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3
-            className="text-sm font-medium text-[var(--color-fg)] truncate"
-            style={{ fontFeatureSettings: '"ss01"' }}
-          >
-            {r.title}
-          </h3>
+          <div className="flex items-center gap-2">
+            {urgent && (
+              <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-[var(--color-warning)]/15 text-[var(--color-warning-fg)]">
+                {r.priority}
+              </span>
+            )}
+            <h3 className="text-sm font-medium text-[var(--color-fg)] truncate" style={{ fontFeatureSettings: '"ss01"' }}>
+              {r.title}
+            </h3>
+          </div>
           <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
             {r.requester_name || "Unknown"} ·{" "}
             <span className={`capitalize ${priorityTextClass(r.priority)}`}>{r.priority}</span>{" "}

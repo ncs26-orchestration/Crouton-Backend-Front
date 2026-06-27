@@ -281,12 +281,23 @@ export interface OrgRequest {
   description: string;
   requester_user_id: number;
   requester_name: string;
+  requester_role?: string;
+  request_type?: string;
   priority: RequestPriority;
   status: RequestStatus;
   progress: number;
   estimated_completion: string | null;
   created_at: string;
 }
+
+// The call a department agent reached on a node.
+export type DecisionOutcome =
+  | "pending"
+  | "approve"
+  | "approve_with_conditions"
+  | "flag"
+  | "reject"
+  | "block";
 
 export interface WorkflowNodeData {
   id: string;
@@ -298,6 +309,7 @@ export interface WorkflowNodeData {
   description: string;
   progress_percent: number;
   status_text: string;
+  decision_outcome?: DecisionOutcome;
   started_at: string | null;
   completed_at: string | null;
   blocked_by?: { reason: string; blocked_at?: string } | null;

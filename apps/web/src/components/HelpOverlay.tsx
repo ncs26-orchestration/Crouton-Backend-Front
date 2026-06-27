@@ -21,6 +21,7 @@ import {
 interface Props {
   open: boolean;
   onClose: () => void;
+  onHowItWorks?: () => void;
 }
 
 const SECTIONS: { icon: LucideIcon; label: string; desc: string }[] = [
@@ -42,7 +43,7 @@ const TIPS: string[] = [
   "Press Esc to close any dialog.",
 ];
 
-export function HelpOverlay({ open, onClose }: Props) {
+export function HelpOverlay({ open, onClose, onHowItWorks }: Props) {
   return (
     <AnimatePresence>
       {open && (
@@ -84,6 +85,18 @@ export function HelpOverlay({ open, onClose }: Props) {
             </header>
 
             <div className="p-5 max-h-[72vh] overflow-y-auto nice-scroll">
+              {onHowItWorks && (
+                <button
+                  onClick={onHowItWorks}
+                  className="w-full mb-5 flex items-center justify-between gap-3 rounded-lg border border-[var(--color-accent-border)] bg-[var(--color-accent-bg)] px-4 py-3 text-left transition-colors hover:bg-[var(--color-accent-bg)]/70"
+                >
+                  <span>
+                    <span className="block text-sm font-medium text-[var(--color-fg)]">New here? See how it works</span>
+                    <span className="block text-xs text-[var(--color-fg-muted)]">The request pipeline and what you do at each step.</span>
+                  </span>
+                  <span className="text-[var(--color-brand)] text-sm font-medium shrink-0">Open →</span>
+                </button>
+              )}
               <h3 className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-fg-subtle)] font-medium mb-2.5">
                 The sections
               </h3>
