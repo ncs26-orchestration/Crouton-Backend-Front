@@ -148,6 +148,20 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
 	}
+	// Seed the starter internal workflows (Hiring, Time off) as global so the
+	// Workflows area is useful on a brand-new org.
+	for _, w := range orgdir.Workflows {
+		nodesJSON, _ := json.Marshal(w.Nodes)
+		edgesJSON, _ := json.Marshal(w.Edges)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO workflows (id, org_id, team_id, scope, name, description, category, nodes, edges, created_by)
+			VALUES ($1, $2, NULL, 'global', $3, $4, $5, $6, $7, $8)
+		`, "wf_"+randomHex(8), orgID, w.Name, w.Description, w.Category, nodesJSON, edgesJSON, claims.UserID); err != nil {
+			h.logger.Error("create org: seed workflow", slog.String("name", w.Name), slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+
 	// Seed a Maintenance team so technicians have a team to belong to.
 	// Existing orgs are backfilled by the migration; new orgs get it here.
 	maintID := fmt.Sprintf("team_%s", randomHex(8))

@@ -126,6 +126,14 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.POST("/:orgId/requests", reqh.CreateRequest)
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
 	orgGroup.GET("/:orgId/my-verifications", reqh.MyVerifications)
+	// Reusable internal workflows (definitions + on-demand runs).
+	wfh := handler.NewWorkflowsHandler(d.Logger, d.PgPool)
+	orgGroup.GET("/:orgId/workflows", wfh.ListWorkflows)
+	orgGroup.POST("/:orgId/workflows", wfh.CreateWorkflow)
+	orgGroup.PATCH("/:orgId/workflows/:id", wfh.UpdateWorkflow)
+	orgGroup.DELETE("/:orgId/workflows/:id", wfh.DeleteWorkflow)
+	orgGroup.GET("/:orgId/workflows/:id/runs", wfh.ListWorkflowRuns)
+	orgGroup.POST("/:orgId/workflows/:id/run", wfh.RunWorkflow)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
 	e.GET("/requests/:id/nodes/:nodeId", reqh.GetNode, authMiddleware)
 	// Executive approval gate (F7): an approver decides a request parked at
@@ -136,6 +144,7 @@ func NewServer(d Deps) *echo.Echo {
 	e.POST("/requests/:id/assignments", reqh.AssignNode, authMiddleware)
 	e.DELETE("/requests/:id/assignments/:assignmentId", reqh.UnassignNode, authMiddleware)
 	e.POST("/requests/:id/launch", reqh.LaunchRequest, authMiddleware)
+	e.PUT("/requests/:id/graph", reqh.UpdateRequestGraph, authMiddleware)
 	e.POST("/requests/:id/nodes/:nodeId/verify", reqh.VerifyNode, authMiddleware)
 	// Per-node verifier↔agent conversation (ask questions / request changes).
 	e.GET("/requests/:id/nodes/:nodeId/messages", reqh.ListNodeMessages, authMiddleware)

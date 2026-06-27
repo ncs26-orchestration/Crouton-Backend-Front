@@ -15,17 +15,21 @@ import (
 // agents, approved by a human. Status follows the lifecycle enum and
 // progress is a 0-100 percentage the engine maintains.
 type Request struct {
-	ID                  string
-	OrgID               string
-	Title               string
-	Description         string
-	RequesterUserID     int64
-	RequesterRole       string
-	RequestType         string
-	Details             map[string]any
-	Priority            string
-	Status              string
-	Progress            int
+	ID              string
+	OrgID           string
+	Title           string
+	Description     string
+	RequesterUserID int64
+	RequesterRole   string
+	RequestType     string
+	Details         map[string]any
+	Priority        string
+	Status          string
+	Progress        int
+	// Kind is 'request' for an ad-hoc request or 'workflow_run' for an execution
+	// of a workflow definition; WorkflowID links a run to that definition.
+	Kind                string
+	WorkflowID          *string
 	EstimatedCompletion *time.Time
 	CreatedAt           time.Time
 }
@@ -68,16 +72,20 @@ func NewRequestRepo(pg *pgxpool.Pool) *RequestRepo {
 // need a follow-up read. The ID is caller-supplied so the handler can
 // generate a friendly prefixed id.
 func (r *RequestRepo) Create(ctx context.Context, req Request) (*Request, error) {
+	kind := req.Kind
+	if kind == "" {
+		kind = "request"
+	}
 	var detailsRaw []byte
 	row := r.pg.QueryRow(ctx, `
-		INSERT INTO requests (id, org_id, title, description, requester_user_id, requester_role, priority, status, details)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at, details
-	`, req.ID, req.OrgID, req.Title, req.Description, req.RequesterUserID, req.RequesterRole, req.Priority, req.Status, detailsParam(req.Details))
+		INSERT INTO requests (id, org_id, title, description, requester_user_id, requester_role, priority, status, details, kind, workflow_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, kind, workflow_id, estimated_completion, created_at, details
+	`, req.ID, req.OrgID, req.Title, req.Description, req.RequesterUserID, req.RequesterRole, req.Priority, req.Status, detailsParam(req.Details), kind, req.WorkflowID)
 	var out Request
 	if err := row.Scan(
 		&out.ID, &out.OrgID, &out.Title, &out.Description, &out.RequesterUserID, &out.RequesterRole,
-		&out.RequestType, &out.Priority, &out.Status, &out.Progress, &out.EstimatedCompletion, &out.CreatedAt, &detailsRaw,
+		&out.RequestType, &out.Priority, &out.Status, &out.Progress, &out.Kind, &out.WorkflowID, &out.EstimatedCompletion, &out.CreatedAt, &detailsRaw,
 	); err != nil {
 		return nil, err
 	}
@@ -94,7 +102,7 @@ func (r *RequestRepo) SetRequestType(ctx context.Context, id, requestType string
 // GetByID returns a single request or ErrNotFound.
 func (r *RequestRepo) GetByID(ctx context.Context, id string) (*Request, error) {
 	row := r.pg.QueryRow(ctx, `
-		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at, details
+		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, kind, workflow_id, estimated_completion, created_at, details
 		FROM requests
 		WHERE id = $1
 	`, id)
@@ -102,7 +110,7 @@ func (r *RequestRepo) GetByID(ctx context.Context, id string) (*Request, error) 
 	var detailsRaw []byte
 	if err := row.Scan(
 		&req.ID, &req.OrgID, &req.Title, &req.Description, &req.RequesterUserID, &req.RequesterRole,
-		&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt, &detailsRaw,
+		&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.Kind, &req.WorkflowID, &req.EstimatedCompletion, &req.CreatedAt, &detailsRaw,
 	); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
@@ -118,9 +126,9 @@ func (r *RequestRepo) GetByID(ctx context.Context, id string) (*Request, error) 
 // requests pile up; cursor pagination can layer on later.
 func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([]Request, error) {
 	rows, err := r.pg.Query(ctx, `
-		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at, details
+		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, kind, workflow_id, estimated_completion, created_at, details
 		FROM requests
-		WHERE org_id = $1
+		WHERE org_id = $1 AND kind = 'request'
 		ORDER BY created_at DESC
 		LIMIT $2
 	`, orgID, limit)
@@ -135,7 +143,7 @@ func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([
 		var detailsRaw []byte
 		if err := rows.Scan(
 			&req.ID, &req.OrgID, &req.Title, &req.Description, &req.RequesterUserID, &req.RequesterRole,
-			&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt, &detailsRaw,
+			&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.Kind, &req.WorkflowID, &req.EstimatedCompletion, &req.CreatedAt, &detailsRaw,
 		); err != nil {
 			return nil, err
 		}

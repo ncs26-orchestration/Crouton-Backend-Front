@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/graphspec"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/orchestrator"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
@@ -98,11 +99,17 @@ type requestResponse struct {
 	Priority            string         `json:"priority"`
 	Status              string         `json:"status"`
 	Progress            int            `json:"progress"`
+	Kind                string         `json:"kind"`
+	WorkflowID          *string        `json:"workflow_id"`
 	EstimatedCompletion *time.Time     `json:"estimated_completion"`
 	CreatedAt           time.Time      `json:"created_at"`
 }
 
 func toRequestResponse(r repo.Request, requesterName string) requestResponse {
+	kind := r.Kind
+	if kind == "" {
+		kind = "request"
+	}
 	return requestResponse{
 		ID:                  r.ID,
 		OrgID:               r.OrgID,
@@ -116,6 +123,8 @@ func toRequestResponse(r repo.Request, requesterName string) requestResponse {
 		Priority:            r.Priority,
 		Status:              r.Status,
 		Progress:            r.Progress,
+		Kind:                kind,
+		WorkflowID:          r.WorkflowID,
 		EstimatedCompletion: r.EstimatedCompletion,
 		CreatedAt:           r.CreatedAt,
 	}
@@ -171,6 +180,48 @@ func (h *RequestsHandler) intakeOrgContext(ctx context.Context, orgID string) ma
 		return map[string]any{}
 	}
 	return map[string]any{"additional_departments": extra}
+}
+
+// buildGraph turns a planned node/edge list into the repo rows for one
+// execution, mapping stage keys to generated node IDs and dropping edges that
+// reference an unknown key. Shared by request creation and workflow runs so every
+// graph materializes the same way.
+func buildGraph(logger *slog.Logger, reqID string, planNodes []agentclient.PlanNode, planEdges []agentclient.PlanEdge) ([]repo.WorkflowNode, []repo.WorkflowEdge) {
+	keyToNodeID := make(map[string]string, len(planNodes))
+	nodes := make([]repo.WorkflowNode, 0, len(planNodes))
+	for _, pn := range planNodes {
+		nodeID := fmt.Sprintf("wn_%s", randomHex(8))
+		keyToNodeID[pn.Key] = nodeID
+		nodes = append(nodes, repo.WorkflowNode{
+			ID:         nodeID,
+			RequestID:  reqID,
+			Key:        pn.Key,
+			Name:       pn.Name,
+			AgentType:  pn.AgentType,
+			Department: pn.Department,
+			Status:     "pending",
+		})
+	}
+	edges := make([]repo.WorkflowEdge, 0, len(planEdges))
+	for _, pe := range planEdges {
+		srcID, ok1 := keyToNodeID[pe.From]
+		tgtID, ok2 := keyToNodeID[pe.To]
+		if !ok1 || !ok2 {
+			if logger != nil {
+				logger.Warn("build graph: dropping edge with unknown node key",
+					slog.String("request_id", reqID), slog.String("from", pe.From), slog.String("to", pe.To))
+			}
+			continue
+		}
+		edges = append(edges, repo.WorkflowEdge{
+			ID:           fmt.Sprintf("we_%s", randomHex(8)),
+			RequestID:    reqID,
+			SourceNodeID: srcID,
+			TargetNodeID: tgtID,
+			EdgeType:     pe.EdgeType,
+		})
+	}
+	return nodes, edges
 }
 
 func (h *RequestsHandler) CreateRequest(c echo.Context) error {
@@ -252,41 +303,7 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 		}
 	}
 
-	keyToNodeID := make(map[string]string, len(plan.Nodes))
-	nodes := make([]repo.WorkflowNode, 0, len(plan.Nodes))
-	for _, pn := range plan.Nodes {
-		nodeID := fmt.Sprintf("wn_%s", randomHex(8))
-		keyToNodeID[pn.Key] = nodeID
-		nodes = append(nodes, repo.WorkflowNode{
-			ID:         nodeID,
-			RequestID:  reqID,
-			Key:        pn.Key,
-			Name:       pn.Name,
-			AgentType:  pn.AgentType,
-			Department: pn.Department,
-			Status:     "pending",
-		})
-	}
-
-	edges := make([]repo.WorkflowEdge, 0, len(plan.Edges))
-	for _, pe := range plan.Edges {
-		srcID, ok1 := keyToNodeID[pe.From]
-		tgtID, ok2 := keyToNodeID[pe.To]
-		if !ok1 || !ok2 {
-			// The planner referenced a stage key with no node. Skip the
-			// edge but log it — a dangling key means a malformed plan.
-			h.logger.Warn("create request: dropping edge with unknown node key",
-				slog.String("request_id", reqID), slog.String("from", pe.From), slog.String("to", pe.To))
-			continue
-		}
-		edges = append(edges, repo.WorkflowEdge{
-			ID:           fmt.Sprintf("we_%s", randomHex(8)),
-			RequestID:    reqID,
-			SourceNodeID: srcID,
-			TargetNodeID: tgtID,
-			EdgeType:     pe.EdgeType,
-		})
-	}
+	nodes, edges := buildGraph(h.logger, reqID, plan.Nodes, plan.Edges)
 
 	// Persist the graph and advance the request in one transaction so the
 	// request never ends up with a half-written graph.
@@ -872,6 +889,70 @@ func (h *RequestsHandler) LaunchRequest(c echo.Context) error {
 	}
 	names := h.requesterNames(ctx, []int64{updated.RequesterUserID})
 	return c.JSON(http.StatusOK, map[string]any{"request": toRequestResponse(*updated, names[updated.RequesterUserID])})
+}
+
+// UpdateRequestGraph handles PUT /requests/:id/graph — replace a draft's nodes
+// and edges (the "edit the plan" path). Only the requester or an admin/executor,
+// and only while the request is a draft (before any node has run).
+func (h *RequestsHandler) UpdateRequestGraph(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	id := c.Param("id")
+	req, role, done := h.loadRequestForMember(c, id)
+	if done != nil {
+		return done
+	}
+	if role != "admin" && role != "executor" && req.RequesterUserID != claims.UserID {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the requester or an admin/executor can edit the steps"})
+	}
+	if req.Status != "draft" {
+		return c.JSON(http.StatusConflict, map[string]string{"error": "steps can only be edited while the request is a draft"})
+	}
+
+	var body struct {
+		Nodes []graphspec.Node `json:"nodes"`
+		Edges []graphspec.Edge `json:"edges"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+	if err := graphspec.Validate(body.Nodes, body.Edges); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	planNodes := make([]agentclient.PlanNode, len(body.Nodes))
+	for i, n := range body.Nodes {
+		planNodes[i] = agentclient.PlanNode{Key: n.Key, Name: n.Name, AgentType: n.AgentType, Department: n.Department}
+	}
+	planEdges := make([]agentclient.PlanEdge, len(body.Edges))
+	for i, e := range body.Edges {
+		et := e.Type
+		if et == "" {
+			et = "sequence"
+		}
+		planEdges[i] = agentclient.PlanEdge{From: e.From, To: e.To, EdgeType: et}
+	}
+	nodes, edges := buildGraph(h.logger, id, planNodes, planEdges)
+
+	ctx := c.Request().Context()
+	tx, err := h.pg.Begin(ctx)
+	if err != nil {
+		h.logger.Error("update graph: begin tx", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := h.workflow.DeleteGraphByRequest(ctx, tx, id); err != nil {
+		h.logger.Error("update graph: delete old", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if err := h.workflow.InsertGraphTx(ctx, tx, nodes, edges); err != nil {
+		h.logger.Error("update graph: insert new", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		h.logger.Error("update graph: commit", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // VerifyNode handles POST /requests/:id/nodes/:nodeId/verify — a human signs off

@@ -138,6 +138,19 @@ func (r *WorkflowRepo) InsertGraphTx(ctx context.Context, tx pgx.Tx, nodes []Wor
 	return nil
 }
 
+// DeleteGraphByRequest clears a request's nodes and edges (edges first for the
+// FK), used when replacing a draft's graph. Safe only on a draft, where no tasks
+// /flags/checks reference the nodes yet.
+func (r *WorkflowRepo) DeleteGraphByRequest(ctx context.Context, tx pgx.Tx, requestID string) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM workflow_edges WHERE request_id = $1`, requestID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM workflow_nodes WHERE request_id = $1`, requestID); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *WorkflowRepo) InsertNodes(ctx context.Context, nodes []WorkflowNode) error {
 	for _, n := range nodes {
 		_, err := r.pg.Exec(ctx, `

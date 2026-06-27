@@ -13,6 +13,7 @@ import { RegisterView } from "./views/RegisterView";
 import { OrgSetupView } from "./views/OrgSetupView";
 import { OrgView } from "./views/OrgView";
 import { PeopleView } from "./views/PeopleView";
+import { WorkflowsView } from "./views/WorkflowsView";
 import { SettingsView } from "./views/SettingsView";
 import { HomeView } from "./views/HomeView";
 import { MyWorkView } from "./views/MyWorkView";
@@ -35,7 +36,7 @@ interface Location {
 }
 
 const VALID_SECTIONS: ShellSection[] = [
-  "home", "my-work", "requests", "workflows", "machines", "agents",
+  "home", "my-work", "requests", "workflow-library", "workflows", "machines", "agents",
   "reports", "policies", "integrations", "teams", "people", "settings", "help",
 ];
 
@@ -223,6 +224,10 @@ function Shell() {
 
       {section === "requests" && activeOrg && (
         <RequestsView orgId={activeOrg.id} onOpenWorkflow={navigateToWorkflow} />
+      )}
+
+      {section === "workflow-library" && activeOrg && (
+        <WorkflowsView orgId={activeOrg.id} role={activeOrg.role} onOpenWorkflow={navigateToWorkflow} />
       )}
 
       {section === "workflows" && (
