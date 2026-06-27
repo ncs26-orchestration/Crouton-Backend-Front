@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Building2, Check, ChevronRight, Mail, Plus, Shield, Workflow, X } from "lucide-react";
 import { api } from "../lib/api";
 import { BrandMark } from "../components/Brand";
+import { useAuth } from "../contexts/AuthContext";
 
 interface Props {
   onDone: (org: { id: string; name: string; slug: string; role: string }) => void;
@@ -51,6 +52,7 @@ const variants = {
 };
 
 export function OrgSetupView({ onDone }: Props) {
+  const { logout } = useAuth();
   const [step, setStep]       = useState(0);
   const [direction, setDir]   = useState(1); // 1 = forward, -1 = back
 
@@ -132,7 +134,16 @@ export function OrgSetupView({ onDone }: Props) {
 
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-[var(--color-bg)]">
-      <div className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl flex flex-col overflow-hidden">
+
+        {/* Sign out — an escape hatch if you're on the wrong account or session. */}
+        <button
+          type="button"
+          onClick={logout}
+          className="absolute top-3 right-4 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+        >
+          Sign out
+        </button>
 
         {/* ── Header ── */}
         <div className="flex flex-col items-center gap-2 px-8 pt-8 pb-4">

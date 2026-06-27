@@ -52,6 +52,14 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(`non-JSON response (${res.status}): ${text.slice(0, 200)}`);
   }
   if (!res.ok) {
+    // A 401 on an authenticated call means the token is no longer valid (expired,
+    // or its user no longer exists after a DB reset). Clear it and bounce to a
+    // clean login rather than dead-ending on a cryptic error. Auth endpoints are
+    // excluded so a failed login/register still shows its own message.
+    if (res.status === 401 && !url.includes("/auth/") && authStore.get()) {
+      authStore.clear();
+      if (typeof window !== "undefined") window.location.reload();
+    }
     const obj = parsed as { error?: string; details?: string };
     if (obj.error && obj.details) {
       throw new Error(`${obj.error}: ${obj.details}`);
