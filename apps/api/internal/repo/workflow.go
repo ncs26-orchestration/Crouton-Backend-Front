@@ -58,6 +58,19 @@ type NodeFlag struct {
 	CreatedAt time.Time
 }
 
+// NodeCheck is the result of evaluating one policy rule against a request on a
+// node: pass | warn | fail, with the cited policy.
+type NodeCheck struct {
+	ID          string `json:"id"`
+	RequestID   string `json:"request_id"`
+	NodeID      string `json:"node_id"`
+	Label       string `json:"label"`
+	Status      string `json:"status"`
+	Detail      string `json:"detail"`
+	PolicyTitle string `json:"policy_title"`
+	Ordinal     int    `json:"ordinal"`
+}
+
 type WorkflowRepo struct {
 	pg *pgxpool.Pool
 }
@@ -260,6 +273,55 @@ func (r *WorkflowRepo) InsertFlags(ctx context.Context, flags []NodeFlag) error 
 		}
 	}
 	return nil
+}
+
+// DeleteChecksByNode clears a node's checks so a re-run is idempotent.
+func (r *WorkflowRepo) DeleteChecksByNode(ctx context.Context, nodeID string) error {
+	_, err := r.pg.Exec(ctx, `DELETE FROM node_checks WHERE node_id = $1`, nodeID)
+	return err
+}
+
+// InsertChecks writes a node's policy checks in one batch.
+func (r *WorkflowRepo) InsertChecks(ctx context.Context, checks []NodeCheck) error {
+	if len(checks) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, c := range checks {
+		batch.Queue(`
+			INSERT INTO node_checks (id, request_id, node_id, label, status, detail, policy_title, ordinal)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, c.ID, c.RequestID, c.NodeID, c.Label, c.Status, c.Detail, c.PolicyTitle, c.Ordinal)
+	}
+	br := r.pg.SendBatch(ctx, batch)
+	defer func() { _ = br.Close() }()
+	for range checks {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ListChecksByNode returns a node's policy checks in display order.
+func (r *WorkflowRepo) ListChecksByNode(ctx context.Context, nodeID string) ([]NodeCheck, error) {
+	rows, err := r.pg.Query(ctx, `
+		SELECT id, request_id, node_id, label, status, detail, policy_title, ordinal
+		FROM node_checks WHERE node_id = $1 ORDER BY ordinal ASC, created_at ASC
+	`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]NodeCheck, 0)
+	for rows.Next() {
+		var c NodeCheck
+		if err := rows.Scan(&c.ID, &c.RequestID, &c.NodeID, &c.Label, &c.Status, &c.Detail, &c.PolicyTitle, &c.Ordinal); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // ListFlagsByNode returns a node's flags in display order.

@@ -23,6 +23,7 @@ type fakeStore struct {
 	deps        []fakeDep
 	policies    []repo.DepartmentPolicy
 	flags       []repo.NodeFlag
+	checks      []repo.NodeCheck
 	assignments map[string]int // node_id → assignee count
 }
 
@@ -79,6 +80,22 @@ func (s *fakeStore) ListPoliciesByOrg(_ context.Context, _ string) ([]repo.Depar
 
 func (s *fakeStore) CountAssignmentsByNode(_ context.Context, nodeID string) (int, error) {
 	return s.assignments[nodeID], nil
+}
+
+func (s *fakeStore) ClearNodeChecks(_ context.Context, nodeID string) error {
+	kept := s.checks[:0]
+	for _, c := range s.checks {
+		if c.NodeID != nodeID {
+			kept = append(kept, c)
+		}
+	}
+	s.checks = kept
+	return nil
+}
+
+func (s *fakeStore) InsertChecks(_ context.Context, checks []repo.NodeCheck) error {
+	s.checks = append(s.checks, checks...)
+	return nil
 }
 
 func (s *fakeStore) SetNodeDecisionSummary(_ context.Context, nodeID, summary string) error {

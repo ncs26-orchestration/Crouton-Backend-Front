@@ -334,11 +334,20 @@ export interface WorkflowNodeData {
   decision_outcome?: DecisionOutcome;
   decision_summary?: string;
   flags?: NodeFlag[];
+  checks?: NodeCheck[];
   started_at: string | null;
   completed_at: string | null;
   blocked_by?: { reason: string; blocked_at?: string } | null;
   // UI-only: assignee display names attached when building the canvas, for avatars.
   assignees?: string[];
+}
+
+// One policy-rule check result on a node.
+export interface NodeCheck {
+  label: string;
+  status: "pass" | "warn" | "fail";
+  detail: string;
+  policy_title: string;
 }
 
 // A risk or note an agent raised on a node (may cite a policy in the message).

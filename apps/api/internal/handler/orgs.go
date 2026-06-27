@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -133,9 +134,15 @@ func (h *OrgsHandler) CreateOrg(c echo.Context) error {
 		}
 	}
 	for _, p := range orgdir.Policies {
+		rulesJSON := []byte("[]")
+		if len(p.Rules) > 0 {
+			if b, mErr := json.Marshal(p.Rules); mErr == nil {
+				rulesJSON = b
+			}
+		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO department_policies (id, org_id, team_id, title, body) VALUES ($1, $2, $3, $4, $5)
-		`, "pol_"+randomHex(8), orgID, teamByDept[p.Department], p.Title, p.Body); err != nil {
+			INSERT INTO department_policies (id, org_id, team_id, title, body, rules) VALUES ($1, $2, $3, $4, $5, $6)
+		`, "pol_"+randomHex(8), orgID, teamByDept[p.Department], p.Title, p.Body, rulesJSON); err != nil {
 			h.logger.Error("create org: seed policy", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}

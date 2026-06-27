@@ -102,3 +102,11 @@ func (s *dbStore) ListPoliciesByOrg(ctx context.Context, orgID string) ([]repo.D
 func (s *dbStore) CountAssignmentsByNode(ctx context.Context, nodeID string) (int, error) {
 	return s.assignments.CountByNode(ctx, nodeID)
 }
+
+func (s *dbStore) ClearNodeChecks(ctx context.Context, nodeID string) error {
+	return s.workflow.DeleteChecksByNode(ctx, nodeID)
+}
+
+func (s *dbStore) InsertChecks(ctx context.Context, checks []repo.NodeCheck) error {
+	return s.workflow.InsertChecks(ctx, checks)
+}

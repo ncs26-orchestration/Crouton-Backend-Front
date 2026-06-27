@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/policyrules"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
@@ -77,6 +78,8 @@ type Store interface {
 	InsertTasks(ctx context.Context, tasks []repo.AgentTask) error
 	ClearNodeFlags(ctx context.Context, nodeID string) error
 	InsertFlags(ctx context.Context, flags []repo.NodeFlag) error
+	ClearNodeChecks(ctx context.Context, nodeID string) error
+	InsertChecks(ctx context.Context, checks []repo.NodeCheck) error
 	UpdateRequestProgress(ctx context.Context, requestID, status string, progressPercent int) error
 	// F5: cross-department dependencies.
 	InsertDependency(ctx context.Context, dep repo.NodeDependency) error
@@ -612,6 +615,16 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		outcome = "approve"
 	}
 
+	// Evaluate the department's typed policy rules against the request's details
+	// (deterministic, no LLM) and persist the exact pass/warn/fail checks. A
+	// failed rule escalates the outcome so it surfaces even offline.
+	worst := e.persistChecks(ctx, req, node, policiesByDept[strings.ToLower(strings.TrimSpace(node.Department))])
+	if worst == "fail" && outcome == "approve" {
+		outcome = "flag"
+	} else if worst == "warn" && outcome == "approve" {
+		outcome = "approve_with_conditions"
+	}
+
 	// Record the agent's outcome, reasoning, and flags on the node so the UI can
 	// show why a department decided what it did, and surface the risks as audit
 	// events so the decision is traceable and visible at the gate (F6).
@@ -790,6 +803,43 @@ func eligibleNodes(nodes []repo.WorkflowNode, edges []repo.WorkflowEdge, status 
 
 // persistFlags replaces a node's stored flags with the agent's latest set, so a
 // re-run is idempotent and the node detail panel can show them.
+// persistChecks evaluates the department's policy rules against the request's
+// details and replaces the node's stored checks. Returns the worst status seen
+// ("fail" > "warn" > "pass") so the caller can escalate the outcome.
+func (e *Engine) persistChecks(ctx context.Context, req *repo.Request, node repo.WorkflowNode, policies []repo.DepartmentPolicy) string {
+	var checks []policyrules.Check
+	for _, p := range policies {
+		if len(p.Rules) == 0 {
+			continue
+		}
+		checks = append(checks, policyrules.Evaluate(p.Title, p.Rules, req.Details)...)
+	}
+	if err := e.store.ClearNodeChecks(ctx, node.ID); err != nil {
+		e.log.Warn("failed to clear node checks", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+		return "pass"
+	}
+	if len(checks) == 0 {
+		return "pass"
+	}
+	worst := "pass"
+	rows := make([]repo.NodeCheck, 0, len(checks))
+	for i, c := range checks {
+		if c.Status == "fail" {
+			worst = "fail"
+		} else if c.Status == "warn" && worst != "fail" {
+			worst = "warn"
+		}
+		rows = append(rows, repo.NodeCheck{
+			ID: "nck_" + shortID(), RequestID: req.ID, NodeID: node.ID,
+			Label: c.Label, Status: c.Status, Detail: c.Detail, PolicyTitle: c.PolicyTitle, Ordinal: i,
+		})
+	}
+	if err := e.store.InsertChecks(ctx, rows); err != nil {
+		e.log.Warn("failed to insert node checks", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+	}
+	return worst
+}
+
 func (e *Engine) persistFlags(ctx context.Context, requestID, nodeID string, flags []agentclient.Flag) {
 	if err := e.store.ClearNodeFlags(ctx, nodeID); err != nil {
 		e.log.Warn("failed to clear node flags", slog.String("node_id", nodeID), slog.String("err", err.Error()))
