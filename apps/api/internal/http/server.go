@@ -84,6 +84,9 @@ func NewServer(d Deps) *echo.Echo {
 	// Agents and policies read endpoints (F10).
 	orgGroup.GET("/:orgId/agents", oh.ListAgents)
 	orgGroup.GET("/:orgId/policies", oh.ListPolicies)
+	orgGroup.POST("/:orgId/policies", oh.CreatePolicy)
+	orgGroup.PATCH("/:orgId/policies/:policyId", oh.UpdatePolicy)
+	orgGroup.DELETE("/:orgId/policies/:policyId", oh.DeletePolicy)
 
 	// Me — current user's profile and work items.
 	mh := handler.NewMeHandler(d.Logger, d.PgPool)

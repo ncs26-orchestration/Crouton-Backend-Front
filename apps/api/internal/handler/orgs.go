@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/orgdir"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -1180,7 +1181,7 @@ func (h *OrgsHandler) ListPolicies(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	rows, err := h.db.Query(ctx, `
-		SELECT dp.id, dp.org_id, dp.team_id, dp.title, dp.body, dp.created_at,
+		SELECT dp.id, dp.org_id, dp.team_id, dp.title, dp.body, dp.rules, dp.created_at,
 		       COALESCE(t.name, '') AS team_name
 		FROM department_policies dp
 		LEFT JOIN teams t ON t.id = dp.team_id
@@ -1194,18 +1195,19 @@ func (h *OrgsHandler) ListPolicies(c echo.Context) error {
 	defer rows.Close()
 
 	type policyItem struct {
-		ID        string    `json:"id"`
-		OrgID     string    `json:"org_id"`
-		TeamID    string    `json:"team_id"`
-		TeamName  string    `json:"team_name"`
-		Title     string    `json:"title"`
-		Body      string    `json:"body"`
-		CreatedAt time.Time `json:"created_at"`
+		ID        string          `json:"id"`
+		OrgID     string          `json:"org_id"`
+		TeamID    string          `json:"team_id"`
+		TeamName  string          `json:"team_name"`
+		Title     string          `json:"title"`
+		Body      string          `json:"body"`
+		Rules     json.RawMessage `json:"rules"`
+		CreatedAt time.Time       `json:"created_at"`
 	}
 	result := make([]policyItem, 0)
 	for rows.Next() {
 		var item policyItem
-		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.Title, &item.Body, &item.CreatedAt, &item.TeamName); err != nil {
+		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.Title, &item.Body, &item.Rules, &item.CreatedAt, &item.TeamName); err != nil {
 			h.logger.Error("list policies: scan", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
@@ -1215,6 +1217,88 @@ func (h *OrgsHandler) ListPolicies(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"policies": result})
+}
+
+// policyBody is the create/update payload. rules is the typed-rule array as JSON.
+type policyBody struct {
+	TeamID string          `json:"team_id"`
+	Title  string          `json:"title"`
+	Body   string          `json:"body"`
+	Rules  json.RawMessage `json:"rules"`
+}
+
+// CreatePolicy handles POST /orgs/:orgId/policies. Admin or executor only.
+func (h *OrgsHandler) CreatePolicy(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	if role != "admin" && role != "executor" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only admins and executors can manage policies"})
+	}
+	var body policyBody
+	if err := c.Bind(&body); err != nil || body.TeamID == "" || strings.TrimSpace(body.Title) == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "team_id and title are required"})
+	}
+	policies := repo.NewPolicyRepo(h.db)
+	if err := policies.Create(c.Request().Context(), "pol_"+randomHex(8), orgID, body.TeamID, strings.TrimSpace(body.Title), body.Body, body.Rules); err != nil {
+		h.logger.Error("create policy", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"status": "ok"})
+}
+
+// UpdatePolicy handles PATCH /orgs/:orgId/policies/:policyId. Admin or executor.
+func (h *OrgsHandler) UpdatePolicy(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	if role != "admin" && role != "executor" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only admins and executors can manage policies"})
+	}
+	var body policyBody
+	if err := c.Bind(&body); err != nil || strings.TrimSpace(body.Title) == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "title is required"})
+	}
+	policies := repo.NewPolicyRepo(h.db)
+	if err := policies.Update(c.Request().Context(), orgID, c.Param("policyId"), strings.TrimSpace(body.Title), body.Body, body.Rules); err != nil {
+		h.logger.Error("update policy", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// DeletePolicy handles DELETE /orgs/:orgId/policies/:policyId. Admin or executor.
+func (h *OrgsHandler) DeletePolicy(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	if role != "admin" && role != "executor" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only admins and executors can manage policies"})
+	}
+	policies := repo.NewPolicyRepo(h.db)
+	if err := policies.Delete(c.Request().Context(), orgID, c.Param("policyId")); err != nil {
+		h.logger.Error("delete policy", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────

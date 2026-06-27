@@ -21,6 +21,7 @@ import type {
 	NodeAssignment,
 	NodeMessage,
 	OrgRequest,
+	PolicyRule,
 	Project,
 	NodeDetailResponse,
 	RequestGraph,
@@ -633,6 +634,30 @@ export const api = {
 
 	listPolicies: (orgId: string): Promise<{ policies: DepartmentPolicy[] }> =>
 		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies`),
+
+	createPolicy: (
+		orgId: string,
+		payload: { team_id: string; title: string; body: string; rules: PolicyRule[] },
+	): Promise<{ status: string }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
+
+	updatePolicy: (
+		orgId: string,
+		policyId: string,
+		payload: { title: string; body: string; rules: PolicyRule[] },
+	): Promise<{ status: string }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies/${encodeURIComponent(policyId)}`, {
+			method: "PATCH",
+			body: JSON.stringify(payload),
+		}),
+
+	deletePolicy: (orgId: string, policyId: string): Promise<{ status: string }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies/${encodeURIComponent(policyId)}`, {
+			method: "DELETE",
+		}),
 
 	// --- Machines (M-F1) ---
 
