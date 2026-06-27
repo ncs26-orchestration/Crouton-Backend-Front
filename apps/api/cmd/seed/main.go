@@ -747,17 +747,39 @@ func insertRequestGraph(
 		return fmt.Errorf("insert request: %w", err)
 	}
 
+	// Key factors per node for the approver's decision brief: the concrete facts a
+	// node surfaced (its flags), falling back to what it checked (its tasks).
+	keyFactorsByNode := make(map[string][]string)
+	for _, f := range flags {
+		keyFactorsByNode[f.NodeID] = append(keyFactorsByNode[f.NodeID], f.Message)
+	}
+	for _, t := range tasks {
+		if len(keyFactorsByNode[t.NodeID]) == 0 {
+			keyFactorsByNode[t.NodeID] = append(keyFactorsByNode[t.NodeID], t.Title)
+		}
+	}
+
 	batch := &pgx.Batch{}
 	for _, n := range nodes {
 		outcome := n.DecisionOutcome
 		if outcome == "" {
 			outcome = "pending"
 		}
+		// Derive a reasoning narrative from the seeded summary so the offline demo
+		// shows a populated "how it decided" brief.
+		reasoning := ""
+		if n.DecisionSummary != "" {
+			reasoning = n.DecisionSummary + " This reflects the department's review of the request details and the policies it owns."
+		}
+		keyFactors, _ := json.Marshal(keyFactorsByNode[n.ID])
+		if len(keyFactors) == 0 {
+			keyFactors = []byte("[]")
+		}
 		batch.Queue(`
 			INSERT INTO workflow_nodes
-				(id, request_id, key, name, agent_type, department, status, description, progress_percent, status_text, decision_outcome, decision_summary, started_at, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description, n.ProgressPercent, n.StatusText, outcome, n.DecisionSummary, n.StartedAt, n.CompletedAt)
+				(id, request_id, key, name, agent_type, department, status, description, progress_percent, status_text, decision_outcome, decision_summary, decision_reasoning, decision_key_factors, started_at, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description, n.ProgressPercent, n.StatusText, outcome, n.DecisionSummary, reasoning, keyFactors, n.StartedAt, n.CompletedAt)
 	}
 	for _, e := range edges {
 		batch.Queue(`
