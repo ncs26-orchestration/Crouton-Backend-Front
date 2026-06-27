@@ -1,22 +1,53 @@
+<div align="center">
+
 # AI Organization OS
 
-An AI-powered multi-agent workflow system that processes business requests
-through specialized department agents — Finance, Legal, IT, HR, Operations —
-with full traceability, cross-agent collaboration, and a live visual canvas.
+**A company that runs itself, staffed by AI agents.**
 
-Submit a request like "Open a new office in Berlin" and watch it flow through
-Intake → Planning → parallel Department Reviews → Executive Approval →
-Implementation → Report, with every agent decision visible and clickable.
+Department agents (Finance, Legal, IT, HR, Operations) collaborate on real
+business requests with structured handoffs, human sign-off, and a decision trail
+you can read line by line.
+
+</div>
+
+---
+
+Submit "Open a new office in Berlin" and watch it flow through Intake, Planning,
+parallel Department Reviews, Executive Approval, Implementation, and Report. It
+runs live on a visual canvas: every agent decision is clickable, every handoff is
+logged, and a human stays in the loop wherever it matters.
 
 ## What This Is
 
-A hackathon MVP for the NCS challenge: prove that multiple AI agents can
-collaborate on a single business request, with every decision traceable and
-every handoff visible. The system is not a mockup — agents run real logic,
-the graph reflects live state, and every status change is logged.
+Not a mockup. Agents run real logic (LLM-backed, with a deterministic offline
+fallback), the graph reflects live state over SSE, every status change is
+audited, and nothing fully automatic decides on its own. People verify their own
+department's work.
 
-**One sentence:** AI agents organized as a company — with teams, roles, tasks,
-dependencies, and an audit trail — processing a business request end to end.
+**One sentence:** AI agents organized as a company, with teams, roles, policies,
+tasks, dependencies, human approval, and a full audit trail, processing a
+business request end to end.
+
+## What it does
+
+- **Agents that actually decide.** Each department agent returns an outcome
+  (approve, approve-with-conditions, flag, reject, or block), a reasoning
+  narrative, the key factors it weighed, risk flags, and exact policy checks. Not
+  a rubber stamp.
+- **A real approval brief.** Before signing off a step, a human sees how the
+  agent decided and what it reviewed: the request details and the upstream
+  departments' decisions it built on.
+- **Human in the loop.** Assign verifiers to any step; the run pauses there until
+  the right person approves, sends it back, or chats with the agent to request a
+  revision. Cross-department sign-off is blocked by design.
+- **Reusable workflows.** Define internal processes once (hiring, time off,
+  onboarding), scoped company-wide or to a team, and run them on demand. Runs
+  reuse the same engine, verification, and audit as ad-hoc requests.
+- **Editable plans.** The AI proposes a graph; you review and reshape the steps
+  before launch.
+- **Org model and RBAC.** Orgs, teams (departments), members and roles (admin,
+  executor, employee), with a People page to manage who can do what.
+- **Traceability.** Who, what, why, and when, on every node and at the gate.
 
 ## Documentation
 
