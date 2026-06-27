@@ -11,8 +11,9 @@ type Config struct {
 	JWTSecret   string `env:"JWT_SECRET" envDefault:"change-me-in-production"`
 
 	// OrchStepDelayMS paces the orchestration engine between node steps so
-	// progression is watchable in the UI.
-	OrchStepDelayMS int `env:"ORCH_STEP_DELAY_MS" envDefault:"250"`
+	// progression is watchable in the UI. ~600ms reads as a live, deliberate
+	// pipeline (10 nodes ≈ a few seconds) rather than an instant flip.
+	OrchStepDelayMS int `env:"ORCH_STEP_DELAY_MS" envDefault:"600"`
 }
 
 func Load() (Config, error) {
