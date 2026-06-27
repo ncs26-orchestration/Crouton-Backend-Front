@@ -256,6 +256,11 @@ function WorkflowCanvas({
             <ArrowLeft size={12} />
             All Requests
           </button>
+          {req.kind === "workflow_run" && (
+            <span className="inline-block rounded bg-[var(--color-accent-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-brand)] mb-1">
+              Workflow run
+            </span>
+          )}
           <h2
             className="text-sm font-medium text-[var(--color-fg)] leading-tight"
             style={{ fontFeatureSettings: '"ss01"' }}
