@@ -232,7 +232,7 @@ func (h *ReportHandler) GetReport(c echo.Context) error {
 	// Extract approval info from audit events.
 	var approval *reportApproval
 	for _, ae := range auditEvents {
-		if ae.Action == "approval.granted" {
+		if ae.Action == "approval.granted" || ae.Action == "approval.auto" {
 			app := &reportApproval{
 				Decision:      "approve",
 				Justification: ae.Reason,
