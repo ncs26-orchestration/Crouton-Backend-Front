@@ -387,7 +387,7 @@ func TestRunCompletesParallelBranches(t *testing.T) {
 	}
 }
 
-func TestRunParksAtExecApproval(t *testing.T) {
+func TestExecGateAutoAdvances(t *testing.T) {
 	store := approvalGraph()
 	e := quietEngine(store, fakeAgent{})
 
@@ -395,70 +395,19 @@ func TestRunParksAtExecApproval(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	// The reviews complete; the gate is parked in_progress; report waits.
-	for _, id := range []string{"n_intake", "n_fin", "n_legal", "n_it"} {
-		if n := store.byID(id); n.Status != "completed" {
-			t.Errorf("node %s = %q, want completed", id, n.Status)
-		}
-	}
-	if appr := store.byID("n_appr"); appr.Status != "in_progress" {
-		t.Errorf("approval node = %q, want in_progress (parked)", appr.Status)
-	}
-	if rep := store.byID("n_report"); rep.Status != "pending" {
-		t.Errorf("report node = %q, want pending (gated)", rep.Status)
-	}
-	if store.reqStatus != "awaiting_approval" {
-		t.Errorf("request status = %q, want awaiting_approval", store.reqStatus)
-	}
-}
-
-func TestApproveResumesToCompletion(t *testing.T) {
-	store := approvalGraph()
-	e := quietEngine(store, fakeAgent{})
-
-	if err := e.run(context.Background(), "req_1"); err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if store.reqStatus != "awaiting_approval" {
-		t.Fatalf("setup: request = %q, want awaiting_approval", store.reqStatus)
-	}
-
-	// Approve resumes the worker synchronously here (Start runs a goroutine,
-	// but run is also driven directly to assert the terminal state).
-	if err := e.Approve(context.Background(), "req_1", ApprovalApprove, "Budget and risk are acceptable.", "CI User"); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
-	if err := e.run(context.Background(), "req_1"); err != nil {
-		t.Fatalf("resume run: %v", err)
-	}
-
+	// The gate is a sign-off stamp: it auto-completes and the flow proceeds to
+	// the report; the whole request completes without a human approval step.
 	if appr := store.byID("n_appr"); appr.Status != "completed" {
-		t.Errorf("approval node = %q, want completed", appr.Status)
+		t.Errorf("approval node = %q, want completed (auto sign-off)", appr.Status)
 	}
 	if rep := store.byID("n_report"); rep.Status != "completed" {
-		t.Errorf("report node = %q, want completed after approval", rep.Status)
+		t.Errorf("report node = %q, want completed", rep.Status)
 	}
 	if store.reqStatus != "completed" || store.reqProgress != 100 {
 		t.Errorf("request = %q/%d, want completed/100", store.reqStatus, store.reqProgress)
 	}
-}
-
-func TestRejectStopsRequest(t *testing.T) {
-	store := approvalGraph()
-	e := quietEngine(store, fakeAgent{})
-
-	if err := e.run(context.Background(), "req_1"); err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if err := e.Approve(context.Background(), "req_1", ApprovalReject, "Out of budget this quarter.", "CI User"); err != nil {
-		t.Fatalf("reject: %v", err)
-	}
-
-	if store.reqStatus != "rejected" {
-		t.Errorf("request status = %q, want rejected", store.reqStatus)
-	}
-	if rep := store.byID("n_report"); rep.Status != "pending" {
-		t.Errorf("report node = %q, want pending (request stopped)", rep.Status)
+	if countAudit(store, "approval.auto") != 1 {
+		t.Errorf("approval.auto audit = %d, want 1", countAudit(store, "approval.auto"))
 	}
 }
 

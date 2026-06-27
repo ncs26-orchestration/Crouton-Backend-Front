@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../lib/api";
+import { departmentColor } from "../lib/department";
 import type { AgentRosterEntry, AgentStatus } from "../lib/types";
 
 // Icon per agent type. Names, teams and capabilities come from the seeded
@@ -49,27 +50,35 @@ export function AgentsView({ orgId }: { orgId: string }) {
 
   const groups = useMemo(() => groupByDepartment(data?.agents ?? []), [data]);
 
-  const busyCount = (data?.agents ?? []).filter((a) => a.status !== "idle").length;
+  const agents = data?.agents ?? [];
+  const working = agents.filter((a) => a.status === "busy").length;
+  const blocked = agents.filter((a) => a.status === "blocked").length;
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)] overflow-auto nice-scroll">
-      <div className="border-b border-[var(--color-border)] px-8 py-5">
-        <h1 className="text-xl font-medium" style={{ fontFeatureSettings: '"ss01"' }}>
-          Agents
-        </h1>
-        <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">
-          The department agents that staff the organization, grouped by team
-          {busyCount > 0 && (
-            <span className="text-[var(--color-brand)]"> · {busyCount} working now</span>
-          )}
-        </p>
+      <div className="border-b border-[var(--color-border)] px-8 py-5 flex items-end justify-between gap-6">
+        <div>
+          <h1 className="text-xl font-medium" style={{ fontFeatureSettings: '"ss01"' }}>
+            Agents
+          </h1>
+          <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">
+            The department agents that staff the organization.
+          </p>
+        </div>
+        {agents.length > 0 && (
+          <div className="flex items-center gap-5 text-sm shrink-0">
+            <Stat label="Agents" value={agents.length} />
+            <Stat label="Working" value={working} tone="var(--color-brand)" />
+            <Stat label="Blocked" value={blocked} tone={blocked > 0 ? "var(--color-danger)" : undefined} />
+          </div>
+        )}
       </div>
 
-      <div className="px-8 py-6 w-full max-w-[1100px]">
+      <div className="px-8 py-6 w-full">
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-40 rounded-lg bg-[var(--color-surface-2)] animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-44 rounded-lg bg-[var(--color-surface-2)] animate-pulse" />
             ))}
           </div>
         ) : isError ? (
@@ -81,13 +90,16 @@ export function AgentsView({ orgId }: { orgId: string }) {
             No agents yet. The roster is seeded when the organization is created.
           </p>
         ) : (
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-7">
             {groups.map((g) => (
               <section key={g.department}>
-                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-fg-muted)] mb-3">
-                  {g.department}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="size-2 rounded-full" style={{ background: departmentColor(g.department) }} />
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-fg-muted)]">
+                    {g.department}
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {g.agents.map((a) => (
                     <AgentCard key={a.id} agent={a} />
                   ))}
@@ -97,6 +109,17 @@ export function AgentsView({ orgId }: { orgId: string }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
+  return (
+    <div className="text-center">
+      <p className="text-lg font-light tnum leading-none" style={tone ? { color: tone } : undefined}>
+        {value}
+      </p>
+      <p className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mt-1">{label}</p>
     </div>
   );
 }
@@ -139,12 +162,13 @@ function AgentCard({ agent }: { agent: AgentRosterEntry }) {
   const Icon = AGENT_ICON[agent.agent_type] ?? Bot;
   const badge = STATUS_BADGE[agent.status];
   const capabilities = parseCapabilities(agent.capabilities);
+  const color = departmentColor(agent.team_name || agent.agent_type);
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-stripe-ambient flex flex-col gap-3">
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-stripe-ambient flex flex-col gap-3 min-h-[176px]">
       <div className="flex items-start gap-3">
-        <div className="size-10 rounded-lg bg-[var(--color-accent-bg)] border border-[var(--color-accent-border)] flex items-center justify-center shrink-0">
-          <Icon size={18} className="text-[var(--color-brand)]" strokeWidth={1.75} />
+        <div className="size-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: color }}>
+          <Icon size={18} className="text-white" strokeWidth={1.75} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
@@ -187,15 +211,6 @@ function AgentCard({ agent }: { agent: AgentRosterEntry }) {
         <Stat label="Active" value={agent.active} />
         <Stat label="Requests" value={agent.request_count} />
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <p className="text-base font-light tnum text-[var(--color-fg)]">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)]">{label}</p>
     </div>
   );
 }
