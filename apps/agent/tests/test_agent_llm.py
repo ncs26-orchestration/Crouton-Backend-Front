@@ -7,7 +7,7 @@ import json
 
 from app.agents import llm
 from app.agents.department import _parse_decision
-from app.agents.intake import _parse_plan
+from app.agents.intake import _additional_catalog, _parse_plan
 
 
 def test_llm_unavailable_without_keys(monkeypatch) -> None:
@@ -36,6 +36,45 @@ def test_parse_plan_rejects_off_catalog_keys() -> None:
         }
     )
     assert _parse_plan(bad) is None
+
+
+def test_additional_catalog_allows_custom_departments() -> None:
+    org = {
+        "additional_departments": [
+            {"key": "marketing_review", "agent_type": "marketing", "department": "Marketing"},
+        ]
+    }
+    text, keys = _additional_catalog(org)
+    assert "marketing_review" in keys
+    assert "Marketing" in text
+
+    def node(key: str, agent_type: str, dept: str) -> dict:
+        return {"key": key, "name": key, "agent_type": agent_type, "department": dept}
+
+    # A plan that uses the custom key is accepted only when that key is allowed.
+    plan = json.dumps(
+        {
+            "nodes": [
+                node("intake", "intake", "Planning"),
+                node("marketing_review", "marketing", "Marketing"),
+                node("exec_approval", "approval", "Executive"),
+                node("report", "report", "Planning"),
+            ],
+            "edges": [
+                {"from": "intake", "to": "marketing_review", "type": "sequence"},
+                {"from": "marketing_review", "to": "exec_approval", "type": "sequence"},
+                {"from": "exec_approval", "to": "report", "type": "sequence"},
+            ],
+        }
+    )
+    assert _parse_plan(plan, keys) is not None
+    # Without the custom key allowed, the same plan is rejected.
+    assert _parse_plan(plan) is None
+
+
+def test_additional_catalog_empty_without_org_context() -> None:
+    text, keys = _additional_catalog(None)
+    assert text == "" and keys == set()
 
 
 def test_parse_plan_accepts_valid_catalog_plan() -> None:
