@@ -179,15 +179,15 @@ function PersonRow({
               return (
                 <span
                   key={i}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] pl-1.5 pr-1 py-0.5 text-[11px] text-[var(--color-fg-label)]"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] pl-1.5 pr-1 py-0.5 text-[11px] text-[var(--color-fg-label)] min-w-0"
                 >
-                  <span className="size-1.5 rounded-full" style={{ background: departmentColor(tr.team) }} />
-                  {tr.team}
-                  <span className="text-[var(--color-fg-subtle)]">· {tr.role}</span>
+                  <span className="size-1.5 rounded-full shrink-0" style={{ background: departmentColor(tr.team) }} />
+                  <span className="truncate">{tr.team}</span>
+                  <span className="text-[var(--color-fg-subtle)] shrink-0">· {tr.role}</span>
                   {isAdmin && teamId && (
                     <button
                       onClick={() => removeMut.mutate(teamId)}
-                      className="ml-0.5 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
+                      className="ml-0.5 shrink-0 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
                       title={`Remove from ${tr.team}`}
                     >
                       <X size={11} />
