@@ -73,6 +73,7 @@ func NewServer(d Deps) *echo.Echo {
 	orgGroup.DELETE("/:orgId/teams/:teamId", oh.DeleteTeam)
 
 	orgGroup.POST("/:orgId/members", oh.AddOrgMember)
+	orgGroup.POST("/:orgId/members/invite", oh.InviteMember)
 	orgGroup.GET("/:orgId/members", oh.ListOrgMembers)
 	orgGroup.PATCH("/:orgId/members/:userId", oh.UpdateOrgMemberRole)
 	orgGroup.DELETE("/:orgId/members/:userId", oh.RemoveOrgMember)

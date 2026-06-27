@@ -470,6 +470,12 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  inviteMember: (orgId: string, payload: { name: string; email: string; password: string; role: string }): Promise<{ org_id: string; user_id: number; name: string; email: string; role: string }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members/invite`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   updateOrgMemberRole: (orgId: string, userId: number, role: string): Promise<void> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(String(userId))}`, {
       method: "PATCH",
