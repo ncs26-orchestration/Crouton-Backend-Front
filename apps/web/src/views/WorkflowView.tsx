@@ -1,10 +1,16 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ReactFlow,
   Background,
   Controls,
+  Panel,
+  useNodesState,
+  useEdgesState,
+  useReactFlow,
   type NodeTypes,
+  type Node,
+  type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -14,11 +20,18 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  Maximize2,
+  RotateCcw,
   ShieldAlert,
 } from "lucide-react";
 
 import { api } from "../lib/api";
 import { requestToFlow } from "../lib/request-to-flow";
+import {
+  loadNodePositions,
+  saveNodePositions,
+  clearNodePositions,
+} from "../lib/workflow-layout";
 import { nodeStatusColorClass, prettyLabel, requestStatusTextClass } from "../lib/request-format";
 import { useRequestStream } from "../lib/sse";
 import { DepartmentNode } from "../components/DepartmentNode";
@@ -77,17 +90,53 @@ function WorkflowCanvas({
     queryKey: ["request", requestId],
     queryFn: () => api.getRequest(requestId),
     refetchInterval: (query) =>
-      query.state.data?.request.status === "in_progress" ? 5000 : false,
+      query.state.data?.request.status === "in_progress" ? 4000 : false,
   });
 
   // Live updates patch this query's cache entry directly. Open the stream only
   // once the base graph has loaded, so patchCache has an entry to update.
   useRequestStream(requestId, !!data);
 
-  const flowResult = useMemo(() => {
-    if (!data) return { nodes: [], edges: [] };
-    return requestToFlow(data.nodes, data.edges);
-  }, [data]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges] = useEdgesState<Edge>([]);
+  const { fitView } = useReactFlow();
+  const didFit = useRef(false);
+  const prevStatus = useRef<Record<string, string>>({});
+
+  // Rebuild nodes whenever the request data changes (initial load + live SSE
+  // patches), but keep each node where the user dragged it (session positions,
+  // then persisted positions, then the auto-layout). Nodes whose status just
+  // flipped get a one-shot pulse so live progress is visible.
+  useEffect(() => {
+    if (!data) return;
+    const layout = requestToFlow(data.nodes, data.edges);
+    const persisted = loadNodePositions(requestId);
+    const changed = new Set<string>();
+    for (const n of data.nodes) {
+      const prev = prevStatus.current[n.id];
+      if (prev && prev !== n.status) changed.add(n.id);
+      prevStatus.current[n.id] = n.status;
+    }
+    setNodes((curr) => {
+      const currPos = new Map(curr.map((n) => [n.id, n.position]));
+      return layout.nodes.map((n) => ({
+        ...n,
+        position: currPos.get(n.id) ?? persisted[n.id] ?? n.position,
+        selected: n.id === selectedNodeId,
+        className: changed.has(n.id) ? "node-pulse" : undefined,
+      }));
+    });
+    setEdges(layout.edges);
+  }, [data, selectedNodeId, requestId, setNodes, setEdges]);
+
+  // Fit the view once, after the first nodes have landed. Not on every update,
+  // so the user's panned/dragged view is left alone.
+  useEffect(() => {
+    if (!didFit.current && nodes.length > 0) {
+      didFit.current = true;
+      requestAnimationFrame(() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 }));
+    }
+  }, [nodes.length, fitView]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId || !data) return null;
@@ -100,6 +149,23 @@ function WorkflowCanvas({
     },
     [onSelectNode, selectedNodeId],
   );
+
+  const onNodeDragStop = useCallback(() => {
+    setNodes((curr) => {
+      const positions: Record<string, { x: number; y: number }> = {};
+      for (const n of curr) positions[n.id] = { x: n.position.x, y: n.position.y };
+      saveNodePositions(requestId, positions);
+      return curr;
+    });
+  }, [requestId, setNodes]);
+
+  const resetLayout = useCallback(() => {
+    if (!data) return;
+    clearNodePositions(requestId);
+    const layout = requestToFlow(data.nodes, data.edges);
+    setNodes(layout.nodes.map((n) => ({ ...n, selected: n.id === selectedNodeId })));
+    requestAnimationFrame(() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 }));
+  }, [requestId, data, selectedNodeId, setNodes, fitView]);
 
   if (isLoading) {
     return (
@@ -192,23 +258,42 @@ function WorkflowCanvas({
       {/* Center — Canvas */}
       <div className="flex-1 relative bg-[var(--color-surface-2)]">
         <ReactFlow
-          nodes={flowResult.nodes}
-          edges={flowResult.edges}
+          nodes={nodes}
+          edges={edges}
           nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
           onNodeClick={onNodeClick}
-          fitView
-          fitViewOptions={{ padding: 0.16, maxZoom: 1.15 }}
+          onNodeDragStop={onNodeDragStop}
           proOptions={{ hideAttribution: true }}
           minZoom={0.3}
           maxZoom={2}
-          nodesDraggable={false}
+          nodesDraggable
           nodesConnectable={false}
+          elementsSelectable
+          panOnScroll
+          selectionOnDrag
         >
           <Background gap={16} size={1} color="var(--color-border)" />
           <Controls
             showInteractive={false}
             className="!bg-[var(--color-surface)] !border-[var(--color-border)] !rounded-md !shadow-stripe"
           />
+          <Panel position="top-right" className="flex gap-1.5">
+            <button
+              onClick={() => fitView({ padding: 0.16, maxZoom: 1.15, duration: 300 })}
+              title="Fit to view"
+              className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
+            >
+              <Maximize2 size={13} /> Fit
+            </button>
+            <button
+              onClick={resetLayout}
+              title="Reset node layout"
+              className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] shadow-stripe-ambient transition-colors hover:text-[var(--color-fg)]"
+            >
+              <RotateCcw size={13} /> Reset layout
+            </button>
+          </Panel>
         </ReactFlow>
 
         {/* Legend */}
