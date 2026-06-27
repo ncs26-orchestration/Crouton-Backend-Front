@@ -53,7 +53,7 @@ export function AgentsView({ orgId }: { orgId: string }) {
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)] overflow-auto nice-scroll">
-      <div className="border-b border-[var(--color-border)] px-8 py-5">
+      <div className="border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5">
         <h1 className="text-xl font-medium" style={{ fontFeatureSettings: '"ss01"' }}>
           Agents
         </h1>
@@ -65,7 +65,7 @@ export function AgentsView({ orgId }: { orgId: string }) {
         </p>
       </div>
 
-      <div className="px-8 py-6 w-full max-w-[1100px]">
+      <div className="px-4 md:px-8 py-4 md:py-6 w-full max-w-[1100px]">
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
