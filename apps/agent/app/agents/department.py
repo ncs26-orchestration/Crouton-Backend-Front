@@ -201,9 +201,7 @@ _ROLE_GUIDANCE = {
         "the Intake coordinator. Classify the request and identify which departments "
         "it actually involves."
     ),
-    "planning": (
-        "the Planning lead. Outline the cross-department plan and sequence the reviews."
-    ),
+    "planning": ("the Planning lead. Outline the cross-department plan and sequence the reviews."),
     "finance": (
         "the Finance department. Weigh budget feasibility, total cost, and ROI against the "
         "approved budget. If the cost depends on another department's estimate (e.g. IT "
@@ -255,10 +253,10 @@ How to choose "outcome":
   "blocked_on": {{"on_department": "<Department>", "reason": "<what you need and why>"}} and
   pick this outcome only when that department has not reported yet.
 
-{policies}
-{upstream_guidance}Be specific to the request (amounts, locations, systems, people) — no generic boilerplate.
-When a flag or rejection is driven by a policy, quote the policy in the flag message. Produce
-3-5 tasks describing what you actually checked. Output JSON only."""
+{policies}{upstream_guidance}Be specific to the request (amounts, locations, people).
+Do not give generic boilerplate. When a flag or rejection is driven by a policy, quote the
+policy in the flag message. Produce 3-5 tasks describing what you actually checked.
+Output JSON only."""
 
 
 _ALLOWED_SEVERITY = {"info", "warning", "critical"}
@@ -336,9 +334,8 @@ def _policies_block(org_context: dict[str, Any] | None) -> str:
     ]
     if not lines:
         return ""
-    return "Your department's policies — check the request against each and cite by title:\n" + "\n".join(
-        lines
-    )
+    header = "Your department's policies. Check the request against each and cite by title:\n"
+    return header + "\n".join(lines) + "\n\n"
 
 
 async def run_department(
@@ -367,7 +364,7 @@ async def run_department(
         )
         system = _DEPT_SYSTEM.format(
             role=role,
-            policies=(policies + "\n\n") if policies else "",
+            policies=policies,
             upstream_guidance=upstream_guidance,
         )
         user = f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
