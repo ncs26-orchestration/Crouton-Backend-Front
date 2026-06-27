@@ -23,6 +23,7 @@ type fakeStore struct {
 	deps        []fakeDep
 	policies    []repo.DepartmentPolicy
 	flags       []repo.NodeFlag
+	assignments map[string]int // node_id → assignee count
 }
 
 type fakeDep struct {
@@ -74,6 +75,10 @@ func (s *fakeStore) UpdateNodeDecisionOutcome(_ context.Context, nodeID, outcome
 
 func (s *fakeStore) ListPoliciesByOrg(_ context.Context, _ string) ([]repo.DepartmentPolicy, error) {
 	return s.policies, nil
+}
+
+func (s *fakeStore) CountAssignmentsByNode(_ context.Context, nodeID string) (int, error) {
+	return s.assignments[nodeID], nil
 }
 
 func (s *fakeStore) SetNodeDecisionSummary(_ context.Context, nodeID, summary string) error {
@@ -792,4 +797,51 @@ func (a *capturingAgent) orgContextFor(agentType string) map[string]any {
 		}
 	}
 	return nil
+}
+
+// A node with an assigned verifier pauses at awaiting_review instead of
+// completing, blocking downstream until a human verifies it.
+func TestAssignedNodeAwaitsReviewThenVerify(t *testing.T) {
+	store := newGraph() // intake -> finance -> report
+	store.assignments = map[string]int{"n_fin": 1}
+	e := quietEngine(store, fakeAgent{})
+
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if store.byID("n_fin").Status != "awaiting_review" {
+		t.Errorf("finance status = %q, want awaiting_review", store.byID("n_fin").Status)
+	}
+	if store.byID("n_report").Status == "completed" {
+		t.Error("report completed before finance was verified")
+	}
+
+	// Human verifies → finance completes; re-running advances to report.
+	if err := e.VerifyNode(context.Background(), "req_1", "n_fin", ApprovalApprove, "looks good", "Farah Finance"); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if store.byID("n_fin").Status != "completed" {
+		t.Errorf("finance status after verify = %q, want completed", store.byID("n_fin").Status)
+	}
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run after verify: %v", err)
+	}
+	if store.byID("n_report").Status != "completed" {
+		t.Errorf("report status = %q, want completed after verify", store.byID("n_report").Status)
+	}
+	if countAudit(store, "node.verified") != 1 {
+		t.Errorf("node.verified audit = %d, want 1", countAudit(store, "node.verified"))
+	}
+}
+
+// An unassigned node auto-completes (no review gate).
+func TestUnassignedNodeAutoCompletes(t *testing.T) {
+	store := newGraph()
+	e := quietEngine(store, fakeAgent{})
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if store.byID("n_fin").Status != "completed" {
+		t.Errorf("unassigned finance status = %q, want completed", store.byID("n_fin").Status)
+	}
 }

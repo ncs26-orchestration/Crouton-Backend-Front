@@ -1,9 +1,10 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { CheckCircle2, Clock, Loader2, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, ShieldAlert, UserCheck } from "lucide-react";
 
 import type { NodeStatus, WorkflowNodeData } from "../lib/types";
 import { decisionOutcomeBadgeClass, decisionOutcomeLabel, isNotableOutcome } from "../lib/request-format";
+import { Avatar } from "./Avatar";
 
 // Stable per-department accent so each agent reads as a distinct identity on the
 // canvas. Known departments get a fixed hue; anything else is hashed to one.
@@ -45,6 +46,12 @@ const STATUS_CONFIG: Record<NodeStatus, { bg: string; border: string; icon: type
     border: "border-[var(--color-brand)]",
     icon: Loader2,
     label: "In Progress",
+  },
+  awaiting_review: {
+    bg: "bg-[var(--color-warning)]/10",
+    border: "border-[var(--color-warning)]",
+    icon: UserCheck,
+    label: "Needs review",
   },
   completed: {
     bg: "bg-[var(--color-success)]/10",
@@ -105,12 +112,27 @@ function DepartmentNodeInner({ data, selected }: NodeProps) {
               ? "text-[var(--color-brand)] animate-spin"
               : d.status === "completed"
                 ? "text-[var(--color-success)]"
-                : d.status === "blocked"
-                  ? "text-[var(--color-danger)]"
-                  : "text-[var(--color-fg-subtle)]"
+                : d.status === "awaiting_review"
+                  ? "text-[var(--color-warning-fg)]"
+                  : d.status === "blocked"
+                    ? "text-[var(--color-danger)]"
+                    : "text-[var(--color-fg-subtle)]"
           }`}
         />
       </div>
+
+      {d.assignees && d.assignees.length > 0 && (
+        <div className="flex items-center -space-x-1 mt-0.5">
+          {d.assignees.slice(0, 4).map((name, i) => (
+            <span key={i} className="ring-1 ring-[var(--color-surface)] rounded-full">
+              <Avatar name={name} size={16} />
+            </span>
+          ))}
+          {d.assignees.length > 4 && (
+            <span className="text-[9px] text-[var(--color-fg-muted)] pl-1.5">+{d.assignees.length - 4}</span>
+          )}
+        </div>
+      )}
 
       {isNotableOutcome(d.decision_outcome) && d.decision_outcome && (
         <span

@@ -260,6 +260,7 @@ export interface DeployResponse {
 export type RequestPriority = "low" | "medium" | "high" | "urgent";
 
 export type RequestStatus =
+  | "draft"
   | "submitted"
   | "in_progress"
   | "awaiting_approval"
@@ -267,7 +268,16 @@ export type RequestStatus =
   | "rejected"
   | "completed";
 
-export type NodeStatus = "pending" | "in_progress" | "completed" | "blocked";
+export type NodeStatus = "pending" | "in_progress" | "awaiting_review" | "completed" | "blocked";
+
+// A verifier assigned to a workflow node.
+export interface NodeAssignment {
+  id: string;
+  node_id: string;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+}
 
 // A human's call on the executive-approval gate (F7).
 export type ApprovalDecision = "approve" | "reject";
@@ -316,6 +326,8 @@ export interface WorkflowNodeData {
   started_at: string | null;
   completed_at: string | null;
   blocked_by?: { reason: string; blocked_at?: string } | null;
+  // UI-only: assignee display names attached when building the canvas, for avatars.
+  assignees?: string[];
 }
 
 // A risk or note an agent raised on a node (may cite a policy in the message).
@@ -335,6 +347,7 @@ export interface RequestGraph {
   request: OrgRequest;
   nodes: WorkflowNodeData[];
   edges: WorkflowEdgeData[];
+  assignments?: NodeAssignment[];
 }
 
 // A unit of work a department agent reported for a node.
