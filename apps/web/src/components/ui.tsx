@@ -14,7 +14,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="border-b border-[var(--color-border)] px-8 py-5 flex items-start justify-between gap-4 shrink-0">
+    <div className="border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5 flex items-start justify-between gap-4 shrink-0">
       <div className="min-w-0">
         <h1 className="text-xl font-medium text-[var(--color-fg)]" style={{ fontFeatureSettings: '"ss01"' }}>
           {title}

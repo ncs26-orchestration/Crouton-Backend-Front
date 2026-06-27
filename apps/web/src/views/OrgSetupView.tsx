@@ -189,17 +189,17 @@ export function OrgSetupView({ onDone }: Props) {
 
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-[var(--color-bg)]">
-      <div className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl flex flex-col overflow-hidden mx-4">
 
         {/* ── Header ── */}
-        <div className="flex flex-col items-center gap-2 px-8 pt-8 pb-4">
+        <div className="flex flex-col items-center gap-2 px-4 md:px-8 pt-6 md:pt-8 pb-4">
           <BrandMark size={30} />
           <h1 className="text-base font-semibold text-[var(--color-fg)]">Set up your workspace</h1>
           <p className="text-xs text-[var(--color-fg-muted)]">Step {step + 1} of {STEPS.length}</p>
         </div>
 
         {/* ── Progress bar ── */}
-        <div className="px-8 pb-6">
+        <div className="px-4 md:px-8 pb-6">
           <div className="flex items-center gap-2">
             {STEPS.map((label, i) => (
               <div key={label} className="flex items-center gap-2 flex-1 last:flex-none">
@@ -248,7 +248,7 @@ export function OrgSetupView({ onDone }: Props) {
                 exit="exit"
                 transition={{ duration: 0.22, ease: "easeInOut" }}
                 onSubmit={handleStep0}
-                className="px-8 pb-8 flex flex-col gap-5"
+                className="px-4 md:px-8 pb-8 flex flex-col gap-5"
               >
                 {/* Avatar preview + color picker */}
                 <div className="flex flex-col items-center gap-3">
@@ -335,7 +335,7 @@ export function OrgSetupView({ onDone }: Props) {
                 exit="exit"
                 transition={{ duration: 0.22, ease: "easeInOut" }}
                 onSubmit={handleStep1}
-                className="px-8 pb-8 flex flex-col gap-5"
+                className="px-4 md:px-8 pb-8 flex flex-col gap-5"
               >
                 <p className="text-sm text-[var(--color-fg-muted)]">
                   How will you primarily use Crouton?
@@ -408,7 +408,7 @@ export function OrgSetupView({ onDone }: Props) {
                 exit="exit"
                 transition={{ duration: 0.22, ease: "easeInOut" }}
                 onSubmit={handleStep2}
-                className="px-8 pb-8 flex flex-col gap-5"
+                className="px-4 md:px-8 pb-8 flex flex-col gap-5"
               >
                 <p className="text-sm text-[var(--color-fg-muted)]">
                   Add teammates by email. You can always do this later.
@@ -516,7 +516,7 @@ export function OrgSetupView({ onDone }: Props) {
                 exit="exit"
                 transition={{ duration: 0.22, ease: "easeInOut" }}
                 onSubmit={(e) => { e.preventDefault(); handleFinish(); }}
-                className="px-8 pb-8 flex flex-col gap-4"
+                className="px-4 md:px-8 pb-8 flex flex-col gap-4"
               >
                 <p className="text-sm text-[var(--color-fg-muted)]">
                   Add machines to your fleet. Upload a manual or spec sheet for AI-assisted diagnostics.
