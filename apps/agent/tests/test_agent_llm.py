@@ -78,10 +78,11 @@ def test_parse_decision_rejects_garbage() -> None:
     assert _parse_decision('{"flags": []}') is None  # missing summary/status_text/tasks
 
 
-def test_parse_decision_accepts_valid_and_clears_blocked_on() -> None:
+def test_parse_decision_keeps_declared_block() -> None:
     raw = json.dumps(
         {
             "summary": "Budget is feasible.",
+            "outcome": "approve",
             "flags": [{"severity": "info", "message": "Within budget."}],
             "tasks": [{"title": "Assess budget", "status": "completed"}],
             "status_text": "Finance review complete.",
@@ -91,8 +92,11 @@ def test_parse_decision_accepts_valid_and_clears_blocked_on() -> None:
     d = _parse_decision(raw)
     assert d is not None
     assert d.summary == "Budget is feasible."
-    # F5 not built yet — blocked_on must be cleared so the engine never stalls.
-    assert d.blocked_on is None
+    # An agent may now declare a cross-department block (F5); a declared
+    # dependency is kept and forces the block outcome so the engine acts on it.
+    assert d.blocked_on is not None
+    assert d.blocked_on.on_department == "IT"
+    assert d.outcome == "block"
 
 
 def _valid_plan_json() -> str:
