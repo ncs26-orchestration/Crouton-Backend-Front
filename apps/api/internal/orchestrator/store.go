@@ -87,6 +87,10 @@ func (s *dbStore) SetNodeDecisionSummary(ctx context.Context, nodeID, summary st
 	return s.workflow.SetNodeDecisionSummary(ctx, nodeID, summary)
 }
 
+func (s *dbStore) SetNodeDecisionDetail(ctx context.Context, nodeID, reasoning string, keyFactors []string) error {
+	return s.workflow.SetNodeDecisionDetail(ctx, nodeID, reasoning, keyFactors)
+}
+
 func (s *dbStore) ClearNodeFlags(ctx context.Context, nodeID string) error {
 	return s.workflow.DeleteFlagsByNode(ctx, nodeID)
 }

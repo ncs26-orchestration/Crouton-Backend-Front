@@ -135,16 +135,48 @@ services:
   web:
     image: ${REGISTRY:-europe-west1-docker.pkg.dev/ncs26-solution/solution}/web:${TAG:-latest}
     restart: unless-stopped
-    ports:
-      - "80:80"
+    # No host port — Caddy fronts the stack and proxies to web:80 internally.
     depends_on:
       - api
       - agent
     networks: [aios]
 
+  # TLS-terminating reverse proxy. Serves HTTPS for the public domain with an
+  # auto-provisioned Let's Encrypt cert, and plain HTTP on the bare IP / any
+  # other host (keeps the IP working and the CI smoke test green). All traffic
+  # forwards to the web container's nginx, which proxies /api and /agent.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    networks: [aios]
+
+configs:
+  caddyfile:
+    content: |
+      ${PUBLIC_DOMAIN:-orchestration.duckdns.org} {
+        reverse_proxy web:80
+      }
+
+      :80 {
+        reverse_proxy web:80
+      }
+
 volumes:
   pg_data:
   redis_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   aios:

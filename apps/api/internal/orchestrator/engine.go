@@ -74,6 +74,7 @@ type Store interface {
 	UpdateNodeStatus(ctx context.Context, nodeID, status, statusText string, progressPercent int) error
 	UpdateNodeDecisionOutcome(ctx context.Context, nodeID, outcome string) error
 	SetNodeDecisionSummary(ctx context.Context, nodeID, summary string) error
+	SetNodeDecisionDetail(ctx context.Context, nodeID, reasoning string, keyFactors []string) error
 	ClearNodeTasks(ctx context.Context, nodeID string) error
 	InsertTasks(ctx context.Context, tasks []repo.AgentTask) error
 	ClearNodeFlags(ctx context.Context, nodeID string) error
@@ -578,6 +579,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 					e.log.Warn("failed to record block summary", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 				}
 			}
+			e.persistDecisionDetail(ctx, node.ID, decision)
 			e.persistFlags(ctx, req.ID, node.ID, decision.Flags)
 			return false, nil
 		}
@@ -634,6 +636,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			e.log.Warn("failed to record decision summary", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 		}
 	}
+	e.persistDecisionDetail(ctx, node.ID, decision)
 	e.persistFlags(ctx, req.ID, node.ID, decision.Flags)
 	e.auditFlags(ctx, req.ID, node, decision.Flags)
 
@@ -836,6 +839,18 @@ func (e *Engine) persistChecks(ctx context.Context, req *repo.Request, node repo
 		e.log.Warn("failed to insert node checks", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 	}
 	return worst
+}
+
+// persistDecisionDetail stores the agent's step-by-step reasoning and the key
+// factors that drove the outcome, for the human approver's decision brief. Best
+// effort: a failure here doesn't stop the run.
+func (e *Engine) persistDecisionDetail(ctx context.Context, nodeID string, decision *agentclient.Decision) {
+	if decision.Reasoning == "" && len(decision.KeyFactors) == 0 {
+		return
+	}
+	if err := e.store.SetNodeDecisionDetail(ctx, nodeID, decision.Reasoning, decision.KeyFactors); err != nil {
+		e.log.Warn("failed to record decision detail", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+	}
 }
 
 func (e *Engine) persistFlags(ctx context.Context, requestID, nodeID string, flags []agentclient.Flag) {

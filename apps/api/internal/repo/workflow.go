@@ -2,11 +2,37 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// scanStringList unmarshals a jsonb string-array column into a Go slice, matching
+// the []byte + json.Unmarshal pattern the other repos use for jsonb.
+func scanStringList(raw []byte) []string {
+	if len(raw) == 0 {
+		return []string{}
+	}
+	var out []string
+	if err := json.Unmarshal(raw, &out); err != nil || out == nil {
+		return []string{}
+	}
+	return out
+}
+
+// stringListParam marshals a string slice to a jsonb param, defaulting to "[]".
+func stringListParam(s []string) []byte {
+	if len(s) == 0 {
+		return []byte("[]")
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return []byte("[]")
+	}
+	return b
+}
 
 type WorkflowNode struct {
 	ID              string
@@ -21,9 +47,13 @@ type WorkflowNode struct {
 	StatusText      string
 	DecisionOutcome string
 	DecisionSummary string
-	StartedAt       *time.Time
-	CompletedAt     *time.Time
-	CreatedAt       time.Time
+	// DecisionReasoning is the agent's step-by-step explanation of how it reached
+	// the outcome; DecisionKeyFactors are the concrete facts that drove it.
+	DecisionReasoning  string
+	DecisionKeyFactors []string
+	StartedAt          *time.Time
+	CompletedAt        *time.Time
+	CreatedAt          time.Time
 }
 
 type WorkflowEdge struct {
@@ -137,7 +167,8 @@ func (r *WorkflowRepo) InsertEdges(ctx context.Context, edges []WorkflowEdge) er
 func (r *WorkflowRepo) ListNodesByRequest(ctx context.Context, requestID string) ([]WorkflowNode, error) {
 	rows, err := r.pg.Query(ctx, `
 		SELECT id, request_id, key, name, agent_type, department, status, description,
-		       progress_percent, status_text, decision_outcome, decision_summary, started_at, completed_at, created_at
+		       progress_percent, status_text, decision_outcome, decision_summary,
+		       decision_reasoning, decision_key_factors, started_at, completed_at, created_at
 		FROM workflow_nodes WHERE request_id = $1
 		ORDER BY created_at ASC
 	`, requestID)
@@ -149,11 +180,14 @@ func (r *WorkflowRepo) ListNodesByRequest(ctx context.Context, requestID string)
 	var out []WorkflowNode
 	for rows.Next() {
 		var n WorkflowNode
+		var keyFactors []byte
 		if err := rows.Scan(&n.ID, &n.RequestID, &n.Key, &n.Name, &n.AgentType, &n.Department,
 			&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText, &n.DecisionOutcome, &n.DecisionSummary,
+			&n.DecisionReasoning, &keyFactors,
 			&n.StartedAt, &n.CompletedAt, &n.CreatedAt); err != nil {
 			return nil, err
 		}
+		n.DecisionKeyFactors = scanStringList(keyFactors)
 		out = append(out, n)
 	}
 	return out, rows.Err()
@@ -180,21 +214,61 @@ func (r *WorkflowRepo) ListEdgesByRequest(ctx context.Context, requestID string)
 	return out, rows.Err()
 }
 
+// NodeDecisionSummary is a compact view of a node's decision, used to show an
+// approver the upstream decisions the agent built on.
+type NodeDecisionSummary struct {
+	NodeID          string `json:"node_id"`
+	Name            string `json:"name"`
+	Department      string `json:"department"`
+	Status          string `json:"status"`
+	DecisionOutcome string `json:"decision_outcome"`
+	DecisionSummary string `json:"decision_summary"`
+}
+
+// ListPredecessorSummaries returns the decisions of the nodes that feed into the
+// given node (its incoming-edge sources), so the approver sees what came before.
+func (r *WorkflowRepo) ListPredecessorSummaries(ctx context.Context, nodeID string) ([]NodeDecisionSummary, error) {
+	rows, err := r.pg.Query(ctx, `
+		SELECT n.id, n.name, n.department, n.status, n.decision_outcome, n.decision_summary
+		FROM workflow_edges e
+		JOIN workflow_nodes n ON n.id = e.source_node_id
+		WHERE e.target_node_id = $1
+		ORDER BY n.created_at ASC
+	`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]NodeDecisionSummary, 0)
+	for rows.Next() {
+		var s NodeDecisionSummary
+		if err := rows.Scan(&s.NodeID, &s.Name, &s.Department, &s.Status, &s.DecisionOutcome, &s.DecisionSummary); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 func (r *WorkflowRepo) GetNode(ctx context.Context, nodeID string) (*WorkflowNode, error) {
 	row := r.pg.QueryRow(ctx, `
 		SELECT id, request_id, key, name, agent_type, department, status, description,
-		       progress_percent, status_text, decision_outcome, decision_summary, started_at, completed_at, created_at
+		       progress_percent, status_text, decision_outcome, decision_summary,
+		       decision_reasoning, decision_key_factors, started_at, completed_at, created_at
 		FROM workflow_nodes WHERE id = $1
 	`, nodeID)
 	var n WorkflowNode
+	var keyFactors []byte
 	if err := row.Scan(&n.ID, &n.RequestID, &n.Key, &n.Name, &n.AgentType, &n.Department,
 		&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText, &n.DecisionOutcome, &n.DecisionSummary,
+		&n.DecisionReasoning, &keyFactors,
 		&n.StartedAt, &n.CompletedAt, &n.CreatedAt); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
+	n.DecisionKeyFactors = scanStringList(keyFactors)
 	return &n, nil
 }
 
@@ -235,9 +309,25 @@ func (r *WorkflowRepo) UpdateNodeDecisionOutcome(ctx context.Context, nodeID, ou
 	return nil
 }
 
-// SetNodeDecisionSummary stores the agent's full reasoning for a node.
+// SetNodeDecisionSummary stores the agent's assessment summary for a node.
 func (r *WorkflowRepo) SetNodeDecisionSummary(ctx context.Context, nodeID, summary string) error {
 	tag, err := r.pg.Exec(ctx, `UPDATE workflow_nodes SET decision_summary = $2 WHERE id = $1`, nodeID, summary)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetNodeDecisionDetail stores the agent's step-by-step reasoning and the key
+// factors that drove the outcome, for the human approver's decision brief.
+func (r *WorkflowRepo) SetNodeDecisionDetail(ctx context.Context, nodeID, reasoning string, keyFactors []string) error {
+	tag, err := r.pg.Exec(ctx,
+		`UPDATE workflow_nodes SET decision_reasoning = $2, decision_key_factors = $3 WHERE id = $1`,
+		nodeID, reasoning, stringListParam(keyFactors),
+	)
 	if err != nil {
 		return err
 	}
