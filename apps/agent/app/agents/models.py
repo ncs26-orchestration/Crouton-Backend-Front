@@ -54,10 +54,22 @@ class DependencyDecl(BaseModel):
     reason: str = Field(description="The agent's own reason for the dependency")
 
 
+# The decisions a department agent can reach. "approve" passes the request on;
+# "approve_with_conditions" passes it but attaches must-do conditions as flags;
+# "flag" raises a concern for the executive without blocking; "reject" recommends
+# the request be turned down (a compliance-critical reject can stop it outright);
+# "block" waits on another department (paired with blocked_on, F5).
+OUTCOMES = {"approve", "approve_with_conditions", "flag", "reject", "block"}
+
+
 class Decision(BaseModel):
     """A department agent's output for one workflow node."""
 
     summary: str = Field(description="Short summary of the department's assessment")
+    outcome: str = Field(
+        default="approve",
+        description="One of: approve, approve_with_conditions, flag, reject, block",
+    )
     flags: list[Flag] = Field(default_factory=list, description="Risks or notes surfaced")
     tasks: list[TaskItem] = Field(default_factory=list, description="Work performed on this node")
     status_text: str = Field(description="Plain-language status for the UI")
