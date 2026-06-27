@@ -84,7 +84,7 @@ export function ReportsView() {
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)] overflow-auto nice-scroll">
-      <div className="border-b border-[var(--color-border)] px-8 py-5 flex items-center justify-between">
+      <div className="border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-medium" style={{ fontFeatureSettings: '"ss01"' }}>
             Reports
@@ -103,7 +103,7 @@ export function ReportsView() {
         </button>
       </div>
 
-      <div className="px-8 py-6 w-full flex flex-col gap-6">
+      <div className="px-4 md:px-8 py-4 md:py-6 w-full flex flex-col gap-6">
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Metric icon={FileText} label="Completed reports" value={completedRequests.length} />
@@ -150,17 +150,17 @@ export function ReportsView() {
 
         {/* Audit trail */}
         <section>
-          <div className="flex items-center gap-3 text-xs mb-3 flex-wrap">
+          <div className="flex items-center gap-2 md:gap-3 text-xs mb-3 flex-wrap">
             <div className="flex items-center gap-1.5 text-[var(--color-fg-muted)]">
               <Filter size={13} />
               <span className="font-semibold uppercase tracking-wide">Audit trail</span>
             </div>
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <div className="relative flex-1 min-w-[140px] md:min-w-[180px] max-w-xs w-full md:w-auto">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-fg-subtle)]" />
               <input
                 type="text"
                 aria-label="Search audit events"
-                placeholder="Search actor, action, reason, request..."
+                placeholder="Search..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 text-xs bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
@@ -186,7 +186,7 @@ export function ReportsView() {
                 <option key={a} value={a}>{a.replace(/\./g, " ")}</option>
               ))}
             </select>
-            <span className="text-[var(--color-fg-subtle)] ml-auto">
+            <span className="text-[var(--color-fg-subtle)] ml-auto hidden md:inline">
               {filtered.length} of {events.length} events
             </span>
           </div>
@@ -257,7 +257,7 @@ function ReportModal({
     >
       <div
         data-print-root
-        className="relative w-full max-w-[760px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-stripe-elevated"
+        className="relative w-full max-w-[760px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-stripe-elevated mx-4 md:mx-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -322,7 +322,7 @@ function ReportBody({ report }: { report: FinalReport }) {
       </div>
 
       {/* Summary tiles */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <SummaryTile label="Stages completed" value={`${report.summary.completed_stages}/${report.summary.total_stages}`} />
         <SummaryTile label="Total time" value={report.summary.total_time_human} />
         <SummaryTile label="Flags raised" value={String(flags.length)} />
