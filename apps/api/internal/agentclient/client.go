@@ -46,9 +46,10 @@ type IntakeRequest struct {
 }
 
 type IntakeRequestBody struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Priority    string `json:"priority"`
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	Priority    string         `json:"priority"`
+	Details     map[string]any `json:"details,omitempty"`
 }
 
 // Client talks to the Python agent service.

@@ -338,11 +338,22 @@ def _policies_block(org_context: dict[str, Any] | None) -> str:
     return header + "\n".join(lines) + "\n\n"
 
 
+def _details_block(details: dict[str, Any] | None) -> str:
+    """Render the request's structured fields so an agent can cite real numbers."""
+    if not details:
+        return ""
+    lines = [f"  {k}: {v}" for k, v in details.items() if v not in (None, "")]
+    if not lines:
+        return ""
+    return "\n\nStructured details (use these exact facts):\n" + "\n".join(lines)
+
+
 async def run_department(
     agent_type: str,
     title: str,
     description: str,
     priority: str,
+    details: dict[str, Any] | None = None,
     upstream_context: list[dict[str, Any]] | None = None,
     org_context: dict[str, Any] | None = None,
 ) -> Decision:
@@ -367,7 +378,10 @@ async def run_department(
             policies=policies,
             upstream_guidance=upstream_guidance,
         )
-        user = f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
+        user = (
+            f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
+            + _details_block(details)
+        )
         if upstream_context:
             user += "\n\nUpstream department decisions so far:\n" + _summarize_upstream(
                 upstream_context

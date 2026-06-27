@@ -82,19 +82,20 @@ func validateRequestInput(title, description, priority string) (normTitle, normP
 // requestResponse is the wire shape for a request. requester_name is
 // resolved from users so the UI can show who submitted it.
 type requestResponse struct {
-	ID                  string     `json:"id"`
-	OrgID               string     `json:"org_id"`
-	Title               string     `json:"title"`
-	Description         string     `json:"description"`
-	RequesterUserID     int64      `json:"requester_user_id"`
-	RequesterName       string     `json:"requester_name"`
-	RequesterRole       string     `json:"requester_role"`
-	RequestType         string     `json:"request_type"`
-	Priority            string     `json:"priority"`
-	Status              string     `json:"status"`
-	Progress            int        `json:"progress"`
-	EstimatedCompletion *time.Time `json:"estimated_completion"`
-	CreatedAt           time.Time  `json:"created_at"`
+	ID                  string         `json:"id"`
+	OrgID               string         `json:"org_id"`
+	Title               string         `json:"title"`
+	Description         string         `json:"description"`
+	RequesterUserID     int64          `json:"requester_user_id"`
+	RequesterName       string         `json:"requester_name"`
+	RequesterRole       string         `json:"requester_role"`
+	RequestType         string         `json:"request_type"`
+	Details             map[string]any `json:"details"`
+	Priority            string         `json:"priority"`
+	Status              string         `json:"status"`
+	Progress            int            `json:"progress"`
+	EstimatedCompletion *time.Time     `json:"estimated_completion"`
+	CreatedAt           time.Time      `json:"created_at"`
 }
 
 func toRequestResponse(r repo.Request, requesterName string) requestResponse {
@@ -107,6 +108,7 @@ func toRequestResponse(r repo.Request, requesterName string) requestResponse {
 		RequesterName:       requesterName,
 		RequesterRole:       r.RequesterRole,
 		RequestType:         r.RequestType,
+		Details:             r.Details,
 		Priority:            r.Priority,
 		Status:              r.Status,
 		Progress:            r.Progress,
@@ -180,9 +182,11 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	}
 
 	var body struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Priority    string `json:"priority"`
+		Title       string         `json:"title"`
+		Description string         `json:"description"`
+		Priority    string         `json:"priority"`
+		Category    string         `json:"category"`
+		Details     map[string]any `json:"details"`
 	}
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -190,6 +194,12 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	title, priority, verr := validateRequestInput(body.Title, body.Description, body.Priority)
 	if verr != "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": verr})
+	}
+	// The picked category is a soft hint for the request type; intake may refine
+	// it. An empty/General category leaves it for intake to classify.
+	requestTypeHint := slugify(body.Category)
+	if requestTypeHint == "" || requestTypeHint == "general" {
+		requestTypeHint = "general"
 	}
 
 	ctx := c.Request().Context()
@@ -201,12 +211,18 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 		Description:     body.Description,
 		RequesterUserID: claims.UserID,
 		RequesterRole:   requesterRole,
+		Details:         body.Details,
 		Priority:        priority,
 		Status:          "submitted",
 	})
 	if err != nil {
 		h.logger.Error("create request: insert", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if requestTypeHint != "general" {
+		if err := h.requests.SetRequestType(ctx, reqID, requestTypeHint); err == nil {
+			saved.RequestType = requestTypeHint
+		}
 	}
 
 	// Plan the workflow graph. A deterministic fallback keeps creation
@@ -216,6 +232,7 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 			Title:       title,
 			Description: body.Description,
 			Priority:    priority,
+			Details:     body.Details,
 		},
 		OrgContext: h.intakeOrgContext(ctx, orgID),
 	})

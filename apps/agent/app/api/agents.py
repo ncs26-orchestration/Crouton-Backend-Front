@@ -18,6 +18,7 @@ class IntakeRequestBody(BaseModel):
     title: str
     description: str = ""
     priority: str = "medium"
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class IntakeRequest(BaseModel):
@@ -43,6 +44,7 @@ async def intake(body: IntakeRequest) -> Plan:
         title=body.request.title,
         description=body.request.description,
         priority=body.request.priority,
+        details=body.request.details,
         org_context=body.org_context,
     )
 
@@ -55,6 +57,7 @@ async def run(body: RunRequest) -> Decision:
         title=body.request.title,
         description=body.request.description,
         priority=body.request.priority,
+        details=body.request.details,
         upstream_context=body.upstream_context,
         org_context=body.org_context,
     )

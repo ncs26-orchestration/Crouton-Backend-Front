@@ -188,10 +188,21 @@ def _reaches(start: str, goal: str, adjacency: dict[str, list[str]]) -> bool:
     return False
 
 
+def _details_block(details: dict[str, Any] | None) -> str:
+    """Render structured request fields for the prompt, or an empty string."""
+    if not details:
+        return ""
+    lines = [f"  {k}: {v}" for k, v in details.items() if v not in (None, "")]
+    if not lines:
+        return ""
+    return "\nStructured details:\n" + "\n".join(lines)
+
+
 async def run_intake(
     title: str,
     description: str,
     priority: str,
+    details: dict[str, Any] | None = None,
     org_context: dict[str, Any] | None = None,
 ) -> Plan:
     """Plan a workflow for the given business request.
@@ -204,7 +215,8 @@ async def run_intake(
         extra_text, extra_keys = _additional_catalog(org_context)
         raw = await complete_json(
             _INTAKE_SYSTEM + extra_text,
-            f"Request title: {title}\nDescription: {description}\nPriority: {priority}",
+            f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
+            + _details_block(details),
         )
         plan = _parse_plan(raw, extra_keys)
         if plan is not None:

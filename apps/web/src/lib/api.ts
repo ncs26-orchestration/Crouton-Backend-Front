@@ -525,7 +525,13 @@ export const api = {
 
   createRequest: (
     orgId: string,
-    payload: { title: string; description?: string; priority: RequestPriority },
+    payload: {
+      title: string;
+      description?: string;
+      priority: RequestPriority;
+      category?: string;
+      details?: Record<string, string | number>;
+    },
   ): Promise<{ request: OrgRequest }> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`, {
       method: "POST",
