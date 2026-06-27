@@ -117,7 +117,7 @@ export function ShellRail({ active, onSelect, onBrandClick, onUserClick }: Props
             <BrandMark size={24} />
             {expanded && (
               <span className="text-sm font-semibold text-[var(--color-fg)]" style={{ fontFeatureSettings: '"ss01"' }}>
-                Org OS
+                Crouton
               </span>
             )}
           </button>
