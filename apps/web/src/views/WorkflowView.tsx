@@ -491,6 +491,13 @@ function NodeDetail({
 	// prefer it once loaded and fall back to the graph node before then.
 	const n = tasksQuery.data?.node ?? node;
 	const flags = n.flags ?? [];
+	const keyFactors = n.decision_key_factors ?? [];
+	// "What it reviewed": request details + upstream decisions, only on the detail fetch.
+	const reviewed = tasksQuery.data?.node?.context;
+	const upstream = (reviewed?.upstream ?? []).filter((u) => u.decision_summary || u.decision_outcome);
+	const reviewedDetails = Object.entries(reviewed?.details ?? {}).filter(
+		([, v]) => v !== null && v !== undefined && String(v) !== "",
+	);
 
 	const qc = useQueryClient();
 	const toasts = useToasts();
@@ -692,6 +699,70 @@ function NodeDetail({
           <p className="text-xs text-[var(--color-fg)] leading-relaxed">
             {n.decision_summary || n.status_text}
           </p>
+        </div>
+      )}
+
+      {/* How the agent decided — the step-by-step reasoning + the facts it weighed. */}
+      {(n.decision_reasoning || keyFactors.length > 0) && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-1.5 flex items-center gap-1">
+            <Bot size={11} /> How the agent decided
+          </h4>
+          {n.decision_reasoning && (
+            <p className="text-xs text-[var(--color-fg)] leading-relaxed whitespace-pre-line">
+              {n.decision_reasoning}
+            </p>
+          )}
+          {keyFactors.length > 0 && (
+            <ul className="mt-2 flex flex-col gap-1">
+              {keyFactors.map((f, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs text-[var(--color-fg-label)]">
+                  <span className="mt-1 size-1 rounded-full bg-[var(--color-fg-subtle)] shrink-0" />
+                  <span className="leading-snug">{f}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* What it reviewed — the request details and upstream decisions the agent
+          built on, so the approver has the full brief in one place. */}
+      {(upstream.length > 0 || reviewedDetails.length > 0) && (
+        <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--color-fg-muted)] mb-2">
+            What it reviewed
+          </h4>
+          {reviewedDetails.length > 0 && (
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1 mb-3">
+              {reviewedDetails.map(([k, v]) => (
+                <div key={k} className="min-w-0">
+                  <dt className="text-[10px] text-[var(--color-fg-subtle)] truncate">{detailLabel(k)}</dt>
+                  <dd className="text-xs text-[var(--color-fg)] truncate">{String(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {upstream.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] text-[var(--color-fg-subtle)]">Upstream decisions</p>
+              {upstream.map((u) => (
+                <div key={u.node_id} className="rounded-md border border-[var(--color-border)] p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-[var(--color-fg)] truncate">{u.department}</span>
+                    {isNotableOutcome(u.decision_outcome || undefined) && u.decision_outcome && (
+                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${decisionOutcomeBadgeClass(u.decision_outcome)}`}>
+                        {decisionOutcomeLabel(u.decision_outcome)}
+                      </span>
+                    )}
+                  </div>
+                  {u.decision_summary && (
+                    <p className="text-[11px] text-[var(--color-fg-muted)] leading-snug mt-0.5">{u.decision_summary}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
