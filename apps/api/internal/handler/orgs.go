@@ -309,10 +309,22 @@ func (h *OrgsHandler) CreateTeam(c echo.Context) error {
 	}
 
 	teamID := fmt.Sprintf("team_%s", randomHex(8))
+	agentType := slugify(body.Name)
 	ctx := c.Request().Context()
 
+	// Create the team and its department agent together so a new department is
+	// immediately a real, runnable agent the intake planner can route to — not
+	// just a label. They go in one transaction so we never leave a team without
+	// its agent.
+	tx, err := h.db.Begin(ctx)
+	if err != nil {
+		h.logger.Error("create team: begin", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var createdAt time.Time
-	err = h.db.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO teams (id, org_id, name, description) VALUES ($1, $2, $3, $4) RETURNING created_at`,
 		teamID, orgID, body.Name, body.Description,
 	).Scan(&createdAt)
@@ -324,11 +336,43 @@ func (h *OrgsHandler) CreateTeam(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
+	// agent_type is unique per org. A custom name could collide with a seeded
+	// type (e.g. "Finance"); append a short suffix so the team still gets its
+	// own agent rather than failing the whole request.
+	capabilities := body.Description
+	if capabilities == "" {
+		capabilities = body.Name + " department review"
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities) VALUES ($1, $2, $3, $4, $5, $6)`,
+		"agent_"+randomHex(8), orgID, teamID, agentType, body.Name+" Agent", capabilities,
+	); err != nil {
+		if isUniqueViolation(err) {
+			agentType = agentType + "_" + randomHex(4)
+			if _, err2 := tx.Exec(ctx,
+				`INSERT INTO agents (id, org_id, team_id, agent_type, name, capabilities) VALUES ($1, $2, $3, $4, $5, $6)`,
+				"agent_"+randomHex(8), orgID, teamID, agentType, body.Name+" Agent", capabilities,
+			); err2 != nil {
+				h.logger.Error("create team: insert agent retry", slog.String("err", err2.Error()))
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			}
+		} else {
+			h.logger.Error("create team: insert agent", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		h.logger.Error("create team: commit", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
 	return c.JSON(http.StatusCreated, map[string]any{
 		"id":          teamID,
 		"org_id":      orgID,
 		"name":        body.Name,
 		"description": body.Description,
+		"agent_type":  agentType,
 		"created_at":  createdAt,
 	})
 }

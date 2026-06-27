@@ -115,6 +115,54 @@ func toRequestResponse(r repo.Request, requesterName string) requestResponse {
 // request, asks the intake agent to plan a department workflow (falling
 // back to a deterministic plan when the agent is unavailable), persists
 // that graph, and moves the request to in_progress.
+// standardAgentTypes are the agent types the intake planner already knows from
+// its built-in catalog. Any other agent in the org is a custom department the
+// org created, which we surface to the planner so it can route to it.
+var standardAgentTypes = map[string]bool{
+	"finance": true, "legal": true, "it": true, "hr": true,
+	"ops": true, "planning": true, "approval": true,
+}
+
+// intakeOrgContext builds the org_context for the intake planner: the custom
+// departments this org has created (beyond the standard catalog), each with a
+// node key the planner may use. Errors are non-fatal — intake just plans from
+// the standard catalog. This is what lets a department created in the app
+// actually take part in a workflow.
+func (h *RequestsHandler) intakeOrgContext(ctx context.Context, orgID string) map[string]any {
+	rows, err := h.pg.Query(ctx, `
+		SELECT a.agent_type, COALESCE(t.name, '') AS department
+		FROM agents a LEFT JOIN teams t ON t.id = a.team_id
+		WHERE a.org_id = $1
+		ORDER BY a.created_at ASC
+	`, orgID)
+	if err != nil {
+		h.logger.Warn("intake org context: query agents", slog.String("err", err.Error()))
+		return map[string]any{}
+	}
+	defer rows.Close()
+
+	var extra []map[string]string
+	for rows.Next() {
+		var agentType, department string
+		if err := rows.Scan(&agentType, &department); err != nil {
+			h.logger.Warn("intake org context: scan", slog.String("err", err.Error()))
+			return map[string]any{}
+		}
+		if standardAgentTypes[agentType] || department == "" {
+			continue
+		}
+		extra = append(extra, map[string]string{
+			"key":        agentType + "_review",
+			"agent_type": agentType,
+			"department": department,
+		})
+	}
+	if len(extra) == 0 {
+		return map[string]any{}
+	}
+	return map[string]any{"additional_departments": extra}
+}
+
 func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	claims := middleware.UserFromCtx(c)
 	if claims == nil {
@@ -163,7 +211,7 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 			Description: body.Description,
 			Priority:    priority,
 		},
-		OrgContext: map[string]any{},
+		OrgContext: h.intakeOrgContext(ctx, orgID),
 	})
 	if err != nil {
 		h.logger.Warn("intake agent unavailable, using default plan", slog.String("err", err.Error()))
