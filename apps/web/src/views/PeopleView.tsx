@@ -131,7 +131,7 @@ function PersonRow({
   const roleHint = ORG_ROLES.find((r) => r.value === member.role)?.hint;
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 overflow-hidden">
       <div className="flex items-start gap-3">
         <Avatar name={member.name || member.email} size={36} />
         <div className="min-w-0 flex-1">
@@ -200,34 +200,36 @@ function PersonRow({
         )}
 
         {isAdmin && availableTeams.length > 0 && (
-          <div className="flex gap-1.5 mt-2.5 flex-wrap">
-            <select
-              value={addTeamId}
-              onChange={(e) => setAddTeamId(e.target.value)}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors"
-            >
-              <option value="">Add to department…</option>
-              {availableTeams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={addRole}
-              onChange={(e) => setAddRole(e.target.value as (typeof TEAM_ROLES)[number])}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors capitalize"
-            >
-              {TEAM_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-col sm:flex-row gap-1.5 mt-2.5">
+            <div className="flex gap-1.5 flex-1 min-w-0">
+              <select
+                value={addTeamId}
+                onChange={(e) => setAddTeamId(e.target.value)}
+                className="flex-1 min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors"
+              >
+                <option value="">Add to department…</option>
+                {availableTeams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={addRole}
+                onChange={(e) => setAddRole(e.target.value as (typeof TEAM_ROLES)[number])}
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors capitalize"
+              >
+                {TEAM_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               disabled={!addTeamId || addMut.isPending}
               onClick={() => addTeamId && addMut.mutate({ teamId: addTeamId, role: addRole })}
-              className="flex items-center gap-1 rounded-lg bg-[var(--color-brand)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-40 transition-colors"
+              className="flex items-center justify-center gap-1 rounded-lg bg-[var(--color-brand)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-40 transition-colors"
             >
               {addMut.isPending ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
               Add
