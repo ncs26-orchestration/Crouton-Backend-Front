@@ -16,14 +16,14 @@ export function SettingsView() {
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)] overflow-auto nice-scroll">
-      <div className="border-b border-[var(--color-border)] px-8 py-5">
+      <div className="border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5">
         <h1 className="text-xl font-medium" style={{ fontFeatureSettings: '"ss01"' }}>
           Settings
         </h1>
         <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">Your profile, organization, and preferences</p>
       </div>
 
-      <div className="px-8 py-6 w-full grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="px-4 md:px-8 py-4 md:py-6 w-full grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Profile */}
         <Card icon={User} title="Profile">
           <div className="flex items-center gap-3 mb-4">

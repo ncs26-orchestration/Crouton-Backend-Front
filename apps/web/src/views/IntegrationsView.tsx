@@ -75,7 +75,7 @@ const INTEGRATIONS: Integration[] = [
 export function IntegrationsView() {
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)] overflow-auto nice-scroll">
-      <div className="border-b border-[var(--color-border)] px-8 py-5">
+      <div className="border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5">
         <h1 className="text-xl font-medium" style={{ fontFeatureSettings: '"ss01"' }}>
           Integrations
         </h1>
@@ -84,7 +84,7 @@ export function IntegrationsView() {
         </p>
       </div>
 
-      <div className="px-8 py-6 w-full">
+      <div className="px-4 md:px-8 py-4 md:py-6 w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
           {INTEGRATIONS.map((it) => (
             <IntegrationCard key={it.name} integration={it} />
