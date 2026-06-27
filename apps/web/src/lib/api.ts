@@ -25,6 +25,8 @@ import type {
 	WorkflowDef,
 	WorkflowInput,
 	WorkflowRunSummary,
+	WorkflowStep,
+	WorkflowStepEdge,
 	PolicyRule,
 	Project,
 	NodeDetailResponse,
@@ -632,6 +634,16 @@ export const api = {
 
 	launchRequest: (requestId: string): Promise<{ request: OrgRequest }> =>
 		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/launch`, { method: "POST" }),
+
+	// Replace a draft's steps (the "edit the plan" path).
+	updateRequestGraph: (
+		requestId: string,
+		payload: { nodes: WorkflowStep[]; edges: WorkflowStepEdge[] },
+	): Promise<{ status: string }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/graph`, {
+			method: "PUT",
+			body: JSON.stringify(payload),
+		}),
 
 	verifyNode: (
 		requestId: string,

@@ -22,6 +22,7 @@ import {
   Clock,
   Loader2,
   Maximize2,
+  Pencil,
   Play,
   Plus,
   RotateCcw,
@@ -50,11 +51,13 @@ import {
 import { detailLabel } from "../lib/request-templates";
 import { useRequestStream } from "../lib/sse";
 import { useAuth } from "../contexts/AuthContext";
+import { useOrg } from "../contexts/OrgContext";
 import { useToasts } from "../components/Toasts";
 import { Avatar } from "../components/Avatar";
 import { NodeChat } from "../components/NodeChat";
 import { DepartmentNode } from "../components/DepartmentNode";
-import type { AuditEvent, NodeAssignment, OrgRequest, WorkflowNodeData } from "../lib/types";
+import { PlanEditor, linearEdges } from "../components/PlanEditor";
+import type { AuditEvent, NodeAssignment, OrgRequest, WorkflowNodeData, WorkflowStep } from "../lib/types";
 
 const nodeTypes: NodeTypes = {
   department: DepartmentNode,
@@ -114,6 +117,9 @@ function WorkflowCanvas({
 
   const qc = useQueryClient();
   const toasts = useToasts();
+  const { user } = useAuth();
+  const { activeOrg } = useOrg();
+  const [editingSteps, setEditingSteps] = useState(false);
   const launch = useMutation({
     mutationFn: () => api.launchRequest(requestId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["request", requestId] }),
@@ -230,6 +236,10 @@ function WorkflowCanvas({
   }
 
   const req = data.request;
+  // The requester or an admin/executor may edit a draft's steps before launch.
+  const canEditPlan =
+    req.status === "draft" &&
+    (req.requester_user_id === user?.id || activeOrg?.role === "admin" || activeOrg?.role === "executor");
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -309,9 +319,17 @@ function WorkflowCanvas({
           <div className="px-4 pb-3">
             <div className="rounded-md border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3">
               <p className="text-[11px] text-[var(--color-fg-muted)] leading-snug mb-2">
-                This request is a draft. Click a step to assign a verifier who must sign off on the
-                agent's work, then launch. Unassigned steps run automatically.
+                This request is a draft. Edit the steps if needed, click a step to assign a verifier
+                who must sign off on the agent's work, then launch. Unassigned steps run automatically.
               </p>
+              {canEditPlan && (
+                <button
+                  onClick={() => setEditingSteps(true)}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-medium text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] mb-2"
+                >
+                  <Pencil size={13} /> Edit steps
+                </button>
+              )}
               <button
                 onClick={() => launch.mutate()}
                 disabled={launch.isPending}
@@ -455,6 +473,79 @@ function WorkflowCanvas({
             </p>
           </div>
         )}
+      </div>
+
+      {editingSteps && (
+        <DraftStepsEditor
+          requestId={requestId}
+          orgId={req.org_id}
+          initialNodes={data.nodes}
+          onClose={() => setEditingSteps(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// DraftStepsEditor lets the requester/admin reshape a draft's steps before
+// launch. Steps are a linear sequence; saving replaces the draft's graph.
+function DraftStepsEditor({
+  requestId,
+  orgId,
+  initialNodes,
+  onClose,
+}: {
+  requestId: string;
+  orgId: string;
+  initialNodes: WorkflowNodeData[];
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const toasts = useToasts();
+  const [steps, setSteps] = useState<WorkflowStep[]>(
+    initialNodes.map((n) => ({
+      key: n.key || n.id,
+      name: n.name,
+      agent_type: n.agent_type,
+      department: n.department,
+    })),
+  );
+  const agentsQ = useQuery({ queryKey: ["agents", orgId], queryFn: () => api.listAgents(orgId).then((r) => r.agents) });
+
+  const save = useMutation({
+    mutationFn: () => api.updateRequestGraph(requestId, { nodes: steps, edges: linearEdges(steps) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["request", requestId] });
+      onClose();
+    },
+    onError: (e: Error) => toasts.push({ kind: "error", title: e.message }),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-[var(--color-surface)] rounded-xl shadow-stripe-elevated w-full max-w-lg max-h-[88vh] overflow-auto border border-[var(--color-border)]">
+        <div className="sticky top-0 bg-[var(--color-surface)] flex items-center justify-between px-5 py-3.5 border-b border-[var(--color-border)]">
+          <h2 className="text-base font-medium text-[var(--color-fg)]">Edit steps</h2>
+          <button onClick={onClose} className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"><X size={18} /></button>
+        </div>
+        <div className="p-5">
+          <p className="text-xs text-[var(--color-fg-muted)] mb-3">
+            Steps run top to bottom. Adding, removing, or reordering sets a straight-through sequence.
+          </p>
+          <PlanEditor steps={steps} agents={agentsQ.data ?? []} onChange={setSteps} />
+        </div>
+        <div className="sticky bottom-0 bg-[var(--color-surface)] flex justify-end gap-2 px-5 py-3.5 border-t border-[var(--color-border)]">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm rounded-lg text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]">Cancel</button>
+          <button
+            onClick={() => save.mutate()}
+            disabled={steps.length === 0 || save.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] disabled:opacity-40"
+          >
+            {save.isPending && <Loader2 size={13} className="animate-spin" />}
+            Save steps
+          </button>
+        </div>
       </div>
     </div>
   );
