@@ -98,11 +98,17 @@ type requestResponse struct {
 	Priority            string         `json:"priority"`
 	Status              string         `json:"status"`
 	Progress            int            `json:"progress"`
+	Kind                string         `json:"kind"`
+	WorkflowID          *string        `json:"workflow_id"`
 	EstimatedCompletion *time.Time     `json:"estimated_completion"`
 	CreatedAt           time.Time      `json:"created_at"`
 }
 
 func toRequestResponse(r repo.Request, requesterName string) requestResponse {
+	kind := r.Kind
+	if kind == "" {
+		kind = "request"
+	}
 	return requestResponse{
 		ID:                  r.ID,
 		OrgID:               r.OrgID,
@@ -116,6 +122,8 @@ func toRequestResponse(r repo.Request, requesterName string) requestResponse {
 		Priority:            r.Priority,
 		Status:              r.Status,
 		Progress:            r.Progress,
+		Kind:                kind,
+		WorkflowID:          r.WorkflowID,
 		EstimatedCompletion: r.EstimatedCompletion,
 		CreatedAt:           r.CreatedAt,
 	}
@@ -171,6 +179,48 @@ func (h *RequestsHandler) intakeOrgContext(ctx context.Context, orgID string) ma
 		return map[string]any{}
 	}
 	return map[string]any{"additional_departments": extra}
+}
+
+// buildGraph turns a planned node/edge list into the repo rows for one
+// execution, mapping stage keys to generated node IDs and dropping edges that
+// reference an unknown key. Shared by request creation and workflow runs so every
+// graph materializes the same way.
+func buildGraph(logger *slog.Logger, reqID string, planNodes []agentclient.PlanNode, planEdges []agentclient.PlanEdge) ([]repo.WorkflowNode, []repo.WorkflowEdge) {
+	keyToNodeID := make(map[string]string, len(planNodes))
+	nodes := make([]repo.WorkflowNode, 0, len(planNodes))
+	for _, pn := range planNodes {
+		nodeID := fmt.Sprintf("wn_%s", randomHex(8))
+		keyToNodeID[pn.Key] = nodeID
+		nodes = append(nodes, repo.WorkflowNode{
+			ID:         nodeID,
+			RequestID:  reqID,
+			Key:        pn.Key,
+			Name:       pn.Name,
+			AgentType:  pn.AgentType,
+			Department: pn.Department,
+			Status:     "pending",
+		})
+	}
+	edges := make([]repo.WorkflowEdge, 0, len(planEdges))
+	for _, pe := range planEdges {
+		srcID, ok1 := keyToNodeID[pe.From]
+		tgtID, ok2 := keyToNodeID[pe.To]
+		if !ok1 || !ok2 {
+			if logger != nil {
+				logger.Warn("build graph: dropping edge with unknown node key",
+					slog.String("request_id", reqID), slog.String("from", pe.From), slog.String("to", pe.To))
+			}
+			continue
+		}
+		edges = append(edges, repo.WorkflowEdge{
+			ID:           fmt.Sprintf("we_%s", randomHex(8)),
+			RequestID:    reqID,
+			SourceNodeID: srcID,
+			TargetNodeID: tgtID,
+			EdgeType:     pe.EdgeType,
+		})
+	}
+	return nodes, edges
 }
 
 func (h *RequestsHandler) CreateRequest(c echo.Context) error {
@@ -252,41 +302,7 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 		}
 	}
 
-	keyToNodeID := make(map[string]string, len(plan.Nodes))
-	nodes := make([]repo.WorkflowNode, 0, len(plan.Nodes))
-	for _, pn := range plan.Nodes {
-		nodeID := fmt.Sprintf("wn_%s", randomHex(8))
-		keyToNodeID[pn.Key] = nodeID
-		nodes = append(nodes, repo.WorkflowNode{
-			ID:         nodeID,
-			RequestID:  reqID,
-			Key:        pn.Key,
-			Name:       pn.Name,
-			AgentType:  pn.AgentType,
-			Department: pn.Department,
-			Status:     "pending",
-		})
-	}
-
-	edges := make([]repo.WorkflowEdge, 0, len(plan.Edges))
-	for _, pe := range plan.Edges {
-		srcID, ok1 := keyToNodeID[pe.From]
-		tgtID, ok2 := keyToNodeID[pe.To]
-		if !ok1 || !ok2 {
-			// The planner referenced a stage key with no node. Skip the
-			// edge but log it — a dangling key means a malformed plan.
-			h.logger.Warn("create request: dropping edge with unknown node key",
-				slog.String("request_id", reqID), slog.String("from", pe.From), slog.String("to", pe.To))
-			continue
-		}
-		edges = append(edges, repo.WorkflowEdge{
-			ID:           fmt.Sprintf("we_%s", randomHex(8)),
-			RequestID:    reqID,
-			SourceNodeID: srcID,
-			TargetNodeID: tgtID,
-			EdgeType:     pe.EdgeType,
-		})
-	}
+	nodes, edges := buildGraph(h.logger, reqID, plan.Nodes, plan.Edges)
 
 	// Persist the graph and advance the request in one transaction so the
 	// request never ends up with a half-written graph.
