@@ -15,6 +15,7 @@ import {
   Settings,
   Sun,
   Users,
+  UserCog,
   Workflow,
   Wrench,
 } from "lucide-react";
@@ -37,6 +38,7 @@ export type ShellSection =
   | "policies"
   | "integrations"
   | "teams"
+  | "people"
   | "settings"
   | "help";
 
@@ -67,6 +69,7 @@ const PRIMARY: Item[] = [
   { id: "policies", icon: ScrollText, label: "Policies", hint: "Department rules" },
   { id: "integrations", icon: Link2, label: "Integrations", hint: "Connected systems" },
   { id: "teams", icon: Users, label: "Teams", hint: "Departments", dividerBefore: true },
+  { id: "people", icon: UserCog, label: "People", hint: "Roles & access" },
 ];
 
 const UTILITY: Item[] = [

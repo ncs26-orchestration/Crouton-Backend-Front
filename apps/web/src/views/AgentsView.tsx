@@ -39,7 +39,10 @@ interface DepartmentGroup {
   agents: AgentRosterEntry[];
 }
 
-export function AgentsView({ orgId }: { orgId: string }) {
+export function AgentsView({ orgId, role }: { orgId: string; role: string }) {
+  // The server scopes the roster: an admin gets every agent, everyone else only
+  // their own departments (plus org-wide agents). Reflect that in the subtitle.
+  const scopedToDepartment = role !== "admin";
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["agents", orgId],
     queryFn: () => api.listAgents(orgId),
@@ -62,7 +65,9 @@ export function AgentsView({ orgId }: { orgId: string }) {
             Agents
           </h1>
           <p className="text-sm text-[var(--color-fg-muted)] mt-0.5">
-            The department agents that staff the organization.
+            {scopedToDepartment
+              ? "The agents that staff your departments."
+              : "The department agents that staff the organization."}
           </p>
         </div>
         {agents.length > 0 && (
@@ -87,7 +92,9 @@ export function AgentsView({ orgId }: { orgId: string }) {
           </p>
         ) : groups.length === 0 ? (
           <p className="text-sm text-[var(--color-fg-muted)]">
-            No agents yet. The roster is seeded when the organization is created.
+            {scopedToDepartment
+              ? "No agents in your departments yet. Ask an admin to add you to a team."
+              : "No agents yet. The roster is seeded when the organization is created."}
           </p>
         ) : (
           <div className="flex flex-col gap-7">
