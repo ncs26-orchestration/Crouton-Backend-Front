@@ -330,16 +330,19 @@ body {
 
 /* --- Print --- when a report is open, print only that report.
  *
- * Everything is hidden with visibility (not display) so the report can stay
- * mounted inside its modal overlay while only the printable container —
- * marked data-print-root — is revealed. visibility:hidden on an ancestor
+ * Hide everything with visibility (not display) so the report can stay
+ * mounted inside its modal overlay while only the printable container,
+ * marked data-print-root, is revealed. visibility:hidden on an ancestor
  * still lets a visibility:visible descendant render; display:none would not,
  * which is why the overlay must NOT be display:none'd here.
  *
- * The app shell is h-screen/overflow-hidden and the modal overlay is a fixed,
- * scrollable box. Left as-is that clips the report to a single (often blank)
- * page. So in print we let the document flow normally and drop the overlay's
- * fixed positioning, letting long reports paginate across pages. */
+ * The hidden page content still occupies layout, and the app shell is
+ * h-screen/overflow-hidden, so an in-flow report gets pushed down and clipped
+ * to one (often blank) page. So the report is positioned absolute at the top
+ * of the page with auto height, and the overlay is made static so it is not
+ * the report's containing block. With no positioned ancestor the report's
+ * containing block is the page itself, so it escapes the overflow-hidden
+ * shell and paginates across pages. */
 @media print {
   html,
   body,
@@ -362,7 +365,9 @@ body {
     background: none !important;
   }
   [data-print-root] {
-    position: static !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
     width: 100% !important;
     max-width: none !important;
     max-height: none !important;
