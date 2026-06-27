@@ -77,9 +77,12 @@ business request into a department workflow graph.
 
 Return ONLY a JSON object of this shape:
 {
+  "request_type": "hiring | procurement | policy_change | budget | infra | general",
   "nodes": [{"key": str, "name": str, "agent_type": str, "department": str}],
   "edges": [{"from": str, "to": str, "type": "sequence"}]
 }
+
+Set request_type to the category that best fits the request.
 
 Choose node "key" values ONLY from this fixed set (omit stages the request does \
 not need, but keep the flow sensible):

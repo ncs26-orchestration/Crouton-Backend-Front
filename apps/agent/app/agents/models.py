@@ -25,6 +25,10 @@ class PlanEdge(BaseModel):
 class Plan(BaseModel):
     """The intake agent's output: a workflow graph for a business request."""
 
+    request_type: str = Field(
+        default="general",
+        description="Classification: hiring, procurement, policy_change, budget, infra, general",
+    )
     nodes: list[PlanNode] = Field(description="Workflow stages")
     edges: list[PlanEdge] = Field(description="Connections between stages")
 

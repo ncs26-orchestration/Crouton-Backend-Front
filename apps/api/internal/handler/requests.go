@@ -88,6 +88,8 @@ type requestResponse struct {
 	Description         string     `json:"description"`
 	RequesterUserID     int64      `json:"requester_user_id"`
 	RequesterName       string     `json:"requester_name"`
+	RequesterRole       string     `json:"requester_role"`
+	RequestType         string     `json:"request_type"`
 	Priority            string     `json:"priority"`
 	Status              string     `json:"status"`
 	Progress            int        `json:"progress"`
@@ -103,6 +105,8 @@ func toRequestResponse(r repo.Request, requesterName string) requestResponse {
 		Description:         r.Description,
 		RequesterUserID:     r.RequesterUserID,
 		RequesterName:       requesterName,
+		RequesterRole:       r.RequesterRole,
+		RequestType:         r.RequestType,
 		Priority:            r.Priority,
 		Status:              r.Status,
 		Progress:            r.Progress,
@@ -170,7 +174,8 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	}
 	orgID := c.Param("orgId")
 
-	if _, err := requireOrgMember(c, h.pg, orgID, claims.UserID); err != nil {
+	requesterRole, err := requireOrgMember(c, h.pg, orgID, claims.UserID)
+	if err != nil {
 		return handleOrgMemberErr(c, err)
 	}
 
@@ -195,6 +200,7 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 		Title:           title,
 		Description:     body.Description,
 		RequesterUserID: claims.UserID,
+		RequesterRole:   requesterRole,
 		Priority:        priority,
 		Status:          "submitted",
 	})
@@ -216,6 +222,13 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	if err != nil {
 		h.logger.Warn("intake agent unavailable, using default plan", slog.String("err", err.Error()))
 		plan = agentclient.DefaultPlan()
+	}
+	if plan.RequestType != "" {
+		if err := h.requests.SetRequestType(ctx, reqID, plan.RequestType); err != nil {
+			h.logger.Warn("create request: set request_type", slog.String("err", err.Error()))
+		} else {
+			saved.RequestType = plan.RequestType
+		}
 	}
 
 	keyToNodeID := make(map[string]string, len(plan.Nodes))
