@@ -78,7 +78,9 @@ var teams = []teamSpec{
 type graphProfile struct {
 	completed  []string
 	inProgress map[string]string
-	blocked    map[string]string // key → reason for the blocked dependency (F5)
+	blocked    map[string]string   // key → reason for the blocked dependency (F5)
+	outcomes   map[string]string   // key → decision_outcome override (else derived from status)
+	flags      map[string][]string // key → "severity: message" flags an agent raised
 }
 
 // requestSpec is one seeded request and the shape of its workflow graph.
@@ -88,6 +90,7 @@ type requestSpec struct {
 	description string
 	priority    string
 	status      string
+	requestType string // intake classification (hiring, procurement, ...)
 	progress    int
 	requester   string // email
 	ageDays     int    // how long ago it was submitted
@@ -102,6 +105,7 @@ var requests = []requestSpec{
 		description: "Expand into the EU market with a 30-person satellite office in Berlin by Q4.",
 		priority:    "high",
 		status:      "in_progress",
+		requestType: "expansion",
 		progress:    35,
 		requester:   "founder@acme.test",
 		ageDays:     6,
@@ -123,6 +127,7 @@ var requests = []requestSpec{
 		description: "Refresh the engineering fleet with 50 new laptops ahead of the Q3 hiring wave.",
 		priority:    "medium",
 		status:      "awaiting_approval",
+		requestType: "procurement",
 		progress:    55,
 		requester:   "it.lead@acme.test",
 		ageDays:     9,
@@ -132,6 +137,12 @@ var requests = []requestSpec{
 			inProgress: map[string]string{
 				"exec_approval": "Awaiting CFO sign-off on the $92k spend",
 			},
+			outcomes: map[string]string{
+				"finance_review": "approve_with_conditions",
+			},
+			flags: map[string][]string{
+				"finance_review": {"warning: $92k exceeds the $50k single-PO limit in Finance Policy; CFO sign-off required."},
+			},
 		},
 	},
 	{
@@ -140,6 +151,7 @@ var requests = []requestSpec{
 		description: "Bring on 12 contractors for the Q3 delivery push, fully provisioned and compliant.",
 		priority:    "medium",
 		status:      "completed",
+		requestType: "hiring",
 		progress:    100,
 		requester:   "hr.lead@acme.test",
 		ageDays:     21,
@@ -149,6 +161,12 @@ var requests = []requestSpec{
 				"intake", "planning", "finance_review", "legal_review", "it_assessment",
 				"exec_approval", "hr_planning", "ops_planning", "implementation", "report",
 			},
+			outcomes: map[string]string{
+				"legal_review": "approve_with_conditions",
+			},
+			flags: map[string][]string{
+				"legal_review": {"info: Contractor agreements use the standard NDA template; IP assignment confirmed."},
+			},
 		},
 	},
 	{
@@ -157,6 +175,7 @@ var requests = []requestSpec{
 		description: "Move off the legacy CRM to a new vendor with zero data loss and minimal downtime.",
 		priority:    "urgent",
 		status:      "in_progress",
+		requestType: "infra",
 		progress:    15,
 		requester:   "coo@acme.test",
 		ageDays:     2,
@@ -169,11 +188,36 @@ var requests = []requestSpec{
 		},
 	},
 	{
+		id:          "req_seed_offshore",
+		title:       "Stand up an offshore data center",
+		description: "Host EU customer data in a new low-cost region to cut infrastructure spend.",
+		priority:    "high",
+		status:      "rejected",
+		requestType: "infra",
+		progress:    45,
+		requester:   "coo@acme.test",
+		ageDays:     4,
+		etaDays:     0,
+		profile: graphProfile{
+			completed: []string{"intake", "planning", "it_assessment", "legal_review"},
+			outcomes: map[string]string{
+				"legal_review": "reject",
+			},
+			flags: map[string][]string{
+				"it_assessment": {"warning: Region lacks our standard encryption-at-rest tier."},
+				"legal_review": {
+					"critical: Hosting EU customer data outside the EU violates GDPR data residency (Legal Policy).",
+				},
+			},
+		},
+	},
+	{
 		id:          "req_seed_policy",
 		title:       "Update remote-work policy",
 		description: "Refresh the remote-work policy to cover hybrid schedules and home-office stipends.",
 		priority:    "low",
 		status:      "submitted",
+		requestType: "policy_change",
 		progress:    0,
 		requester:   "hr.lead@acme.test",
 		ageDays:     0,
@@ -459,6 +503,7 @@ func buildGraph(r requestSpec, plan *agentclient.Plan, now time.Time) ([]repo.Wo
 			n.Status = "completed"
 			n.ProgressPercent = 100
 			n.StatusText = pn.Name + " complete"
+			n.DecisionOutcome = "approve"
 			st, ct := started, completed
 			n.StartedAt, n.CompletedAt = &st, &ct
 		case r.profile.inProgress[pn.Key] != "":
@@ -471,8 +516,14 @@ func buildGraph(r requestSpec, plan *agentclient.Plan, now time.Time) ([]repo.Wo
 			n.Status = "blocked"
 			n.ProgressPercent = 50
 			n.StatusText = "Waiting for IT: " + r.profile.blocked[pn.Key]
+			n.DecisionOutcome = "block"
 			st := started
 			n.StartedAt = &st
+		}
+		// An explicit profile outcome wins (e.g. a flag or a rejection on a
+		// completed node) so the demo shows the full range of decisions.
+		if o := r.profile.outcomes[pn.Key]; o != "" {
+			n.DecisionOutcome = o
 		}
 		nodes = append(nodes, n)
 	}
@@ -555,21 +606,29 @@ func insertRequestGraph(
 	}
 	createdAt := now.AddDate(0, 0, -r.ageDays)
 
+	requestType := r.requestType
+	if requestType == "" {
+		requestType = "general"
+	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO requests
-			(id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, r.id, demoOrgID, r.title, r.description, requesterID, r.priority, r.status, r.progress, eta, createdAt); err != nil {
+			(id, org_id, title, description, requester_user_id, request_type, priority, status, progress, estimated_completion, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, r.id, demoOrgID, r.title, r.description, requesterID, requestType, r.priority, r.status, r.progress, eta, createdAt); err != nil {
 		return fmt.Errorf("insert request: %w", err)
 	}
 
 	batch := &pgx.Batch{}
 	for _, n := range nodes {
+		outcome := n.DecisionOutcome
+		if outcome == "" {
+			outcome = "pending"
+		}
 		batch.Queue(`
 			INSERT INTO workflow_nodes
-				(id, request_id, key, name, agent_type, department, status, description, progress_percent, status_text, started_at, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description, n.ProgressPercent, n.StatusText, n.StartedAt, n.CompletedAt)
+				(id, request_id, key, name, agent_type, department, status, description, progress_percent, status_text, decision_outcome, started_at, completed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		`, n.ID, n.RequestID, n.Key, n.Name, n.AgentType, n.Department, n.Status, n.Description, n.ProgressPercent, n.StatusText, outcome, n.StartedAt, n.CompletedAt)
 	}
 	for _, e := range edges {
 		batch.Queue(`
@@ -766,8 +825,32 @@ func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64
 			}
 			count++
 
+			completedAt := submitted.Add(4 * time.Hour)
+
+			// Flags an agent raised, so the risk is traceable and visible at the gate.
+			for _, f := range r.profile.flags[n.Key] {
+				if _, err := pool.Exec(ctx, `
+					INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)
+				`, "aev_"+shortID(), r.id, &n.ID, n.Name, "node.flagged", f, completedAt); err != nil {
+					return 0, fmt.Errorf("insert audit node.flagged for %s: %w", n.ID, err)
+				}
+				count++
+			}
+
 			if n.Status == "completed" {
-				completedAt := submitted.Add(4 * time.Hour)
+				// A rejecting department records agent.rejected instead of completing clean.
+				if r.profile.outcomes[n.Key] == "reject" {
+					if _, err := pool.Exec(ctx, `
+						INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
+						VALUES ($1, $2, $3, $4, $5, $6, $7)
+					`, "aev_"+shortID(), r.id, &n.ID, n.Name, "agent.rejected",
+						n.Name+" rejected the request", completedAt); err != nil {
+						return 0, fmt.Errorf("insert audit agent.rejected for %s: %w", n.ID, err)
+					}
+					count++
+					continue
+				}
 				if _, err := pool.Exec(ctx, `
 					INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
 					VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -780,7 +863,7 @@ func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64
 		}
 
 		// request status events
-		if r.status == "completed" || r.status == "in_progress" {
+		if r.status == "completed" || r.status == "in_progress" || r.status == "rejected" {
 			if _, err := pool.Exec(ctx, `
 				INSERT INTO audit_events (id, request_id, node_id, actor, action, reason, created_at)
 				VALUES ($1, $2, NULL, $3, $4, $5, $6)
