@@ -429,6 +429,7 @@ export interface ReportStage {
   status: string;
   status_text: string;
   decision_outcome?: DecisionOutcome;
+  decision_summary?: string;
   started_at: string | null;
   completed_at: string | null;
   duration_seconds: number;
