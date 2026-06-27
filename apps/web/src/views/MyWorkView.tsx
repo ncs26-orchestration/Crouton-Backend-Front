@@ -48,7 +48,7 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
     <div className="flex-1 flex flex-col overflow-hidden">
       <PageHeader title="My Work" subtitle="Approvals, work in flight, and recent decisions" />
 
-      <div className="flex-1 overflow-auto px-8 py-6">
+      <div className="flex-1 overflow-auto px-4 md:px-8 py-4 md:py-6">
         {isLoading && (
           <div className="flex items-center justify-center h-40">
             <div className="size-6 rounded-full border-2 border-[var(--color-brand)] border-t-transparent animate-spin" />
@@ -65,7 +65,7 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
         {!isLoading && !error && (
           <div className="flex flex-col gap-8 w-full">
             {/* Summary */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <StatCard icon={ShieldCheck} label="Pending approvals" value={pending.length} tone={pending.length ? "warning" : "neutral"} />
               <StatCard icon={Loader2} label="In progress" value={active.length} tone="brand" />
               <StatCard icon={CheckCircle2} label="Recently decided" value={decided.length} tone="success" />
