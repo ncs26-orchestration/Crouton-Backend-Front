@@ -89,6 +89,8 @@ type Store interface {
 	CreateDocument(ctx context.Context, d *repo.Document) error
 	// Policies an agent checks a request against (F10).
 	ListPoliciesByOrg(ctx context.Context, orgID string) ([]repo.DepartmentPolicy, error)
+	// Human-in-the-loop: how many verifiers are assigned to a node.
+	CountAssignmentsByNode(ctx context.Context, nodeID string) (int, error)
 }
 
 // Engine advances requests on background goroutines.
@@ -404,6 +406,73 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 	}
 }
 
+// ErrNodeNotAwaitingReview means the node isn't paused for human verification.
+var ErrNodeNotAwaitingReview = errors.New("node is not awaiting review")
+
+// VerifyNode records a human's sign-off on a node parked at awaiting_review.
+// On approve it completes the node so the worker (relaunched by the caller via
+// Start) advances the branch; on reject it stops the request. RBAC is enforced
+// by the caller; verifierName is recorded in the audit trail.
+func (e *Engine) VerifyNode(ctx context.Context, requestID, nodeID string, decision ApprovalDecision, note, verifierName string) error {
+	nodes, err := e.store.ListNodesByRequest(ctx, requestID)
+	if err != nil {
+		return fmt.Errorf("list nodes: %w", err)
+	}
+	var node *repo.WorkflowNode
+	for i := range nodes {
+		if nodes[i].ID == nodeID {
+			n := nodes[i]
+			node = &n
+			break
+		}
+	}
+	if node == nil {
+		return repo.ErrNotFound
+	}
+	if node.Status != "awaiting_review" {
+		return ErrNodeNotAwaitingReview
+	}
+	req, err := e.store.GetRequest(ctx, requestID)
+	if err != nil {
+		return fmt.Errorf("get request: %w", err)
+	}
+
+	switch decision {
+	case ApprovalApprove:
+		statusText := node.Name + " verified by " + verifierName + "."
+		if err := e.store.UpdateNodeStatus(ctx, nodeID, "completed", statusText, 100); err != nil {
+			return fmt.Errorf("complete verified node: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID: "aev_" + shortID(), RequestID: requestID, NodeID: &nodeID,
+			Actor: verifierName, Action: "node.verified", Reason: note,
+		}); err != nil {
+			e.log.Warn("failed to audit node.verified", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+		}
+		e.publishNodeEvent(requestID, "completed", nodeID, node.Key, 100, statusText, time.Now())
+		return nil
+	case ApprovalReject:
+		statusText := node.Name + " sent back by " + verifierName + "."
+		if err := e.store.UpdateNodeStatus(ctx, nodeID, "completed", statusText, 100); err != nil {
+			return fmt.Errorf("close rejected node: %w", err)
+		}
+		if err := e.store.UpdateRequestProgress(ctx, requestID, "rejected", req.Progress); err != nil {
+			return fmt.Errorf("reject request: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID: "aev_" + shortID(), RequestID: requestID, NodeID: &nodeID,
+			Actor: verifierName, Action: "node.rejected", Reason: note,
+		}); err != nil {
+			e.log.Warn("failed to audit node.rejected", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+		}
+		e.publishNodeEvent(requestID, "completed", nodeID, node.Key, 100, statusText, time.Now())
+		e.publishRequestEvent(requestID, "rejected", req.Progress)
+		return nil
+	default:
+		return fmt.Errorf("invalid verify decision %q", decision)
+	}
+}
+
 // runNode marks a node in_progress, runs its agent (falling back to a
 // deterministic decision on error so it never stalls), persists the tasks, and
 // marks the node completed (or blocked if the agent declared a dependency, F5)
@@ -583,6 +652,31 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		e.log.Info("orchestrator: request rejected by agent",
 			slog.String("request_id", req.ID), slog.String("department", node.Department))
 		return false, errRequestRejected
+	}
+
+	// Human-in-the-loop: if a verifier is assigned to this node, pause for their
+	// sign-off instead of completing. The agent's decision is already persisted
+	// above; a human resumes the flow via VerifyNode. Nodes with no assignee
+	// auto-complete as before.
+	if assignees, aerr := e.store.CountAssignmentsByNode(ctx, node.ID); aerr != nil {
+		e.log.Warn("failed to count assignments", slog.String("node_id", node.ID), slog.String("err", aerr.Error()))
+	} else if assignees > 0 {
+		reviewText := node.Name + " complete — awaiting verification."
+		if err := e.store.UpdateNodeStatus(ctx, node.ID, "awaiting_review", reviewText, 90); err != nil {
+			return false, fmt.Errorf("mark awaiting_review: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID:        "aev_" + shortID(),
+			RequestID: req.ID,
+			NodeID:    &node.ID,
+			Actor:     node.Department,
+			Action:    "node.awaiting_review",
+			Reason:    reviewText,
+		}); err != nil {
+			e.log.Warn("failed to audit node.awaiting_review", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+		}
+		e.publishNodeEvent(req.ID, "awaiting_review", node.ID, node.Key, 90, reviewText, now)
+		return false, nil
 	}
 
 	if err := e.store.UpdateNodeStatus(ctx, node.ID, "completed", statusText, 100); err != nil {

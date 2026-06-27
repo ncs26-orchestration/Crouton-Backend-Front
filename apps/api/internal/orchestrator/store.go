@@ -15,11 +15,12 @@ type dbStore struct {
 	dependencies *repo.DependencyRepo
 	documents    *repo.DocumentRepo
 	policies     *repo.PolicyRepo
+	assignments  *repo.AssignmentRepo
 }
 
 // NewDBStore adapts the concrete repos to the engine's Store interface.
-func NewDBStore(requests *repo.RequestRepo, workflow *repo.WorkflowRepo, audit *repo.AuditRepo, dependencies *repo.DependencyRepo, documents *repo.DocumentRepo, policies *repo.PolicyRepo) Store {
-	return &dbStore{requests: requests, workflow: workflow, audit: audit, dependencies: dependencies, documents: documents, policies: policies}
+func NewDBStore(requests *repo.RequestRepo, workflow *repo.WorkflowRepo, audit *repo.AuditRepo, dependencies *repo.DependencyRepo, documents *repo.DocumentRepo, policies *repo.PolicyRepo, assignments *repo.AssignmentRepo) Store {
+	return &dbStore{requests: requests, workflow: workflow, audit: audit, dependencies: dependencies, documents: documents, policies: policies, assignments: assignments}
 }
 
 func (s *dbStore) GetRequest(ctx context.Context, requestID string) (*repo.Request, error) {
@@ -96,4 +97,8 @@ func (s *dbStore) InsertFlags(ctx context.Context, flags []repo.NodeFlag) error 
 
 func (s *dbStore) ListPoliciesByOrg(ctx context.Context, orgID string) ([]repo.DepartmentPolicy, error) {
 	return s.policies.ListByOrg(ctx, orgID)
+}
+
+func (s *dbStore) CountAssignmentsByNode(ctx context.Context, nodeID string) (int, error) {
+	return s.assignments.CountByNode(ctx, nodeID)
 }

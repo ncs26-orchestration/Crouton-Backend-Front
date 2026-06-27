@@ -109,6 +109,7 @@ func NewServer(d Deps) *echo.Echo {
 		repo.NewDependencyRepo(d.PgPool),
 		docRepo,
 		repo.NewPolicyRepo(d.PgPool),
+		repo.NewAssignmentRepo(d.PgPool),
 	)
 	rootCtx := d.RootCtx
 	if rootCtx == nil {
@@ -126,6 +127,12 @@ func NewServer(d Deps) *echo.Echo {
 	// Executive approval gate (F7): an approver decides a request parked at
 	// awaiting_approval; approve resumes the worker, reject stops it.
 	e.POST("/requests/:id/approve", reqh.ApproveRequest, authMiddleware)
+	// Human-in-the-loop: customize a draft (assign verifiers), launch it, and
+	// verify a node parked at awaiting_review.
+	e.POST("/requests/:id/assignments", reqh.AssignNode, authMiddleware)
+	e.DELETE("/requests/:id/assignments/:assignmentId", reqh.UnassignNode, authMiddleware)
+	e.POST("/requests/:id/launch", reqh.LaunchRequest, authMiddleware)
+	e.POST("/requests/:id/nodes/:nodeId/verify", reqh.VerifyNode, authMiddleware)
 	// Audit reads (F6).
 	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
 	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)
