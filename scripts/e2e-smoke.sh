@@ -86,16 +86,23 @@ curl -fsS "$API/orgs/${org_id}/requests" -H "authorization: Bearer ${token}" \
   | jq -e --arg id "$req_id" '.requests | map(.id) | index($id) != null' >/dev/null \
   || fail "new request not found in list"
 
-# The intake planner runs on create (deterministic default plan when no LLM
-# key is set), so the request moves to in_progress and carries a department
-# workflow graph of ~10 stages with parallel review branches.
-say "request detail loads with the auto-planned workflow graph"
+# The intake planner runs on create (deterministic default plan when no LLM key
+# is set), so the request lands in 'draft' carrying a department workflow graph
+# of ~10 stages with parallel review branches. It does not run until launched.
+say "request detail loads in draft with the planned workflow graph"
 curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}" \
   | jq -e --arg id "$req_id" \
       '.request.id == $id and .request.priority == "high"
+       and .request.status == "draft"
        and (.nodes | length) >= 9 and (.edges | length) >= 9
        and ([.nodes[].key] | index("exec_approval")) != null' >/dev/null \
   || fail "request detail / workflow graph shape"
+
+# Launch the draft (no verifiers assigned, so every node runs automatically).
+say "launch the draft request"
+curl -fsS -X POST "$API/requests/${req_id}/launch" -H "authorization: Bearer ${token}" \
+  | jq -e '.request.status == "in_progress"' >/dev/null \
+  || fail "launch did not move the request to in_progress"
 
 # F4: start a background SSE listener BEFORE the engine runs so we capture
 # live events. We kill it after the request completes.
