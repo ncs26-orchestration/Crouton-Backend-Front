@@ -58,13 +58,15 @@ export function PeopleView({ orgId, role }: { orgId: string; role: string }) {
 
       <div className="flex-1 overflow-auto px-4 md:px-8 py-4 md:py-6">
         {membersQ.isLoading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 size={20} className="animate-spin text-[var(--color-fg-muted)]" />
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-36 rounded-xl bg-[var(--color-surface-2)] animate-pulse" />
+            ))}
           </div>
         ) : members.length === 0 ? (
           <EmptyState icon={ShieldCheck} title="No people yet" hint="Invite members from the Teams page." />
         ) : (
-          <div className="flex flex-col gap-3 w-full">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-4">
             {members.map((m) => (
               <PersonRow key={m.id} orgId={orgId} member={m} teams={teams} isAdmin={isAdmin} />
             ))}
@@ -138,7 +140,7 @@ function PersonRow({
         </div>
 
         {/* Org role */}
-        <div className="shrink-0 text-right">
+        <div className="shrink-0">
           {isAdmin ? (
             <select
               value={member.role}
@@ -158,7 +160,7 @@ function PersonRow({
             </span>
           )}
           {isAdmin && roleHint && (
-            <p className="text-[10px] text-[var(--color-fg-subtle)] mt-1 max-w-[16rem] text-right leading-snug">
+            <p className="text-[10px] text-[var(--color-fg-subtle)] mt-1 leading-snug">
               {roleHint}
             </p>
           )}
