@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agents, attachments, chat, copilot, extract, health, interview
+from app.api import agents, attachments, chat, copilot, diagnostic, extract, health, interview
 from app.deps import lifespan_deps
 
 
@@ -24,6 +24,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(agents.router)
+    app.include_router(diagnostic.router)
     app.include_router(chat.router)
     app.include_router(extract.router)
     app.include_router(copilot.router)

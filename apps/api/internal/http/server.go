@@ -173,6 +173,15 @@ func NewServer(d Deps) *echo.Echo {
 	e.POST("/incidents/:id/resolve", incH.ResolveIncident, authMiddleware)
 	e.GET("/incidents/:id/events", incH.StreamEvents)
 
+	// Diagnosis — AI-powered machine incident diagnostics. Technicians
+	// request a diagnosis and follow step-by-step repair checkpoints.
+	diagH := handler.NewDiagnosisHandler(d.Logger, d.PgPool, agentClient)
+	e.POST("/machines/:id/documents", diagH.UploadMachineDocument, authMiddleware)
+	e.GET("/machines/:id/documents", diagH.ListMachineDocuments, authMiddleware)
+	e.POST("/incidents/:id/diagnose", diagH.RequestDiagnosis, authMiddleware)
+	e.GET("/incidents/:id/diagnosis", diagH.GetDiagnosis, authMiddleware)
+	e.POST("/diagnosis/steps/:stepId/complete", diagH.CompleteStep, authMiddleware)
+
 	// Engine-adapter registry. Each adapter implements the
 	// engine.Adapter interface; the registry is the single lookup
 	// the HTTP layer uses to route /compile/:target, and the source
