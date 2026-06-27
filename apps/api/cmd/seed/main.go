@@ -280,6 +280,9 @@ func seed(ctx context.Context, pool *pgxpool.Pool) (seedCounts, error) {
 // teams, requests, and workflow graph; users are removed afterwards so the
 // requests' requester FK is already gone.
 func reset(ctx context.Context, pool *pgxpool.Pool) error {
+	if _, err := pool.Exec(ctx, `DELETE FROM incidents WHERE org_id = (SELECT id FROM organizations WHERE slug = $1)`, demoOrgSlug); err != nil {
+		return fmt.Errorf("delete incidents: %w", err)
+	}
 	if _, err := pool.Exec(ctx, `DELETE FROM organizations WHERE slug = $1`, demoOrgSlug); err != nil {
 		return fmt.Errorf("delete org: %w", err)
 	}
