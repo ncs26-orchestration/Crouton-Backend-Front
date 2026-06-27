@@ -94,6 +94,64 @@ func (r *AssignmentRepo) IsAssigned(ctx context.Context, nodeID string, userID i
 	return ok, err
 }
 
+// UserInOrg reports whether a user is a member of the org.
+func (r *AssignmentRepo) UserInOrg(ctx context.Context, orgID string, userID int64) (bool, error) {
+	var ok bool
+	err := r.pg.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM org_members WHERE org_id = $1 AND user_id = $2)`,
+		orgID, userID,
+	).Scan(&ok)
+	return ok, err
+}
+
+// NodeVerification is a node parked at awaiting_review that a given user is
+// allowed to sign off, with enough context to render it in their work queue.
+type NodeVerification struct {
+	NodeID       string `json:"node_id"`
+	RequestID    string `json:"request_id"`
+	NodeName     string `json:"node_name"`
+	Department   string `json:"department"`
+	RequestTitle string `json:"request_title"`
+	AssignedToMe bool   `json:"assigned_to_me"`
+}
+
+// ListVerificationsForUser returns the awaiting_review nodes in an org that the
+// user may verify: nodes assigned to them, nodes in their department, and (when
+// isAdmin) every awaiting_review node. Mirrors the VerifyNode RBAC.
+func (r *AssignmentRepo) ListVerificationsForUser(ctx context.Context, orgID string, userID int64, isAdmin bool) ([]NodeVerification, error) {
+	rows, err := r.pg.Query(ctx, `
+		SELECT wn.id, wn.request_id, wn.name, wn.department, r.title,
+			EXISTS(SELECT 1 FROM node_assignments na2 WHERE na2.node_id = wn.id AND na2.user_id = $2) AS assigned_to_me
+		FROM workflow_nodes wn
+		JOIN requests r ON r.id = wn.request_id
+		WHERE r.org_id = $1
+			AND wn.status = 'awaiting_review'
+			AND (
+				$3
+				OR EXISTS(SELECT 1 FROM node_assignments na WHERE na.node_id = wn.id AND na.user_id = $2)
+				OR EXISTS(
+					SELECT 1 FROM team_members tm
+					JOIN teams t ON t.id = tm.team_id
+					WHERE tm.user_id = $2 AND t.org_id = $1 AND LOWER(t.name) = LOWER(wn.department)
+				)
+			)
+		ORDER BY wn.started_at ASC NULLS LAST
+	`, orgID, userID, isAdmin)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]NodeVerification, 0)
+	for rows.Next() {
+		var v NodeVerification
+		if err := rows.Scan(&v.NodeID, &v.RequestID, &v.NodeName, &v.Department, &v.RequestTitle, &v.AssignedToMe); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 // UserInDepartment reports whether a user belongs to the team whose name matches
 // a node's department, within an org. Used for RBAC on verification.
 func (r *AssignmentRepo) UserInDepartment(ctx context.Context, orgID string, userID int64, department string) (bool, error) {

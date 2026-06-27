@@ -724,6 +724,28 @@ func (h *RequestsHandler) loadRequestForMember(c echo.Context, id string) (*repo
 	return req, role, nil
 }
 
+// MyVerifications handles GET /orgs/:orgId/my-verifications — the awaiting_review
+// nodes the caller may sign off (assigned to them, in their department, or all
+// for an admin). Powers the "Waiting on you" queue in My Work.
+func (h *RequestsHandler) MyVerifications(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	role, err := requireOrgMember(c, h.pg, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	ctx := c.Request().Context()
+	verifications, err := h.assignments.ListVerificationsForUser(ctx, orgID, claims.UserID, role == "admin")
+	if err != nil {
+		h.logger.Error("my verifications: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"verifications": verifications})
+}
+
 // AssignNode handles POST /requests/:id/assignments — assign a verifier to a
 // node. Only the requester or an org admin/executor may assign, and the assignee
 // must belong to the node's department team.
@@ -758,15 +780,15 @@ func (h *RequestsHandler) AssignNode(c echo.Context) error {
 		h.logger.Error("assign node: get node", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	// The assignee must be in the node's department team — a person can only be
-	// asked to verify their own department's work.
-	inDept, err := h.assignments.UserInDepartment(ctx, req.OrgID, body.UserID, node.Department)
+	// The assignee must be a member of the org (an explicit assignment by the
+	// executive authorizes them to verify this node, even across departments).
+	isMember, err := h.assignments.UserInOrg(ctx, req.OrgID, body.UserID)
 	if err != nil {
-		h.logger.Error("assign node: dept check", slog.String("err", err.Error()))
+		h.logger.Error("assign node: member check", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	if !inDept {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "that person is not in the " + node.Department + " team"})
+	if !isMember {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "that person is not a member of this organization"})
 	}
 
 	assignedBy := claims.UserID
@@ -838,9 +860,11 @@ func (h *RequestsHandler) LaunchRequest(c echo.Context) error {
 }
 
 // VerifyNode handles POST /requests/:id/nodes/:nodeId/verify — a human signs off
-// (or sends back) a node parked at awaiting_review. Allowed for an org
-// admin/executor, a member of the node's department team, or a user assigned to
-// the node — never someone from another department.
+// (or sends back) a node parked at awaiting_review. Allowed for an org admin
+// (the executive, who can override any department), a member of the node's
+// department team, or a user assigned to the node — never someone from another
+// department. An executor does not get a blanket override: they sign off only
+// their own department's nodes, like any other member.
 func (h *RequestsHandler) VerifyNode(c echo.Context) error {
 	claims := middleware.UserFromCtx(c)
 	id := c.Param("id")
@@ -862,9 +886,9 @@ func (h *RequestsHandler) VerifyNode(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	// RBAC: admin/executor override, or a member of the node's department, or the
-	// assigned verifier.
-	allowed := role == "admin" || role == "executor"
+	// RBAC: admin (executive) override, or a member of the node's department, or
+	// the assigned verifier. Executors do not get a cross-department override.
+	allowed := role == "admin"
 	if !allowed {
 		if inDept, derr := h.assignments.UserInDepartment(ctx, req.OrgID, claims.UserID, node.Department); derr == nil && inDept {
 			allowed = true
@@ -905,9 +929,10 @@ func (h *RequestsHandler) VerifyNode(c echo.Context) error {
 }
 
 // userCanActOnNode reports whether the caller may verify or chat on a node:
-// org admin/executor, a member of the node's department, or an assigned verifier.
+// org admin (executive override), a member of the node's department, or an
+// assigned verifier. Executors are scoped to their own department here too.
 func (h *RequestsHandler) userCanActOnNode(ctx context.Context, orgID, role string, userID int64, node *repo.WorkflowNode) bool {
-	if role == "admin" || role == "executor" {
+	if role == "admin" {
 		return true
 	}
 	if inDept, err := h.assignments.UserInDepartment(ctx, orgID, userID, node.Department); err == nil && inDept {

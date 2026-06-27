@@ -125,6 +125,7 @@ func NewServer(d Deps) *echo.Echo {
 	reqh := handler.NewRequestsHandler(d.Logger, d.PgPool, agentClient, orchEngine)
 	orgGroup.POST("/:orgId/requests", reqh.CreateRequest)
 	orgGroup.GET("/:orgId/requests", reqh.ListRequests)
+	orgGroup.GET("/:orgId/my-verifications", reqh.MyVerifications)
 	e.GET("/requests/:id", reqh.GetRequest, authMiddleware)
 	e.GET("/requests/:id/nodes/:nodeId", reqh.GetNode, authMiddleware)
 	// Executive approval gate (F7): an approver decides a request parked at
