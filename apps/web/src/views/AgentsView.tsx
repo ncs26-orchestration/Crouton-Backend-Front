@@ -67,19 +67,23 @@ export function AgentsView({ orgId }: { orgId: string }) {
 
       <div className="px-4 md:px-8 py-4 md:py-6 w-full">
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="h-40 rounded-lg bg-[var(--color-surface-2)] animate-pulse" />
             ))}
           </div>
         ) : isError ? (
-          <p className="text-sm text-[var(--color-danger)]">
-            Could not load the agent roster. {(error as Error)?.message}
-          </p>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-sm text-[var(--color-danger)]">
+              Could not load the agent roster. {(error as Error)?.message}
+            </p>
+          </div>
         ) : groups.length === 0 ? (
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            No agents yet. The roster is seeded when the organization is created.
-          </p>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              No agents yet. The roster is seeded when the organization is created.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-8">
             {groups.map((g) => (
@@ -87,7 +91,7 @@ export function AgentsView({ orgId }: { orgId: string }) {
                 <h2 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-fg-muted)] mb-3">
                   {g.department}
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {g.agents.map((a) => (
                     <AgentCard key={a.id} agent={a} />
                   ))}
