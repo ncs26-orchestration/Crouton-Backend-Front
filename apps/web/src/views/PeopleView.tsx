@@ -56,7 +56,7 @@ export function PeopleView({ orgId, role }: { orgId: string; role: string }) {
         }
       />
 
-      <div className="flex-1 overflow-auto px-8 py-6">
+      <div className="flex-1 overflow-auto px-4 md:px-8 py-4 md:py-6">
         {membersQ.isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 size={20} className="animate-spin text-[var(--color-fg-muted)]" />
@@ -64,7 +64,7 @@ export function PeopleView({ orgId, role }: { orgId: string; role: string }) {
         ) : members.length === 0 ? (
           <EmptyState icon={ShieldCheck} title="No people yet" hint="Invite members from the Teams page." />
         ) : (
-          <div className="flex flex-col gap-3 w-full max-w-4xl">
+          <div className="flex flex-col gap-3 w-full">
             {members.map((m) => (
               <PersonRow key={m.id} orgId={orgId} member={m} teams={teams} isAdmin={isAdmin} />
             ))}
