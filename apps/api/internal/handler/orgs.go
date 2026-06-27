@@ -1072,8 +1072,21 @@ func (h *OrgsHandler) ListAgents(c echo.Context) error {
 	}
 	orgID := c.Param("orgId")
 
-	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+	role, err := requireOrgMember(c, h.db, orgID, claims.UserID)
+	if err != nil {
 		return handleOrgMemberErr(c, err)
+	}
+
+	// Only an admin (the executive) sees the whole roster. Everyone else sees the
+	// agents that staff their own departments, plus org-wide agents that belong to
+	// no single team (intake, planning, executive approval).
+	deptFilter := ""
+	args := []any{orgID}
+	if role != "admin" {
+		deptFilter = ` AND (a.team_id IS NULL OR a.team_id IN (
+			SELECT tm.team_id FROM team_members tm WHERE tm.user_id = $2
+		))`
+		args = append(args, claims.UserID)
 	}
 
 	ctx := c.Request().Context()
@@ -1105,9 +1118,9 @@ func (h *OrgsHandler) ListAgents(c echo.Context) error {
 			JOIN requests rq ON rq.id = wn.request_id
 			WHERE rq.org_id = a.org_id AND wn.agent_type = a.agent_type
 		) agg ON true
-		WHERE a.org_id = $1
+		WHERE a.org_id = $1`+deptFilter+`
 		ORDER BY a.created_at ASC
-	`, orgID)
+	`, args...)
 	if err != nil {
 		h.logger.Error("list agents: query", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
