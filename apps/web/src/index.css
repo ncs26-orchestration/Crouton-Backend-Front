@@ -410,3 +410,20 @@ select:focus,
 select:focus-visible {
   outline: none;
 }
+
+/* Mobile touch targets — every tappable element gets at least 44px
+   so thumbs hit the right spot. Small utility buttons (icon-only,
+   inline text) opt out with .btn-sm (they get their own sizing). */
+@media (max-width: 767px) {
+  button:not(.btn-sm):not(.btn-inline),
+  a[role="button"]:not(.btn-sm):not(.btn-inline) {
+    min-height: 44px;
+  }
+}
+
+/* iOS safe area for bottom nav */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

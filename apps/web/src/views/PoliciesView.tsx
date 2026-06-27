@@ -27,7 +27,7 @@ export function PoliciesView({ orgId, role }: { orgId: string; role: string }) {
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)] overflow-auto nice-scroll">
-      <div className="border-b border-[var(--color-border)] px-8 py-5 flex items-start justify-between">
+      <div className="border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5 flex items-start justify-between">
         <div>
           <h1 className="text-xl font-medium" style={{ fontFeatureSettings: '"ss01"' }}>
             Policies
@@ -46,7 +46,7 @@ export function PoliciesView({ orgId, role }: { orgId: string; role: string }) {
         )}
       </div>
 
-      <div className="px-8 py-6 w-full max-w-[860px]">
+      <div className="px-4 md:px-8 py-4 md:py-6 w-full">
         {isLoading ? (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 4 }).map((_, i) => (

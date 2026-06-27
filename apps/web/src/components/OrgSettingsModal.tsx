@@ -110,7 +110,7 @@ export function OrgSettingsModal({ projectId, projectName, overview: initialOver
           </div>
           <button
             onClick={onClose}
-            className="text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
+            className="btn-sm text-[var(--color-fg-subtle)] hover:text-[var(--color-fg)]"
           >
             <X size={18} />
           </button>
@@ -290,7 +290,7 @@ function ChipSelect({ options, values, onChange }: { options: string[]; values: 
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--color-accent-bg)] border border-[var(--color-brand)] text-[11px] text-[var(--color-fg)]"
           >
             {val}
-            <button onClick={() => onChange(values.filter(v => v !== val))} className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]">
+            <button onClick={() => onChange(values.filter(v => v !== val))} className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]">
               <X size={10} />
             </button>
           </span>

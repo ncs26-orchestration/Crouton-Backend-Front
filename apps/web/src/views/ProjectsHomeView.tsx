@@ -65,8 +65,8 @@ export function ProjectsHomeView({ onOpenChat, onOpenProject }: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto nice-scroll bg-[var(--color-bg)]">
-      <div className="max-w-5xl mx-auto px-8 py-10">
-        <header className="flex items-end justify-between gap-6 mb-8">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
+        <header className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-6 md:mb-8">
           <div>
             <div
               className="text-[11px] uppercase tracking-[0.16em] text-[var(--color-fg-muted)]"
@@ -87,7 +87,7 @@ export function ProjectsHomeView({ onOpenChat, onOpenProject }: Props) {
           </div>
           <button
             onClick={() => setShowOnboarding(true)}
-            className="inline-flex items-center gap-1.5 text-[13px] px-3 py-2 rounded-md bg-[var(--color-brand)] text-white hover:brightness-110 shadow-stripe-ambient"
+            className="inline-flex items-center gap-1.5 text-[13px] px-3 py-2 rounded-md bg-[var(--color-brand)] text-white hover:brightness-110 shadow-stripe-ambient min-h-[44px] md:min-h-auto"
             style={{ fontWeight: 500 }}
           >
             <FolderPlus size={13} />
@@ -97,7 +97,7 @@ export function ProjectsHomeView({ onOpenChat, onOpenProject }: Props) {
 
         {!projectsQuery.isLoading && projects.length > 0 && (
           <>
-            <section className="mb-6 grid grid-cols-3 gap-3">
+            <section className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <StatCard
                 label="Projects"
                 value={projects.length}
@@ -182,7 +182,7 @@ export function ProjectsHomeView({ onOpenChat, onOpenProject }: Props) {
             </div>
             <button
               onClick={() => setShowOnboarding(true)}
-              className="mt-4 inline-flex items-center gap-1.5 text-[13px] px-3 py-2 rounded-md bg-[var(--color-brand)] text-white hover:brightness-110"
+              className="mt-4 inline-flex items-center gap-1.5 text-[13px] px-3 py-2 rounded-md bg-[var(--color-brand)] text-white hover:brightness-110 min-h-[44px] md:min-h-auto"
               style={{ fontWeight: 500 }}
             >
               <FolderPlus size={13} />
@@ -325,7 +325,7 @@ function ProjectCard({
           onClick={() => createChat.mutate()}
           disabled={createChat.isPending}
           title="New chat in this project"
-          className="size-7 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] opacity-0 group-hover:opacity-100 transition-all disabled:opacity-40"
+          className="btn-sm size-7 rounded-md flex items-center justify-center text-[var(--color-fg-muted)] hover:text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] opacity-0 group-hover:opacity-100 transition-all disabled:opacity-40"
         >
           {createChat.isPending ? (
             <Loader2 size={12} className="animate-spin" />
@@ -366,7 +366,7 @@ function ProjectCard({
           <li>
             <button
               onClick={() => createChat.mutate()}
-              className="w-full text-left text-[12px] text-[var(--color-brand)] hover:underline px-2 py-1"
+              className="btn-inline w-full text-left text-[12px] text-[var(--color-brand)] hover:underline px-2 py-1"
             >
               Start your first chat →
             </button>

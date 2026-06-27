@@ -71,7 +71,7 @@ export function HomeView({ orgId, onOpenWorkflow, onNavigate, onShowHowItWorks }
             </button>
             <button
               onClick={() => onNavigate("requests")}
-              className="flex items-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)]"
+              className="flex items-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)] min-h-[44px] md:min-h-auto"
             >
               <Plus size={15} /> New request
             </button>
@@ -79,7 +79,7 @@ export function HomeView({ orgId, onOpenWorkflow, onNavigate, onShowHowItWorks }
         }
       />
 
-      <div className="px-8 py-6 flex flex-col gap-6 w-full">
+      <div className="px-4 md:px-8 py-4 md:py-6 flex flex-col gap-6 w-full">
         {/* Hero: completion ring + pipeline funnel */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <SectionCard bodyClassName="p-5 flex items-center gap-5 w-full">
@@ -99,7 +99,7 @@ export function HomeView({ orgId, onOpenWorkflow, onNavigate, onShowHowItWorks }
           <SectionCard title="Pipeline" className="lg:col-span-2" bodyClassName="px-4 py-4 flex flex-col gap-3">
             {funnel.map((s, i) => (
               <button key={s.label} onClick={() => onNavigate("requests")} className="group flex items-center gap-3 text-left">
-                <span className="w-32 shrink-0 text-xs text-[var(--color-fg-muted)] group-hover:text-[var(--color-fg)] flex items-center gap-2">
+                <span className="w-20 md:w-32 shrink-0 text-xs text-[var(--color-fg-muted)] group-hover:text-[var(--color-fg)] flex items-center gap-2">
                   <span className="size-2 rounded-full shrink-0" style={{ background: s.tone }} />
                   {s.label}
                 </span>
@@ -122,7 +122,7 @@ export function HomeView({ orgId, onOpenWorkflow, onNavigate, onShowHowItWorks }
             className="lg:col-span-3"
             bodyClassName=""
             action={
-              <button onClick={() => onNavigate("requests")} className="flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline">
+              <button onClick={() => onNavigate("requests")} className="btn-inline flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline">
                 View all <ArrowRight size={12} />
               </button>
             }

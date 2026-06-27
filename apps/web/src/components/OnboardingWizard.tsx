@@ -167,7 +167,7 @@ export function OnboardingWizard({ onComplete, onSkip }: Props) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 10, scale: 0.99 }}
         transition={{ type: "spring", stiffness: 300, damping: 26 }}
-        className="relative max-w-lg w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-deep overflow-hidden"
+        className="relative max-w-lg w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-stripe-deep overflow-hidden mx-4"
       >
         <button
           onClick={handleSkip}
@@ -503,7 +503,7 @@ function ChipInput({ values, onChange, placeholder, singleLine }: ChipInputProps
           {val}
           <button
             onClick={() => onChange(values.filter((v) => v !== val))}
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
           >
             <X size={10} />
           </button>

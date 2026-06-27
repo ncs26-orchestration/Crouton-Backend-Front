@@ -59,7 +59,7 @@ export function AgentsView({ orgId, role }: { orgId: string; role: string }) {
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--color-bg)] text-[var(--color-fg)] overflow-auto nice-scroll">
-      <div className="border-b border-[var(--color-border)] px-8 py-5 flex items-end justify-between gap-6">
+      <div className="border-b border-[var(--color-border)] px-4 md:px-8 py-4 md:py-5 flex items-end justify-between gap-6">
         <div>
           <h1 className="text-xl font-medium" style={{ fontFeatureSettings: '"ss01"' }}>
             Agents
@@ -79,23 +79,27 @@ export function AgentsView({ orgId, role }: { orgId: string; role: string }) {
         )}
       </div>
 
-      <div className="px-8 py-6 w-full">
+      <div className="px-4 md:px-8 py-4 md:py-6 w-full">
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="h-44 rounded-lg bg-[var(--color-surface-2)] animate-pulse" />
             ))}
           </div>
         ) : isError ? (
-          <p className="text-sm text-[var(--color-danger)]">
-            Could not load the agent roster. {(error as Error)?.message}
-          </p>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-sm text-[var(--color-danger)]">
+              Could not load the agent roster. {(error as Error)?.message}
+            </p>
+          </div>
         ) : groups.length === 0 ? (
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            {scopedToDepartment
-              ? "No agents in your departments yet. Ask an admin to add you to a team."
-              : "No agents yet. The roster is seeded when the organization is created."}
-          </p>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              {scopedToDepartment
+                ? "No agents in your departments yet. Ask an admin to add you to a team."
+                : "No agents yet. The roster is seeded when the organization is created."}
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-7">
             {groups.map((g) => (
@@ -106,7 +110,7 @@ export function AgentsView({ orgId, role }: { orgId: string; role: string }) {
                     {g.department}
                   </h2>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
                   {g.agents.map((a) => (
                     <AgentCard key={a.id} agent={a} />
                   ))}

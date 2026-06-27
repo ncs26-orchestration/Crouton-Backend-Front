@@ -231,7 +231,7 @@ function EngineRuns({ engine, onRemoved }: { engine: EngineRef; onRemoved: () =>
                         });
                       }
                     }}
-                    className="flex items-center gap-1 text-[11px] text-[var(--color-brand)] hover:underline"
+                    className="btn-inline flex items-center gap-1 text-[11px] text-[var(--color-brand)] hover:underline"
                     style={{ fontWeight: 400 }}
                   >
                     <Play size={11} /> start

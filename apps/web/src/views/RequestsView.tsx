@@ -54,7 +54,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+      <div className="shrink-0 px-4 md:px-6 py-4 border-b border-[var(--color-border)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1
             className="text-lg font-medium text-[var(--color-fg)]"
@@ -68,7 +68,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded bg-[var(--color-brand)] text-white text-sm font-medium hover:bg-[var(--color-brand-hover)] transition-colors min-h-[44px] md:min-h-auto"
           style={{ fontFeatureSettings: '"ss01"' }}
         >
           <Plus size={14} strokeWidth={2} />
@@ -77,7 +77,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
       </div>
 
       {/* Filters */}
-      <div className="shrink-0 px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3">
+      <div className="shrink-0 px-4 md:px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3 flex-wrap">
         <FilterSelect
           label="Status"
           value={statusFilter}
@@ -118,7 +118,7 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
             {requests.length === 0 && (
               <button
                 onClick={() => setModalOpen(true)}
-                className="text-sm text-[var(--color-brand)] hover:underline"
+                className="btn-inline text-sm text-[var(--color-brand)] hover:underline"
               >
                 Submit your first request
               </button>
@@ -127,22 +127,55 @@ export function RequestsView({ orgId, onOpenWorkflow }: Props) {
         )}
 
         {filtered.length > 0 && (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-[var(--color-fg-muted)] border-b border-[var(--color-border)]">
-                <th className="px-6 py-2.5 font-medium">Title</th>
-                <th className="px-4 py-2.5 font-medium">Requester</th>
-                <th className="px-4 py-2.5 font-medium">Priority</th>
-                <th className="px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5 font-medium text-right">Progress</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop table */}
+            <table className="w-full text-sm hidden md:table">
+              <thead>
+                <tr className="text-left text-xs text-[var(--color-fg-muted)] border-b border-[var(--color-border)]">
+                  <th className="px-6 py-2.5 font-medium">Title</th>
+                  <th className="px-4 py-2.5 font-medium">Requester</th>
+                  <th className="px-4 py-2.5 font-medium">Priority</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Progress</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <RequestRow key={r.id} request={r} onClick={() => onOpenWorkflow(r.id)} />
+                ))}
+              </tbody>
+            </table>
+
+            {/* Mobile cards */}
+            <div className="md:hidden flex flex-col gap-2 p-4">
               {filtered.map((r) => (
-                <RequestRow key={r.id} request={r} onClick={() => onOpenWorkflow(r.id)} />
+                <button
+                  key={r.id}
+                  onClick={() => onOpenWorkflow(r.id)}
+                  className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-left shadow-stripe-ambient hover:border-[var(--color-border-strong)] transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-[var(--color-fg)] truncate" style={{ fontFeatureSettings: '"ss01"' }}>
+                      {r.title}
+                    </p>
+                    <p className="text-xs text-[var(--color-fg-muted)] mt-0.5 truncate">
+                      {r.requester_name}
+                      {r.request_type && r.request_type !== "general" && (
+                        <> · <span className="rounded bg-[var(--color-surface-3)] px-1 py-0.5 text-[10px]">{prettyLabel(r.request_type)}</span></>
+                      )}
+                      <> · <span className={`capitalize ${priorityTextClass(r.priority)}`}>{r.priority}</span></>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="tnum text-xs text-[var(--color-fg-muted)]">{r.progress}%</span>
+                    <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${statusBadgeClass(r.status)}`}>
+                      {prettyLabel(r.status)}
+                    </span>
+                  </div>
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -299,7 +332,7 @@ function NewRequestModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-request-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-lg p-6 border border-[var(--color-border)] max-h-[88vh] overflow-y-auto nice-scroll"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-lg p-4 md:p-6 border border-[var(--color-border)] mx-4 md:mx-0 max-h-[88vh] overflow-y-auto nice-scroll"
       >
         <div className="flex items-start justify-between mb-4">
           <h2
@@ -312,7 +345,7 @@ function NewRequestModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
           >
             <X size={18} />
           </button>
@@ -420,7 +453,7 @@ function NewRequestModal({
           <button
             onClick={() => mutation.mutate()}
             disabled={!title.trim() || mutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50 min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             {mutation.isPending && <Loader2 size={13} className="animate-spin" />}

@@ -59,7 +59,7 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
     <div className="flex-1 flex flex-col overflow-hidden">
       <PageHeader title="My Work" subtitle="Approvals, work in flight, and recent decisions" />
 
-      <div className="flex-1 overflow-auto px-8 py-6">
+      <div className="flex-1 overflow-auto px-4 md:px-8 py-4 md:py-6">
         {isLoading && (
           <div className="flex items-center justify-center h-40">
             <div className="size-6 rounded-full border-2 border-[var(--color-brand)] border-t-transparent animate-spin" />
@@ -76,7 +76,7 @@ export function MyWorkView({ orgId, role, onOpenWorkflow }: Props) {
         {!isLoading && !error && (
           <div className="flex flex-col gap-8 w-full">
             {/* Summary */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard icon={UserCheck} label="Waiting on you" value={verifications.length} tone={verifications.length ? "warning" : "neutral"} />
               <StatCard icon={ShieldCheck} label="Pending approvals" value={pending.length} tone={pending.length ? "warning" : "neutral"} />
               <StatCard icon={Loader2} label="In progress" value={active.length} tone="brand" />
@@ -296,7 +296,7 @@ function PendingCard({
           <button
             type="button"
             onClick={onDecide}
-            className="px-3 py-1.5 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors"
+            className="px-3 py-1.5 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             Review &amp; decide
@@ -403,7 +403,7 @@ function ApprovalModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="approval-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)]"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-4 md:p-6 border border-[var(--color-border)] mx-4 md:mx-0"
       >
         <div className="flex items-start justify-between mb-1">
           <h2
@@ -417,7 +417,7 @@ function ApprovalModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+            className="btn-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
           >
             <X size={18} />
           </button>
@@ -458,7 +458,7 @@ function ApprovalModal({
             type="button"
             onClick={() => decide("approve")}
             disabled={!canDecide}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded bg-[var(--color-brand)] text-white font-medium hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50 min-h-[44px] md:min-h-auto"
             style={{ fontFeatureSettings: '"ss01"' }}
           >
             {submitting === "approve" && <Loader2 size={13} className="animate-spin" />}
