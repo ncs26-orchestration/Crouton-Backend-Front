@@ -197,9 +197,16 @@ function RequestRow({ request: r, onClick }: { request: OrgRequest; onClick: () 
       className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface-2)] cursor-pointer transition-colors"
     >
       <td className="px-6 py-3">
-        <span className="font-medium text-[var(--color-fg)]" style={{ fontFeatureSettings: '"ss01"' }}>
-          {r.title}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-[var(--color-fg)]" style={{ fontFeatureSettings: '"ss01"' }}>
+            {r.title}
+          </span>
+          {r.request_type && r.request_type !== "general" && (
+            <span className="rounded bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-fg-muted)]">
+              {prettyLabel(r.request_type)}
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3 text-[var(--color-fg-muted)]">{r.requester_name}</td>
       <td className="px-4 py-3">

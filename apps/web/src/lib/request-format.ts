@@ -1,4 +1,4 @@
-import type { NodeStatus, RequestPriority, RequestStatus } from "./types";
+import type { DecisionOutcome, NodeStatus, RequestPriority, RequestStatus } from "./types";
 
 // Shared request/node status + priority presentation so the list,
 // canvas, and node card can't drift. Colors come from the status tokens
@@ -117,4 +117,46 @@ export function relativeTime(iso: string): string {
   const day = Math.floor(hr / 24);
   if (day < 7) return `${day}d ago`;
   return new Date(iso).toLocaleDateString();
+}
+
+// ── Agent decision outcomes ─────────────────────────────────────────────────
+
+// A decision worth showing on the canvas/desk. "approve" and "pending" are the
+// quiet default; the rest are what a reviewer wants to see at a glance.
+export function isNotableOutcome(outcome?: DecisionOutcome): boolean {
+  return !!outcome && outcome !== "pending" && outcome !== "approve";
+}
+
+export function decisionOutcomeLabel(outcome: DecisionOutcome): string {
+  switch (outcome) {
+    case "approve":
+      return "Approved";
+    case "approve_with_conditions":
+      return "Approved with conditions";
+    case "flag":
+      return "Flagged";
+    case "reject":
+      return "Rejected";
+    case "block":
+      return "Blocked";
+    default:
+      return "Pending";
+  }
+}
+
+// Filled badge color for a decision outcome.
+export function decisionOutcomeBadgeClass(outcome: DecisionOutcome): string {
+  switch (outcome) {
+    case "approve":
+      return "bg-[var(--color-success)]/12 text-[var(--color-success)]";
+    case "approve_with_conditions":
+    case "flag":
+      return "bg-[var(--color-warning)]/15 text-[var(--color-warning-fg)]";
+    case "reject":
+      return "bg-[var(--color-danger)]/12 text-[var(--color-danger)]";
+    case "block":
+      return "bg-[var(--color-accent-bg)] text-[var(--color-brand)]";
+    default:
+      return "bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]";
+  }
 }
