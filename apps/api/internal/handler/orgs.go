@@ -855,9 +855,14 @@ func (h *OrgsHandler) RemoveTeamMember(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-// ── Agent endpoints (F10) ──────────────────────────────────────────────────────
+// ── Agent endpoints (F10 seeds the roster; F9 adds live status) ─────────────────
 
-// ListAgents handles GET /orgs/:orgId/agents.
+// ListAgents handles GET /orgs/:orgId/agents. The roster is seeded by F10; F9
+// adds a live status derived from the org's workflow nodes — each agent's nodes
+// across every request in the org are aggregated into completed/active/blocked
+// counts, and the status reduces to "blocked" (a node is waiting on another
+// department), "busy" (a node is in_progress), or "idle". The aggregate is a
+// LEFT JOIN LATERAL so agents with no activity still appear (all zero).
 func (h *OrgsHandler) ListAgents(c echo.Context) error {
 	claims := middleware.UserFromCtx(c)
 	if claims == nil {
@@ -872,9 +877,32 @@ func (h *OrgsHandler) ListAgents(c echo.Context) error {
 	ctx := c.Request().Context()
 	rows, err := h.db.Query(ctx, `
 		SELECT a.id, a.org_id, a.team_id, a.agent_type, a.name, a.avatar, a.capabilities, a.created_at,
-		       COALESCE(t.name, '') AS team_name
+		       COALESCE(t.name, '') AS team_name,
+		       COALESCE(agg.completed, 0), COALESCE(agg.active, 0), COALESCE(agg.blocked, 0),
+		       COALESCE(agg.total, 0), COALESCE(agg.request_count, 0), COALESCE(agg.latest_status, '')
 		FROM agents a
 		LEFT JOIN teams t ON t.id = a.team_id
+		LEFT JOIN LATERAL (
+			SELECT
+				count(*)                                          AS total,
+				count(*) FILTER (WHERE wn.status = 'completed')   AS completed,
+				count(*) FILTER (WHERE wn.status = 'in_progress') AS active,
+				count(*) FILTER (WHERE wn.status = 'blocked')     AS blocked,
+				count(DISTINCT wn.request_id)                     AS request_count,
+				(
+					SELECT wn2.status_text
+					FROM workflow_nodes wn2
+					JOIN requests rq2 ON rq2.id = wn2.request_id
+					WHERE rq2.org_id = a.org_id
+					  AND wn2.agent_type = a.agent_type
+					  AND wn2.status_text <> ''
+					ORDER BY COALESCE(wn2.completed_at, wn2.started_at, wn2.created_at) DESC
+					LIMIT 1
+				) AS latest_status
+			FROM workflow_nodes wn
+			JOIN requests rq ON rq.id = wn.request_id
+			WHERE rq.org_id = a.org_id AND wn.agent_type = a.agent_type
+		) agg ON true
 		WHERE a.org_id = $1
 		ORDER BY a.created_at ASC
 	`, orgID)
@@ -894,20 +922,45 @@ func (h *OrgsHandler) ListAgents(c echo.Context) error {
 		Avatar       string    `json:"avatar"`
 		Capabilities string    `json:"capabilities"`
 		CreatedAt    time.Time `json:"created_at"`
+		Status       string    `json:"status"`
+		Completed    int       `json:"completed"`
+		Active       int       `json:"active"`
+		Blocked      int       `json:"blocked"`
+		Total        int       `json:"total"`
+		RequestCount int       `json:"request_count"`
+		LatestStatus string    `json:"latest_status"`
 	}
 	result := make([]agentItem, 0)
 	for rows.Next() {
 		var item agentItem
-		if err := rows.Scan(&item.ID, &item.OrgID, &item.TeamID, &item.AgentType, &item.Name, &item.Avatar, &item.Capabilities, &item.CreatedAt, &item.TeamName); err != nil {
+		if err := rows.Scan(
+			&item.ID, &item.OrgID, &item.TeamID, &item.AgentType, &item.Name, &item.Avatar, &item.Capabilities, &item.CreatedAt, &item.TeamName,
+			&item.Completed, &item.Active, &item.Blocked, &item.Total, &item.RequestCount, &item.LatestStatus,
+		); err != nil {
 			h.logger.Error("list agents: scan", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
+		item.Status = agentLiveStatus(item.Active, item.Blocked)
 		result = append(result, item)
 	}
 	if err := rows.Err(); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"agents": result})
+}
+
+// agentLiveStatus reduces an agent's live node counts to a single label. A
+// blocked node takes precedence (the agent is waiting on another department);
+// otherwise an in_progress node means busy; everything else is idle.
+func agentLiveStatus(active, blocked int) string {
+	switch {
+	case blocked > 0:
+		return "blocked"
+	case active > 0:
+		return "busy"
+	default:
+		return "idle"
+	}
 }
 
 // ── Policy endpoints (F10) ─────────────────────────────────────────────────────

@@ -1,7 +1,9 @@
 import type {
+	AgentRosterEntry,
 	Attachment,
 	ApprovalDecision,
 	AuditEvent,
+	DepartmentPolicy,
 	Chat,
 	ChatMessage,
 	CompileResponse,
@@ -551,4 +553,12 @@ export const api = {
 
 	getReport: (requestId: string): Promise<FinalReport> =>
 		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/report`),
+
+	// --- Roster + Policies (F9) ---
+
+	listAgents: (orgId: string): Promise<{ agents: AgentRosterEntry[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/agents`),
+
+	listPolicies: (orgId: string): Promise<{ policies: DepartmentPolicy[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies`),
 };

@@ -221,7 +221,7 @@ function Shell() {
 
       {section === "agents" && activeOrg && <AgentsView orgId={activeOrg.id} />}
       {section === "reports" && <ReportsView />}
-      {section === "policies" && <PoliciesView />}
+      {section === "policies" && activeOrg && <PoliciesView orgId={activeOrg.id} />}
       {section === "integrations" && <IntegrationsView />}
       {section === "teams" && <OrgView />}
       {section === "settings" && <SettingsView />}
