@@ -52,6 +52,7 @@ var users = []userSpec{
 	{"it.lead@acme.test", "Ivy IT", "employee"},
 	{"hr.lead@acme.test", "Hana HR", "employee"},
 	{"ops.lead@acme.test", "Otto Ops", "employee"},
+	{"tech.lead@acme.test", "Tara Technician", "employee"},
 }
 
 // teamSpec is a department team plus the lead's email.
@@ -68,6 +69,7 @@ var teams = []teamSpec{
 	{"team_seed_it", "IT", "Systems, security, provisioning", "it.lead@acme.test"},
 	{"team_seed_hr", "HR", "Hiring, onboarding, people ops", "hr.lead@acme.test"},
 	{"team_seed_ops", "Operations", "Execution, logistics, delivery", "ops.lead@acme.test"},
+	{"team_seed_maint", "Maintenance", "Equipment maintenance and repair", "tech.lead@acme.test"},
 }
 
 // graphProfile describes how a request's workflow graph should look: which
@@ -208,6 +210,8 @@ func main() {
 	log.Printf("  teams        %d", len(teams))
 	log.Printf("  agents       %d", counts.agents)
 	log.Printf("  policies     %d", counts.policies)
+	log.Printf("  machines     %d", len(machines))
+	log.Printf("  incidents    %d", counts.incidents)
 	log.Printf("  requests     %d (%d nodes, %d edges, %d tasks, %d deps, %d audit events)", len(requests), counts.nodes, counts.edges, counts.tasks, counts.deps, counts.auditEvents)
 	log.Println("  login    founder@acme.test / password  (same password for every @acme.test user)")
 }
@@ -254,6 +258,14 @@ func seed(ctx context.Context, pool *pgxpool.Pool) (seedCounts, error) {
 	if err != nil {
 		return seedCounts{}, fmt.Errorf("requests: %w", err)
 	}
+	if err := seedMachines(ctx, pool, userIDs); err != nil {
+		return seedCounts{}, fmt.Errorf("machines: %w", err)
+	}
+	incidentCount, err := seedIncidents(ctx, pool, userIDs)
+	if err != nil {
+		return seedCounts{}, fmt.Errorf("incidents: %w", err)
+	}
+	counts.incidents = incidentCount
 	auditCount, err := seedAuditEvents(ctx, pool, userIDs)
 	if err != nil {
 		return seedCounts{}, fmt.Errorf("audit events: %w", err)
@@ -325,6 +337,16 @@ func seedTeams(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64
 		); err != nil {
 			return fmt.Errorf("insert team lead %s: %w", t.leadEmail, err)
 		}
+		// The Maintenance team lead also needs the technician role so
+		// they can see assigned machines.
+		if t.name == "Maintenance" {
+			if _, err := pool.Exec(ctx,
+				`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'technician')`,
+				t.id, userIDs[t.leadEmail],
+			); err != nil {
+				return fmt.Errorf("insert technician %s: %w", t.leadEmail, err)
+			}
+		}
 	}
 	return nil
 }
@@ -335,6 +357,7 @@ type seedCounts struct {
 	edges       int
 	tasks       int
 	deps        int
+	incidents   int
 	auditEvents int
 	agents      int
 	policies    int
@@ -589,9 +612,104 @@ func shortID() string {
 	return hex.EncodeToString(b)
 }
 
+// machineSpec is one machine in the demo seed.
+type machineSpec struct {
+	id            string
+	name          string
+	machineType   string
+	location      string
+	serialNumber  string
+	status        string
+	assignedEmail string
+}
+
+var machines = []machineSpec{
+	{"mach_seed_cnc", "CNC Mill #4", "CNC Mill", "Building A, Floor 1", "CNC-2024-004", "down", "tech.lead@acme.test"},
+	{"mach_seed_press", "Press Line B", "Hydraulic Press", "Building A, Floor 2", "PRS-2023-012", "operational", "tech.lead@acme.test"},
+	{"mach_seed_laser", "Laser Cutter #1", "Laser Cutter", "Building B, Workshop", "LCS-2024-007", "operational", ""},
+	{"mach_seed_server", "Server Rack A", "Server Rack", "Data Center, Rack A03", "SRV-001", "operational", ""},
+	{"mach_seed_hvac", "HVAC Unit 3", "HVAC System", "Roof, East Wing", "HVAC-2023-003", "degraded", ""},
+}
+
+func seedMachines(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) error {
+	for _, m := range machines {
+		var assignedID *int64
+		if m.assignedEmail != "" {
+			if id, ok := userIDs[m.assignedEmail]; ok {
+				assignedID = &id
+			}
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO machines (id, org_id, assigned_user_id, name, machine_type, location, serial_number, status)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT (id) DO NOTHING
+		`, m.id, demoOrgID, assignedID, m.name, m.machineType, m.location, m.serialNumber, m.status); err != nil {
+			return fmt.Errorf("insert machine %s: %w", m.name, err)
+		}
+	}
+	return nil
+}
+
 // seedAuditEvents creates believable audit events for each seeded request.
 // Completed nodes get node.started + node.completed; in_progress nodes get
 // node.started; completed requests get request.completed.
+// ────────────────────────────────────────────────────────────────────────────
+// Incidents
+// ────────────────────────────────────────────────────────────────────────────
+
+type incidentSpec struct {
+	id          string
+	machineID   string
+	title       string
+	description string
+	severity    string
+	status      string
+	reporter    string // email
+}
+
+var demoIncidents = []incidentSpec{
+	{
+		id:          "inc_seed_spindle",
+		machineID:   "mach_seed_cnc",
+		title:       "Spindle bearing failure",
+		description: "CNC Mill #4 spindle bearing overheated and seized during production run. Machine shut down automatically.",
+		severity:    "critical",
+		status:      "open",
+		reporter:    "tech.lead@acme.test",
+	},
+	{
+		id:          "inc_seed_coolant",
+		machineID:   "mach_seed_hvac",
+		title:       "Coolant leak detected",
+		description: "HVAC Unit 3 showing gradual coolant pressure loss. Compressor cycling frequently.",
+		severity:    "high",
+		status:      "in_progress",
+		reporter:    "tech.lead@acme.test",
+	},
+}
+
+func seedIncidents(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64) (int, error) {
+	for _, inc := range demoIncidents {
+		reporterID, ok := userIDs[inc.reporter]
+		if !ok {
+			continue
+		}
+		// Get the machine's org_id.
+		var orgID string
+		if err := pool.QueryRow(ctx, `SELECT org_id FROM machines WHERE id = $1`, inc.machineID).Scan(&orgID); err != nil {
+			return 0, fmt.Errorf("get machine org for %s: %w", inc.machineID, err)
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO incidents (id, machine_id, org_id, reported_by, title, description, severity, status, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() - interval '2 hours')
+			ON CONFLICT (id) DO NOTHING
+		`, inc.id, inc.machineID, orgID, reporterID, inc.title, inc.description, inc.severity, inc.status); err != nil {
+			return 0, fmt.Errorf("insert incident %s: %w", inc.id, err)
+		}
+	}
+	return len(demoIncidents), nil
+}
+
 func seedAuditEvents(ctx context.Context, pool *pgxpool.Pool, _ map[string]int64) (int, error) {
 	now := time.Now()
 	var count int
