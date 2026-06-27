@@ -383,3 +383,10 @@ select:focus,
 select:focus-visible {
   outline: none;
 }
+
+/* iOS safe area for bottom nav */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

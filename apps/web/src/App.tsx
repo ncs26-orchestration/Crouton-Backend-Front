@@ -196,7 +196,7 @@ function Shell() {
   const section = location.section;
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex bg-[var(--color-bg)] text-[var(--color-fg)]">
+    <div className="h-screen w-screen overflow-hidden flex bg-[var(--color-bg)] text-[var(--color-fg)] md:pb-0 pb-16">
       <ShellRail
         active={section}
         onSelect={setSection}
