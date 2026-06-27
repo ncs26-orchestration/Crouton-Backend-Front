@@ -24,7 +24,7 @@ def _client_and_model() -> tuple[AsyncOpenAI, str] | None:
     """Pick an OpenAI-compatible provider from settings, or ``None``.
 
     Every client gets an explicit timeout so a stuck provider fails fast into
-    the deterministic fallback, well inside the orchestrator's per-node budget.
+    the next fallback, well inside the orchestrator's per-node budget.
     """
     timeout = settings.llm_timeout_seconds
     if settings.deepseek_api_key:
@@ -50,11 +50,21 @@ def _client_and_model() -> tuple[AsyncOpenAI, str] | None:
             AsyncOpenAI(api_key=settings.openai_api_key, timeout=timeout),
             settings.openai_model,
         )
-    return None
+    # Fall back to local Ollama. Uses a generous timeout (60s) because the
+    # model may need to load into memory on first request. If Ollama is not
+    # running, the connection will fail fast (<1s) instead.
+    return (
+        AsyncOpenAI(
+            api_key="ollama",
+            base_url=settings.ollama_base_url.rstrip("/") + "/v1",
+            timeout=60.0,
+        ),
+        settings.ollama_model,
+    )
 
 
 def llm_available() -> bool:
-    """True when an OpenAI-compatible provider is configured."""
+    """True when an LLM provider is reachable (remote or local Ollama)."""
     return _client_and_model() is not None
 
 

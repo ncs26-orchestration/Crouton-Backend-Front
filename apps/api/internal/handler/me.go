@@ -19,6 +19,58 @@ func NewMeHandler(logger *slog.Logger, db *pgxpool.Pool) *MeHandler {
 	return &MeHandler{logger: logger, db: db}
 }
 
+// GetMeProfile handles GET /me — returns the authenticated user's profile
+// including org role and team roles.
+func (h *MeHandler) GetMeProfile(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
+	ctx := c.Request().Context()
+
+	type teamRole struct {
+		Team string `json:"team"`
+		Role string `json:"role"`
+	}
+
+	profile := struct {
+		ID        int64      `json:"id"`
+		Email     string     `json:"email"`
+		Name      string     `json:"name"`
+		OrgRole   string     `json:"org_role"`
+		OrgID     string     `json:"org_id"`
+		OrgName   string     `json:"org_name"`
+		TeamRoles []teamRole `json:"team_roles"`
+	}{
+		ID:    claims.UserID,
+		Email: claims.Email,
+		Name:  claims.Name,
+	}
+
+	// Fetch org membership + team roles.
+	err := h.db.QueryRow(ctx, `
+		SELECT om.org_id, o.name, om.role,
+		       COALESCE(
+		         (SELECT jsonb_agg(jsonb_build_object('team', t.name, 'role', tm.role))
+		            FROM team_members tm
+		            JOIN teams t ON t.id = tm.team_id AND t.org_id = om.org_id
+		           WHERE tm.user_id = $1),
+		         '[]'::jsonb
+		       ) AS team_roles
+		  FROM org_members om
+		  JOIN organizations o ON o.id = om.org_id
+		 WHERE om.user_id = $1
+		 LIMIT 1
+	`, claims.UserID).Scan(&profile.OrgID, &profile.OrgName, &profile.OrgRole, &profile.TeamRoles)
+	if err != nil {
+		h.logger.Error("get me profile: query", slog.String("err", err.Error()))
+		profile.OrgRole = "unknown"
+	}
+
+	return c.JSON(http.StatusOK, profile)
+}
+
 type workItemResponse struct {
 	ID              string    `json:"id"`
 	OrgID           string    `json:"org_id"`

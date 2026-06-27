@@ -99,10 +99,16 @@ func (h *WorkHandler) ListMyWork(c echo.Context) error {
 		JOIN incidents mi ON mi.id = at.incident_id
 		JOIN machines m ON m.id = mi.machine_id
 		JOIN org_members om ON om.org_id = mi.org_id AND om.user_id = $1
-		JOIN users mu ON mu.id = mi.reported_by
+		LEFT JOIN users mu ON mu.id = mi.reported_by
 		WHERE at.incident_id IS NOT NULL
 		  AND mi.status NOT IN ('resolved')
-		  AND om.role IN ('admin', 'executor')
+		  AND (
+		    om.role IN ('admin', 'executor')
+		    OR EXISTS (
+		      SELECT 1 FROM team_members tm
+		      WHERE tm.user_id = $1 AND tm.role = 'technician'
+		    )
+		  )
 
 		ORDER BY request_id DESC
 		LIMIT 50

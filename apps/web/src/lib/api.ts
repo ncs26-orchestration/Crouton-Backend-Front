@@ -15,6 +15,8 @@ import type {
 	ExtractResponse,
 	FinalReport,
 	ISRegistry,
+	Incident,
+	IncidentMessage,
 	OrgRequest,
 	Project,
 	NodeDetailResponse,
@@ -460,8 +462,8 @@ export const api = {
 
   // --- Org members ---
 
-  listOrgMembers: (orgId: string): Promise<{ members: Array<{ id: number; name: string; email: string; role: string; joined_at: string }> }> =>
-    fetchJSON<Array<{ id: number; name: string; email: string; role: string; joined_at: string }>>(`/api/orgs/${encodeURIComponent(orgId)}/members`)
+  listOrgMembers: (orgId: string): Promise<{ members: Array<{ id: number; name: string; email: string; role: string; team_roles?: { team: string; role: string }[]; joined_at: string }> }> =>
+    fetchJSON<Array<{ id: number; name: string; email: string; role: string; team_roles?: { team: string; role: string }[]; joined_at: string }>>(`/api/orgs/${encodeURIComponent(orgId)}/members`)
       .then((arr) => ({ members: Array.isArray(arr) ? arr : [] })),
 
   addOrgMember: (orgId: string, payload: { user_id: number; role: string }): Promise<void> =>
@@ -585,6 +587,37 @@ export const api = {
 
 	listMachines: (orgId: string): Promise<{ machines: Machine[] }> =>
 		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/machines`),
+
+	// --- Incidents (M-F6) ---
+
+	listIncidents: (orgId: string): Promise<{ incidents: Incident[] }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/incidents`),
+
+	getIncident: (incidentId: string): Promise<{ incident: Incident }> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}`),
+
+	listIncidentMessages: (incidentId: string): Promise<{ messages: IncidentMessage[] }> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/messages`),
+
+	appendIncidentMessage: (incidentId: string, content: string): Promise<{ message: IncidentMessage }> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/messages`, {
+			method: "POST",
+			body: JSON.stringify({ content }),
+		}),
+
+	resolveIncident: (incidentId: string, notes: string): Promise<{ status: string }> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/resolve`, {
+			method: "POST",
+			body: JSON.stringify({ notes }),
+		}),
+
+	requestDiagnosis: (incidentId: string): Promise<unknown> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/diagnose`, {
+			method: "POST",
+		}),
+
+	getDiagnosis: (incidentId: string): Promise<unknown> =>
+		fetchJSON(`/api/incidents/${encodeURIComponent(incidentId)}/diagnosis`),
 
 	uploadMachineDocument: (machineId: string, file: File, docType: string): Promise<{ document: { id: string; filename: string; doc_type: string } }> => {
 		const form = new FormData();

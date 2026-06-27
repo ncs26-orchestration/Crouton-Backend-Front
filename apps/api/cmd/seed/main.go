@@ -709,6 +709,15 @@ func seedIncidents(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]i
 		`, inc.id, inc.machineID, orgID, reporterID, inc.title, inc.description, inc.severity, inc.status); err != nil {
 			return 0, fmt.Errorf("insert incident %s: %w", inc.id, err)
 		}
+		// Create agent_task so the incident appears in the technician's work inbox.
+		taskID := "enpanne:machine:" + inc.id
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO agent_tasks (id, title, status, incident_id)
+			VALUES ($1, $2, 'pending', $3)
+			ON CONFLICT (id) DO NOTHING
+		`, taskID, inc.title, inc.id); err != nil {
+			return 0, fmt.Errorf("insert agent_task for incident %s: %w", inc.id, err)
+		}
 	}
 	return len(demoIncidents), nil
 }

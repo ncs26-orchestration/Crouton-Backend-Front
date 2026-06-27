@@ -738,10 +738,19 @@ func (h *OrgsHandler) ListOrgMembers(c echo.Context) error {
 
 	ctx := c.Request().Context()
 	rows, err := h.db.Query(ctx,
-		`SELECT u.id, u.email, u.name, om.role, om.joined_at
+		`SELECT u.id, u.email, u.name, om.role, om.joined_at,
+		        COALESCE(
+		          jsonb_agg(
+		            jsonb_build_object('team', t.name, 'role', tm.role)
+		          ) FILTER (WHERE tm.team_id IS NOT NULL),
+		          '[]'::jsonb
+		        ) AS team_roles
 		   FROM org_members om
 		   JOIN users u ON u.id = om.user_id
+		   LEFT JOIN team_members tm ON tm.user_id = u.id
+		   LEFT JOIN teams t ON t.id = tm.team_id AND t.org_id = om.org_id
 		  WHERE om.org_id = $1
+		  GROUP BY u.id, u.email, u.name, om.role, om.joined_at
 		  ORDER BY om.joined_at ASC`,
 		orgID,
 	)
@@ -751,17 +760,22 @@ func (h *OrgsHandler) ListOrgMembers(c echo.Context) error {
 	}
 	defer rows.Close()
 
+	type teamRoleEntry struct {
+		Team string `json:"team"`
+		Role string `json:"role"`
+	}
 	type memberItem struct {
-		ID       int64     `json:"id"`
-		Email    string    `json:"email"`
-		Name     string    `json:"name"`
-		Role     string    `json:"role"`
-		JoinedAt time.Time `json:"joined_at"`
+		ID        int64           `json:"id"`
+		Email     string          `json:"email"`
+		Name      string          `json:"name"`
+		Role      string          `json:"role"`
+		TeamRoles []teamRoleEntry `json:"team_roles"`
+		JoinedAt  time.Time       `json:"joined_at"`
 	}
 	result := make([]memberItem, 0)
 	for rows.Next() {
 		var m memberItem
-		if err := rows.Scan(&m.ID, &m.Email, &m.Name, &m.Role, &m.JoinedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Email, &m.Name, &m.Role, &m.JoinedAt, &m.TeamRoles); err != nil {
 			h.logger.Error("list org members: scan", slog.String("err", err.Error()))
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}

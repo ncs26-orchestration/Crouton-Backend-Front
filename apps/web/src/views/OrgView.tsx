@@ -17,7 +17,8 @@ import { useToasts } from "../components/Toasts";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type Team = { id: string; name: string; description: string; created_at: string };
-type OrgMember = { id: number; name: string; email: string; role: string; joined_at: string };
+type TeamRoleEntry = { team: string; role: string };
+type OrgMember = { id: number; name: string; email: string; role: string; team_roles?: TeamRoleEntry[]; joined_at: string };
 
 // ── OrgView ────────────────────────────────────────────────────────────────
 
@@ -503,6 +504,18 @@ function MembersTab({ orgId }: { orgId: string }) {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-[var(--color-fg)] truncate">{m.name}</p>
             <p className="text-xs text-[var(--color-fg-muted)] truncate">{m.email}</p>
+            {m.team_roles && m.team_roles.length > 0 && (
+              <div className="flex gap-1 mt-1">
+                {m.team_roles.map((tr, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-brand)]"
+                  >
+                    {tr.team}: {tr.role}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <select
             value={m.role}
@@ -512,7 +525,6 @@ function MembersTab({ orgId }: { orgId: string }) {
             <option value="admin">Admin</option>
             <option value="executor">Executor</option>
             <option value="employee">Employee</option>
-            <option value="technician">Technician</option>
           </select>
           <button
             onClick={() => removeMut.mutate(m.id)}

@@ -504,6 +504,36 @@ export interface WorkflowDiff {
   changed: string[];
 }
 
+// --- Incidents (M-F6) ---
+
+export type IncidentSeverity = "low" | "medium" | "high" | "critical";
+export type IncidentStatus = "open" | "in_progress" | "resolved";
+
+export interface Incident {
+  id: string;
+  machine_id: string;
+  machine_name: string;
+  org_id: string;
+  reported_by: number;
+  title: string;
+  description: string;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  resolved_at: string | null;
+  resolution_notes: string;
+  created_at: string;
+}
+
+export interface IncidentMessage {
+  id: string;
+  incident_id: string;
+  sender_id: number | null;
+  sender_name: string;
+  sender_role: string;
+  content: string;
+  created_at: string;
+}
+
 // --- Machines (M-F1) ---
 
 export type MachineStatus = "operational" | "degraded" | "down" | "maintenance";

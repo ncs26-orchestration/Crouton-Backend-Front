@@ -64,9 +64,13 @@ machine's service manual (excerpted below), produce a JSON diagnostic plan.
 {manual_excerpt}
 === END MANUAL ===
 
+If the manual is relevant to the incident, use it to ground your steps. \
+If the manual content is empty, generic, or unrelated, ignore it and rely on \
+your general industrial maintenance knowledge instead.
+
 Respond ONLY with a JSON object:
 {{
-  "summary": "1-sentence diagnosis grounded in the manual and telemetry",
+  "summary": "1-sentence diagnosis grounded in the manual or general reasoning",
   "root_cause": "probable root cause or null if uncertain",
   "steps": [
     {{
@@ -82,7 +86,7 @@ Respond ONLY with a JSON object:
 Rules:
 - Generate 4-8 steps ordered from safest/simplest to most invasive.
 - Start with inspection/measurement, end with test/restart.
-- Reference specific machine type, telemetry values, and manual sections.
+- Reference specific machine type, telemetry values, and manual sections if available.
 - Include safety warnings for heat, pressure, electrical, or chemical hazards.
 - Output JSON only."""
 

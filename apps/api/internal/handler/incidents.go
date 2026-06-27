@@ -40,7 +40,7 @@ type incidentResponse struct {
 	ID              string     `json:"id"`
 	MachineID       string     `json:"machine_id"`
 	OrgID           string     `json:"org_id"`
-	ReportedBy      int64      `json:"reported_by"`
+	ReportedBy      *int64     `json:"reported_by"`
 	Title           string     `json:"title"`
 	Description     string     `json:"description"`
 	Severity        string     `json:"severity"`
@@ -86,6 +86,64 @@ func toIncMessageResponse(m repo.IncidentMessage) incMessageResponse {
 		Content:    m.Content,
 		CreatedAt:  m.CreatedAt,
 	}
+}
+
+// ── List by Org ─────────────────────────────────────────────────────
+
+// ListIncidents handles GET /orgs/:orgId/incidents.
+// Includes machine name via JOIN. Returns all incidents for the org.
+func (h *IncidentsHandler) ListIncidents(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
+	orgID := c.Param("orgId")
+
+	if _, err := requireOrgMember(c, h.db, orgID, claims.UserID); err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+
+	ctx := c.Request().Context()
+	rows, err := h.db.Query(ctx,
+		`SELECT i.id, i.machine_id, i.org_id, i.reported_by, i.title,
+		        i.description, i.severity, i.status,
+		        i.resolved_at, COALESCE(i.resolution_notes, ''), i.created_at,
+		        COALESCE(m.name, '') AS machine_name
+		   FROM incidents i
+		   LEFT JOIN machines m ON m.id = i.machine_id
+		  WHERE i.org_id = $1
+		  ORDER BY i.created_at DESC`,
+		orgID,
+	)
+	if err != nil {
+		h.logger.Error("list incidents: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer rows.Close()
+
+	type incidentListItem struct {
+		incidentResponse
+		MachineName string `json:"machine_name"`
+	}
+	out := make([]incidentListItem, 0)
+	for rows.Next() {
+		var item incidentListItem
+		if err := rows.Scan(
+			&item.ID, &item.MachineID, &item.OrgID, &item.ReportedBy,
+			&item.Title, &item.Description, &item.Severity, &item.Status,
+			&item.ResolvedAt, &item.ResolutionNotes, &item.CreatedAt,
+			&item.MachineName,
+		); err != nil {
+			h.logger.Error("list incidents: scan", slog.String("err", err.Error()))
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"incidents": out})
 }
 
 // ── Create ──────────────────────────────────────────────────────────
@@ -141,7 +199,7 @@ func (h *IncidentsHandler) CreateIncident(c echo.Context) error {
 		ID:          incidentID,
 		MachineID:   body.MachineID,
 		OrgID:       machine.OrgID,
-		ReportedBy:  claims.UserID,
+		ReportedBy:  &claims.UserID,
 		Title:       body.Title,
 		Description: body.Description,
 		Severity:    body.Severity,
