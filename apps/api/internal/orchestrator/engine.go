@@ -269,9 +269,10 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			return nil
 		}
 
-		// The executive-approval node is a human gate, not an agent step. Run
-		// every other eligible node first; if the gate is among them, park the
-		// request at awaiting_approval and stop. A human resumes it via Approve.
+		// The executive-approval node is a final sign-off stamp, not a blocking
+		// human step — the human-in-the-loop work happens at the department
+		// verifications. Run the other eligible nodes, then auto-advance the gate
+		// (recording the sign-off) so the flow proceeds to execution.
 		var gate *repo.WorkflowNode
 		for i := range eligible {
 			if eligible[i].AgentType == approvalAgentType {
@@ -298,29 +299,26 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			}
 		}
 		if gate != nil {
-			return e.parkForApproval(ctx, requestID, *gate, completed*100/len(nodes))
+			const statusText = "Signed off — proceeding to execution."
+			if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", statusText, 100); err != nil {
+				return fmt.Errorf("complete approval gate: %w", err)
+			}
+			if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+				ID: "aev_" + shortID(), RequestID: requestID, NodeID: &gate.ID,
+				Actor: "Executive", Action: "approval.auto",
+				Reason: "Auto sign-off — department verifications carry the human review.",
+			}); err != nil {
+				e.log.Warn("failed to audit approval.auto", slog.String("request_id", requestID), slog.String("err", err.Error()))
+			}
+			completed++
+			progress := completed * 100 / len(nodes)
+			if err := e.store.UpdateRequestProgress(ctx, requestID, "in_progress", progress); err != nil {
+				return fmt.Errorf("update request progress: %w", err)
+			}
+			e.publishNodeEvent(requestID, "completed", gate.ID, gate.Key, 100, statusText, time.Now())
+			e.publishRequestEvent(requestID, "in_progress", progress)
 		}
 	}
-}
-
-// parkForApproval marks the executive-approval gate in_progress and parks the
-// whole request at awaiting_approval, then returns so the worker goroutine
-// exits. A human resumes the request through Approve. Restart recovery only
-// re-launches in_progress requests, so a parked request correctly keeps waiting
-// across a restart instead of auto-advancing.
-func (e *Engine) parkForApproval(ctx context.Context, requestID string, gate repo.WorkflowNode, progress int) error {
-	const statusText = "Awaiting executive approval."
-	if err := e.store.UpdateNodeStatus(ctx, gate.ID, "in_progress", statusText, 50); err != nil {
-		return fmt.Errorf("mark approval in_progress: %w", err)
-	}
-	if err := e.store.UpdateRequestProgress(ctx, requestID, "awaiting_approval", progress); err != nil {
-		return fmt.Errorf("park for approval: %w", err)
-	}
-	e.publishNodeEvent(requestID, "in_progress", gate.ID, gate.Key, 50, statusText, time.Now())
-	e.publishRequestEvent(requestID, "awaiting_approval", progress)
-	e.log.Info("orchestrator: parked for executive approval",
-		slog.String("request_id", requestID), slog.String("node_id", gate.ID))
-	return nil
 }
 
 // Approve records a human decision on a request parked at the executive gate.
