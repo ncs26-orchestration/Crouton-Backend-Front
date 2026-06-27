@@ -152,6 +152,17 @@ func (r *AssignmentRepo) ListVerificationsForUser(ctx context.Context, orgID str
 	return out, rows.Err()
 }
 
+// IsTeamLead reports whether a user is a lead of a specific team. Used to let a
+// team lead manage their own team's workflows.
+func (r *AssignmentRepo) IsTeamLead(ctx context.Context, teamID string, userID int64) (bool, error) {
+	var ok bool
+	err := r.pg.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2 AND role = 'lead')`,
+		teamID, userID,
+	).Scan(&ok)
+	return ok, err
+}
+
 // UserInDepartment reports whether a user belongs to the team whose name matches
 // a node's department, within an org. Used for RBAC on verification.
 func (r *AssignmentRepo) UserInDepartment(ctx context.Context, orgID string, userID int64, department string) (bool, error) {

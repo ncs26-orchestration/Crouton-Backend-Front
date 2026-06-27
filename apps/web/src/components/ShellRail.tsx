@@ -33,6 +33,7 @@ export type ShellSection =
   | "home"
   | "my-work"
   | "requests"
+  | "workflow-library"
   | "workflows"
   | "machines"
   | "agents"
@@ -63,7 +64,7 @@ const PRIMARY: Item[] = [
   { id: "home", icon: Home, label: "Home", hint: "Dashboard" },
   { id: "my-work", icon: Inbox, label: "My Work", hint: "Tasks & approvals" },
   { id: "requests", icon: FileText, label: "Requests", hint: "Submit & track" },
-  { id: "workflows", icon: Workflow, label: "Workflows", hint: "Live canvas" },
+  { id: "workflow-library", icon: Workflow, label: "Workflows", hint: "Reusable processes" },
   { id: "machines", icon: Wrench, label: "Machines", hint: "Equipment" },
   { id: "agents", icon: Bot, label: "Agents", hint: "Agent roster" },
   { id: "reports", icon: BarChart3, label: "Reports", hint: "Audit & analytics" },

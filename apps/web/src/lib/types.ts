@@ -301,6 +301,60 @@ export interface NodeVerification {
   assigned_to_me: boolean;
 }
 
+// One step in a workflow definition (the runnable node shape).
+export interface WorkflowStep {
+  key: string;
+  name: string;
+  agent_type: string;
+  department: string;
+}
+
+// A connection between two workflow steps, by key.
+export interface WorkflowStepEdge {
+  from: string;
+  to: string;
+  type?: string;
+}
+
+// A reusable internal process (hiring, leave): a named graph of department
+// steps, scoped org-wide ('global') or to a team. Run on demand to create an
+// execution. (Named WorkflowDef to avoid clashing with the IR `Workflow`.)
+export interface WorkflowDef {
+  id: string;
+  org_id: string;
+  team_id: string | null;
+  team_name: string;
+  scope: "global" | "team";
+  name: string;
+  description: string;
+  category: string;
+  nodes: WorkflowStep[];
+  edges: WorkflowStepEdge[];
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// The editable shape sent when creating or updating a workflow.
+export interface WorkflowInput {
+  name: string;
+  description: string;
+  category: string;
+  scope: "global" | "team";
+  team_id: string | null;
+  nodes: WorkflowStep[];
+  edges: WorkflowStepEdge[];
+}
+
+// A compact view of one execution of a workflow.
+export interface WorkflowRunSummary {
+  id: string;
+  title: string;
+  status: string;
+  progress: number;
+  created_at: string;
+}
+
 // A human's call on the executive-approval gate (F7).
 export type ApprovalDecision = "approve" | "reject";
 
@@ -319,6 +373,9 @@ export interface OrgRequest {
   priority: RequestPriority;
   status: RequestStatus;
   progress: number;
+  // 'request' for an ad-hoc request, 'workflow_run' for a workflow execution.
+  kind?: "request" | "workflow_run";
+  workflow_id?: string | null;
   estimated_completion: string | null;
   created_at: string;
 }
