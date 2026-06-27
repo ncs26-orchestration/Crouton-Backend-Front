@@ -22,6 +22,9 @@ type fakeStore struct {
 	reqProgress int
 	deps        []fakeDep
 	policies    []repo.DepartmentPolicy
+	flags       []repo.NodeFlag
+	checks      []repo.NodeCheck
+	assignments map[string]int // node_id → assignee count
 }
 
 type fakeDep struct {
@@ -73,6 +76,52 @@ func (s *fakeStore) UpdateNodeDecisionOutcome(_ context.Context, nodeID, outcome
 
 func (s *fakeStore) ListPoliciesByOrg(_ context.Context, _ string) ([]repo.DepartmentPolicy, error) {
 	return s.policies, nil
+}
+
+func (s *fakeStore) CountAssignmentsByNode(_ context.Context, nodeID string) (int, error) {
+	return s.assignments[nodeID], nil
+}
+
+func (s *fakeStore) ClearNodeChecks(_ context.Context, nodeID string) error {
+	kept := s.checks[:0]
+	for _, c := range s.checks {
+		if c.NodeID != nodeID {
+			kept = append(kept, c)
+		}
+	}
+	s.checks = kept
+	return nil
+}
+
+func (s *fakeStore) InsertChecks(_ context.Context, checks []repo.NodeCheck) error {
+	s.checks = append(s.checks, checks...)
+	return nil
+}
+
+func (s *fakeStore) SetNodeDecisionSummary(_ context.Context, nodeID, summary string) error {
+	for _, n := range s.nodes {
+		if n.ID == nodeID {
+			n.DecisionSummary = summary
+			return nil
+		}
+	}
+	return repo.ErrNotFound
+}
+
+func (s *fakeStore) ClearNodeFlags(_ context.Context, nodeID string) error {
+	kept := s.flags[:0]
+	for _, f := range s.flags {
+		if f.NodeID != nodeID {
+			kept = append(kept, f)
+		}
+	}
+	s.flags = kept
+	return nil
+}
+
+func (s *fakeStore) InsertFlags(_ context.Context, flags []repo.NodeFlag) error {
+	s.flags = append(s.flags, flags...)
+	return nil
 }
 
 func (s *fakeStore) UpdateNodeStatus(_ context.Context, nodeID, status, statusText string, progress int) error {
@@ -338,7 +387,7 @@ func TestRunCompletesParallelBranches(t *testing.T) {
 	}
 }
 
-func TestRunParksAtExecApproval(t *testing.T) {
+func TestExecGateAutoAdvances(t *testing.T) {
 	store := approvalGraph()
 	e := quietEngine(store, fakeAgent{})
 
@@ -346,70 +395,19 @@ func TestRunParksAtExecApproval(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	// The reviews complete; the gate is parked in_progress; report waits.
-	for _, id := range []string{"n_intake", "n_fin", "n_legal", "n_it"} {
-		if n := store.byID(id); n.Status != "completed" {
-			t.Errorf("node %s = %q, want completed", id, n.Status)
-		}
-	}
-	if appr := store.byID("n_appr"); appr.Status != "in_progress" {
-		t.Errorf("approval node = %q, want in_progress (parked)", appr.Status)
-	}
-	if rep := store.byID("n_report"); rep.Status != "pending" {
-		t.Errorf("report node = %q, want pending (gated)", rep.Status)
-	}
-	if store.reqStatus != "awaiting_approval" {
-		t.Errorf("request status = %q, want awaiting_approval", store.reqStatus)
-	}
-}
-
-func TestApproveResumesToCompletion(t *testing.T) {
-	store := approvalGraph()
-	e := quietEngine(store, fakeAgent{})
-
-	if err := e.run(context.Background(), "req_1"); err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if store.reqStatus != "awaiting_approval" {
-		t.Fatalf("setup: request = %q, want awaiting_approval", store.reqStatus)
-	}
-
-	// Approve resumes the worker synchronously here (Start runs a goroutine,
-	// but run is also driven directly to assert the terminal state).
-	if err := e.Approve(context.Background(), "req_1", ApprovalApprove, "Budget and risk are acceptable.", "CI User"); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
-	if err := e.run(context.Background(), "req_1"); err != nil {
-		t.Fatalf("resume run: %v", err)
-	}
-
+	// The gate is a sign-off stamp: it auto-completes and the flow proceeds to
+	// the report; the whole request completes without a human approval step.
 	if appr := store.byID("n_appr"); appr.Status != "completed" {
-		t.Errorf("approval node = %q, want completed", appr.Status)
+		t.Errorf("approval node = %q, want completed (auto sign-off)", appr.Status)
 	}
 	if rep := store.byID("n_report"); rep.Status != "completed" {
-		t.Errorf("report node = %q, want completed after approval", rep.Status)
+		t.Errorf("report node = %q, want completed", rep.Status)
 	}
 	if store.reqStatus != "completed" || store.reqProgress != 100 {
 		t.Errorf("request = %q/%d, want completed/100", store.reqStatus, store.reqProgress)
 	}
-}
-
-func TestRejectStopsRequest(t *testing.T) {
-	store := approvalGraph()
-	e := quietEngine(store, fakeAgent{})
-
-	if err := e.run(context.Background(), "req_1"); err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if err := e.Approve(context.Background(), "req_1", ApprovalReject, "Out of budget this quarter.", "CI User"); err != nil {
-		t.Fatalf("reject: %v", err)
-	}
-
-	if store.reqStatus != "rejected" {
-		t.Errorf("request status = %q, want rejected", store.reqStatus)
-	}
-	if rep := store.byID("n_report"); rep.Status != "pending" {
-		t.Errorf("report node = %q, want pending (request stopped)", rep.Status)
+	if countAudit(store, "approval.auto") != 1 {
+		t.Errorf("approval.auto audit = %d, want 1", countAudit(store, "approval.auto"))
 	}
 }
 
@@ -696,6 +694,19 @@ func TestAgentFlagIsAuditedAndOutcomeRecorded(t *testing.T) {
 	if countAudit(store, "node.flagged") != 1 {
 		t.Errorf("node.flagged audit count = %d, want 1", countAudit(store, "node.flagged"))
 	}
+	// The reasoning and the flag are persisted on the node, not just audited.
+	if store.byID("n_fin").DecisionSummary != "Over budget but fundable." {
+		t.Errorf("finance decision_summary not persisted, got %q", store.byID("n_fin").DecisionSummary)
+	}
+	finFlags := 0
+	for _, f := range store.flags {
+		if f.NodeID == "n_fin" {
+			finFlags++
+		}
+	}
+	if finFlags != 1 {
+		t.Errorf("finance persisted flags = %d, want 1", finFlags)
+	}
 }
 
 // Policies for a node's department are passed to the agent as org_context.
@@ -752,4 +763,51 @@ func (a *capturingAgent) orgContextFor(agentType string) map[string]any {
 		}
 	}
 	return nil
+}
+
+// A node with an assigned verifier pauses at awaiting_review instead of
+// completing, blocking downstream until a human verifies it.
+func TestAssignedNodeAwaitsReviewThenVerify(t *testing.T) {
+	store := newGraph() // intake -> finance -> report
+	store.assignments = map[string]int{"n_fin": 1}
+	e := quietEngine(store, fakeAgent{})
+
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if store.byID("n_fin").Status != "awaiting_review" {
+		t.Errorf("finance status = %q, want awaiting_review", store.byID("n_fin").Status)
+	}
+	if store.byID("n_report").Status == "completed" {
+		t.Error("report completed before finance was verified")
+	}
+
+	// Human verifies → finance completes; re-running advances to report.
+	if err := e.VerifyNode(context.Background(), "req_1", "n_fin", ApprovalApprove, "looks good", "Farah Finance"); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if store.byID("n_fin").Status != "completed" {
+		t.Errorf("finance status after verify = %q, want completed", store.byID("n_fin").Status)
+	}
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run after verify: %v", err)
+	}
+	if store.byID("n_report").Status != "completed" {
+		t.Errorf("report status = %q, want completed after verify", store.byID("n_report").Status)
+	}
+	if countAudit(store, "node.verified") != 1 {
+		t.Errorf("node.verified audit = %d, want 1", countAudit(store, "node.verified"))
+	}
+}
+
+// An unassigned node auto-completes (no review gate).
+func TestUnassignedNodeAutoCompletes(t *testing.T) {
+	store := newGraph()
+	e := quietEngine(store, fakeAgent{})
+	if err := e.run(context.Background(), "req_1"); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if store.byID("n_fin").Status != "completed" {
+		t.Errorf("unassigned finance status = %q, want completed", store.byID("n_fin").Status)
+	}
 }

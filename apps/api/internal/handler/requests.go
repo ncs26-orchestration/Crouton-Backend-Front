@@ -22,26 +22,30 @@ import (
 // plans the workflow graph and launches the orchestration engine), list,
 // get-with-graph, node detail, and audit reads.
 type RequestsHandler struct {
-	logger   *slog.Logger
-	pg       *pgxpool.Pool
-	requests *repo.RequestRepo
-	workflow *repo.WorkflowRepo
-	deps     *repo.DependencyRepo
-	audit    *repo.AuditRepo
-	agent    *agentclient.Client
-	engine   *orchestrator.Engine
+	logger      *slog.Logger
+	pg          *pgxpool.Pool
+	requests    *repo.RequestRepo
+	workflow    *repo.WorkflowRepo
+	deps        *repo.DependencyRepo
+	audit       *repo.AuditRepo
+	assignments *repo.AssignmentRepo
+	messages    *repo.NodeMessageRepo
+	agent       *agentclient.Client
+	engine      *orchestrator.Engine
 }
 
 func NewRequestsHandler(logger *slog.Logger, pg *pgxpool.Pool, agent *agentclient.Client, engine *orchestrator.Engine) *RequestsHandler {
 	return &RequestsHandler{
-		logger:   logger,
-		pg:       pg,
-		requests: repo.NewRequestRepo(pg),
-		workflow: repo.NewWorkflowRepo(pg),
-		deps:     repo.NewDependencyRepo(pg),
-		audit:    repo.NewAuditRepo(pg),
-		agent:    agent,
-		engine:   engine,
+		logger:      logger,
+		pg:          pg,
+		requests:    repo.NewRequestRepo(pg),
+		workflow:    repo.NewWorkflowRepo(pg),
+		deps:        repo.NewDependencyRepo(pg),
+		audit:       repo.NewAuditRepo(pg),
+		assignments: repo.NewAssignmentRepo(pg),
+		messages:    repo.NewNodeMessageRepo(pg),
+		agent:       agent,
+		engine:      engine,
 	}
 }
 
@@ -82,19 +86,20 @@ func validateRequestInput(title, description, priority string) (normTitle, normP
 // requestResponse is the wire shape for a request. requester_name is
 // resolved from users so the UI can show who submitted it.
 type requestResponse struct {
-	ID                  string     `json:"id"`
-	OrgID               string     `json:"org_id"`
-	Title               string     `json:"title"`
-	Description         string     `json:"description"`
-	RequesterUserID     int64      `json:"requester_user_id"`
-	RequesterName       string     `json:"requester_name"`
-	RequesterRole       string     `json:"requester_role"`
-	RequestType         string     `json:"request_type"`
-	Priority            string     `json:"priority"`
-	Status              string     `json:"status"`
-	Progress            int        `json:"progress"`
-	EstimatedCompletion *time.Time `json:"estimated_completion"`
-	CreatedAt           time.Time  `json:"created_at"`
+	ID                  string         `json:"id"`
+	OrgID               string         `json:"org_id"`
+	Title               string         `json:"title"`
+	Description         string         `json:"description"`
+	RequesterUserID     int64          `json:"requester_user_id"`
+	RequesterName       string         `json:"requester_name"`
+	RequesterRole       string         `json:"requester_role"`
+	RequestType         string         `json:"request_type"`
+	Details             map[string]any `json:"details"`
+	Priority            string         `json:"priority"`
+	Status              string         `json:"status"`
+	Progress            int            `json:"progress"`
+	EstimatedCompletion *time.Time     `json:"estimated_completion"`
+	CreatedAt           time.Time      `json:"created_at"`
 }
 
 func toRequestResponse(r repo.Request, requesterName string) requestResponse {
@@ -107,6 +112,7 @@ func toRequestResponse(r repo.Request, requesterName string) requestResponse {
 		RequesterName:       requesterName,
 		RequesterRole:       r.RequesterRole,
 		RequestType:         r.RequestType,
+		Details:             r.Details,
 		Priority:            r.Priority,
 		Status:              r.Status,
 		Progress:            r.Progress,
@@ -180,9 +186,11 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	}
 
 	var body struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Priority    string `json:"priority"`
+		Title       string         `json:"title"`
+		Description string         `json:"description"`
+		Priority    string         `json:"priority"`
+		Category    string         `json:"category"`
+		Details     map[string]any `json:"details"`
 	}
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -190,6 +198,12 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 	title, priority, verr := validateRequestInput(body.Title, body.Description, body.Priority)
 	if verr != "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": verr})
+	}
+	// The picked category is a soft hint for the request type; intake may refine
+	// it. An empty/General category leaves it for intake to classify.
+	requestTypeHint := slugify(body.Category)
+	if requestTypeHint == "" || requestTypeHint == "general" {
+		requestTypeHint = "general"
 	}
 
 	ctx := c.Request().Context()
@@ -201,12 +215,18 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 		Description:     body.Description,
 		RequesterUserID: claims.UserID,
 		RequesterRole:   requesterRole,
+		Details:         body.Details,
 		Priority:        priority,
 		Status:          "submitted",
 	})
 	if err != nil {
 		h.logger.Error("create request: insert", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if requestTypeHint != "general" {
+		if err := h.requests.SetRequestType(ctx, reqID, requestTypeHint); err == nil {
+			saved.RequestType = requestTypeHint
+		}
 	}
 
 	// Plan the workflow graph. A deterministic fallback keeps creation
@@ -216,6 +236,7 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 			Title:       title,
 			Description: body.Description,
 			Priority:    priority,
+			Details:     body.Details,
 		},
 		OrgContext: h.intakeOrgContext(ctx, orgID),
 	})
@@ -280,30 +301,26 @@ func (h *RequestsHandler) CreateRequest(c echo.Context) error {
 		h.logger.Error("create request: insert graph", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	if err := h.requests.UpdateStatusProgressTx(ctx, tx, reqID, "in_progress", 0); err != nil {
-		h.logger.Error("create request: set in_progress", slog.String("err", err.Error()))
+	// The request lands in 'draft': intake has planned the graph, but it doesn't
+	// run until a human reviews it, assigns verifiers, and launches it.
+	if err := h.requests.UpdateStatusProgressTx(ctx, tx, reqID, "draft", 0); err != nil {
+		h.logger.Error("create request: set draft", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	if err := tx.Commit(ctx); err != nil {
 		h.logger.Error("create request: commit", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	saved.Status = "in_progress"
+	saved.Status = "draft"
 
 	if err := h.audit.Append(ctx, repo.AuditEvent{
 		ID:        "aev_" + randomHex(8),
 		RequestID: reqID,
 		Actor:     claims.Name,
 		Action:    "request.created",
-		Reason:    claims.Name + " submitted: " + title,
+		Reason:    claims.Name + " drafted: " + title,
 	}); err != nil {
 		h.logger.Error("create request: append audit event", slog.String("err", err.Error()))
-	}
-
-	// Hand the request off to the orchestration engine, which runs each node
-	// through its department agent on a background worker (F3).
-	if h.engine != nil {
-		h.engine.Start(reqID)
 	}
 
 	names := h.requesterNames(ctx, []int64{saved.RequesterUserID})
@@ -413,6 +430,8 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 			"description":      n.Description,
 			"progress_percent": n.ProgressPercent,
 			"status_text":      n.StatusText,
+			"decision_outcome": n.DecisionOutcome,
+			"decision_summary": n.DecisionSummary,
 			"started_at":       n.StartedAt,
 			"completed_at":     n.CompletedAt,
 		}
@@ -431,12 +450,19 @@ func (h *RequestsHandler) GetRequest(c echo.Context) error {
 		})
 	}
 
+	assignments, err := h.assignments.ListByRequest(ctx, id)
+	if err != nil {
+		h.logger.Error("get request: assignments", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
 	names := h.requesterNames(ctx, []int64{req.RequesterUserID})
 	return c.JSON(http.StatusOK, map[string]any{
-		"request": toRequestResponse(*req, names[req.RequesterUserID]),
-		"nodes":   nodeList,
-		"edges":   edgeList,
-		"agents":  []any{},
+		"request":     toRequestResponse(*req, names[req.RequesterUserID]),
+		"nodes":       nodeList,
+		"edges":       edgeList,
+		"agents":      []any{},
+		"assignments": assignments,
 	})
 }
 
@@ -492,6 +518,25 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		})
 	}
 
+	flags, err := h.workflow.ListFlagsByNode(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("get node: flags", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	flagList := make([]map[string]any, 0, len(flags))
+	for _, f := range flags {
+		flagList = append(flagList, map[string]any{
+			"severity": f.Severity,
+			"message":  f.Message,
+		})
+	}
+
+	checks, err := h.workflow.ListChecksByNode(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("get node: checks", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
 	// F5: include dependency info for blocked nodes.
 	var blockedBy map[string]any
 	if node.Status == "blocked" {
@@ -515,6 +560,9 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 		"progress_percent": node.ProgressPercent,
 		"status_text":      node.StatusText,
 		"decision_outcome": node.DecisionOutcome,
+		"decision_summary": node.DecisionSummary,
+		"flags":            flagList,
+		"checks":           checks,
 		"started_at":       node.StartedAt,
 		"completed_at":     node.CompletedAt,
 	}
@@ -646,6 +694,407 @@ func (h *RequestsHandler) ApproveRequest(c echo.Context) error {
 	}
 	names := h.requesterNames(ctx, []int64{updated.RequesterUserID})
 	return c.JSON(http.StatusOK, map[string]any{"request": toRequestResponse(*updated, names[updated.RequesterUserID])})
+}
+
+// loadRequestForMember fetches a request and authorizes the caller as an org
+// member, returning the request and the caller's org role. A non-member gets a
+// "not found" probe-protected error.
+func (h *RequestsHandler) loadRequestForMember(c echo.Context, id string) (*repo.Request, string, error) {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return nil, "", c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	ctx := c.Request().Context()
+	req, err := h.requests.GetByID(ctx, id)
+	if errors.Is(err, repo.ErrNotFound) {
+		return nil, "", c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+	}
+	if err != nil {
+		h.logger.Error("load request: query", slog.String("err", err.Error()))
+		return nil, "", c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	role, err := requireOrgMember(c, h.pg, req.OrgID, claims.UserID)
+	if err != nil {
+		var he *echo.HTTPError
+		if errors.As(err, &he) && he.Code == http.StatusForbidden {
+			return nil, "", c.JSON(http.StatusNotFound, map[string]string{"error": "request not found"})
+		}
+		return nil, "", handleOrgMemberErr(c, err)
+	}
+	return req, role, nil
+}
+
+// MyVerifications handles GET /orgs/:orgId/my-verifications — the awaiting_review
+// nodes the caller may sign off (assigned to them, in their department, or all
+// for an admin). Powers the "Waiting on you" queue in My Work.
+func (h *RequestsHandler) MyVerifications(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	if claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+	orgID := c.Param("orgId")
+	role, err := requireOrgMember(c, h.pg, orgID, claims.UserID)
+	if err != nil {
+		return handleOrgMemberErr(c, err)
+	}
+	ctx := c.Request().Context()
+	verifications, err := h.assignments.ListVerificationsForUser(ctx, orgID, claims.UserID, role == "admin")
+	if err != nil {
+		h.logger.Error("my verifications: query", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"verifications": verifications})
+}
+
+// AssignNode handles POST /requests/:id/assignments — assign a verifier to a
+// node. Only the requester or an org admin/executor may assign, and the assignee
+// must belong to the node's department team.
+func (h *RequestsHandler) AssignNode(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	id := c.Param("id")
+	req, role, done := h.loadRequestForMember(c, id)
+	if done != nil {
+		return done
+	}
+	if role != "admin" && role != "executor" && req.RequesterUserID != claims.UserID {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the requester or an admin/executor can assign verifiers"})
+	}
+	if req.Status != "draft" {
+		return c.JSON(http.StatusConflict, map[string]string{"error": "verifiers can only be assigned while the request is in draft"})
+	}
+
+	var body struct {
+		NodeID string `json:"node_id"`
+		UserID int64  `json:"user_id"`
+	}
+	if err := c.Bind(&body); err != nil || body.NodeID == "" || body.UserID == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "node_id and user_id are required"})
+	}
+
+	ctx := c.Request().Context()
+	node, err := h.workflow.GetNode(ctx, body.NodeID)
+	if errors.Is(err, repo.ErrNotFound) || (node != nil && node.RequestID != id) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "node not found"})
+	}
+	if err != nil {
+		h.logger.Error("assign node: get node", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	// The assignee must be a member of the org (an explicit assignment by the
+	// executive authorizes them to verify this node, even across departments).
+	isMember, err := h.assignments.UserInOrg(ctx, req.OrgID, body.UserID)
+	if err != nil {
+		h.logger.Error("assign node: member check", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if !isMember {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "that person is not a member of this organization"})
+	}
+
+	assignedBy := claims.UserID
+	if err := h.assignments.Create(ctx, repo.NodeAssignment{
+		ID: "asg_" + randomHex(8), RequestID: id, NodeID: body.NodeID, UserID: body.UserID, AssignedBy: &assignedBy,
+	}); err != nil {
+		h.logger.Error("assign node: insert", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	list, _ := h.assignments.ListByRequest(ctx, id)
+	return c.JSON(http.StatusCreated, map[string]any{"assignments": list})
+}
+
+// UnassignNode handles DELETE /requests/:id/assignments/:assignmentId.
+func (h *RequestsHandler) UnassignNode(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	id := c.Param("id")
+	req, role, done := h.loadRequestForMember(c, id)
+	if done != nil {
+		return done
+	}
+	if role != "admin" && role != "executor" && req.RequesterUserID != claims.UserID {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the requester or an admin/executor can change verifiers"})
+	}
+	ctx := c.Request().Context()
+	if err := h.assignments.Delete(ctx, c.Param("assignmentId"), id); err != nil {
+		h.logger.Error("unassign node: delete", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	list, _ := h.assignments.ListByRequest(ctx, id)
+	return c.JSON(http.StatusOK, map[string]any{"assignments": list})
+}
+
+// LaunchRequest handles POST /requests/:id/launch — moves a draft into execution.
+func (h *RequestsHandler) LaunchRequest(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	id := c.Param("id")
+	req, role, done := h.loadRequestForMember(c, id)
+	if done != nil {
+		return done
+	}
+	if role != "admin" && role != "executor" && req.RequesterUserID != claims.UserID {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the requester or an admin/executor can launch this request"})
+	}
+	if req.Status != "draft" {
+		return c.JSON(http.StatusConflict, map[string]string{"error": "request is not in draft"})
+	}
+	ctx := c.Request().Context()
+	if err := h.requests.UpdateStatusProgress(ctx, id, "in_progress", 0); err != nil {
+		h.logger.Error("launch request: update status", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if err := h.audit.Append(ctx, repo.AuditEvent{
+		ID: "aev_" + randomHex(8), RequestID: id, Actor: claims.Name,
+		Action: "request.launched", Reason: claims.Name + " launched the workflow",
+	}); err != nil {
+		h.logger.Warn("launch request: audit", slog.String("err", err.Error()))
+	}
+	if h.engine != nil {
+		h.engine.Start(id)
+	}
+	updated, err := h.requests.GetByID(ctx, id)
+	if err != nil {
+		h.logger.Error("launch request: reload", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	names := h.requesterNames(ctx, []int64{updated.RequesterUserID})
+	return c.JSON(http.StatusOK, map[string]any{"request": toRequestResponse(*updated, names[updated.RequesterUserID])})
+}
+
+// VerifyNode handles POST /requests/:id/nodes/:nodeId/verify — a human signs off
+// (or sends back) a node parked at awaiting_review. Allowed for an org admin
+// (the executive, who can override any department), a member of the node's
+// department team, or a user assigned to the node — never someone from another
+// department. An executor does not get a blanket override: they sign off only
+// their own department's nodes, like any other member.
+func (h *RequestsHandler) VerifyNode(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	id := c.Param("id")
+	nodeID := c.Param("nodeId")
+	if h.engine == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	req, role, done := h.loadRequestForMember(c, id)
+	if done != nil {
+		return done
+	}
+	ctx := c.Request().Context()
+	node, err := h.workflow.GetNode(ctx, nodeID)
+	if errors.Is(err, repo.ErrNotFound) || (node != nil && node.RequestID != id) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "node not found"})
+	}
+	if err != nil {
+		h.logger.Error("verify node: get node", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	// RBAC: admin (executive) override, or a member of the node's department, or
+	// the assigned verifier. Executors do not get a cross-department override.
+	allowed := role == "admin"
+	if !allowed {
+		if inDept, derr := h.assignments.UserInDepartment(ctx, req.OrgID, claims.UserID, node.Department); derr == nil && inDept {
+			allowed = true
+		}
+	}
+	if !allowed {
+		if asg, aerr := h.assignments.IsAssigned(ctx, nodeID, claims.UserID); aerr == nil && asg {
+			allowed = true
+		}
+	}
+	if !allowed {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the " + node.Department + " team or an executive can verify this step"})
+	}
+
+	var body struct {
+		Decision string `json:"decision"`
+		Note     string `json:"note"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+	if body.Decision != string(orchestrator.ApprovalApprove) && body.Decision != string(orchestrator.ApprovalReject) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "decision must be approve or reject"})
+	}
+
+	if err := h.engine.VerifyNode(ctx, id, nodeID, orchestrator.ApprovalDecision(body.Decision), body.Note, claims.Name); err != nil {
+		if errors.Is(err, orchestrator.ErrNodeNotAwaitingReview) {
+			return c.JSON(http.StatusConflict, map[string]string{"error": "this step is not awaiting verification"})
+		}
+		h.logger.Error("verify node: engine", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	// On approve, resume the worker so the branch advances.
+	if body.Decision == string(orchestrator.ApprovalApprove) {
+		h.engine.Start(id)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// userCanActOnNode reports whether the caller may verify or chat on a node:
+// org admin (executive override), a member of the node's department, or an
+// assigned verifier. Executors are scoped to their own department here too.
+func (h *RequestsHandler) userCanActOnNode(ctx context.Context, orgID, role string, userID int64, node *repo.WorkflowNode) bool {
+	if role == "admin" {
+		return true
+	}
+	if inDept, err := h.assignments.UserInDepartment(ctx, orgID, userID, node.Department); err == nil && inDept {
+		return true
+	}
+	if asg, err := h.assignments.IsAssigned(ctx, node.ID, userID); err == nil && asg {
+		return true
+	}
+	return false
+}
+
+// ListNodeMessages handles GET /requests/:id/nodes/:nodeId/messages.
+func (h *RequestsHandler) ListNodeMessages(c echo.Context) error {
+	id := c.Param("id")
+	nodeID := c.Param("nodeId")
+	if _, _, done := h.loadRequestForMember(c, id); done != nil {
+		return done
+	}
+	ctx := c.Request().Context()
+	msgs, err := h.messages.ListByNode(ctx, nodeID)
+	if err != nil {
+		h.logger.Error("list node messages", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"messages": msgs})
+}
+
+// PostNodeMessage handles POST /requests/:id/nodes/:nodeId/messages — the
+// verifier asks a question or requests changes; the department agent replies, and
+// on a change request it revises its decision on the node.
+func (h *RequestsHandler) PostNodeMessage(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	id := c.Param("id")
+	nodeID := c.Param("nodeId")
+	req, role, done := h.loadRequestForMember(c, id)
+	if done != nil {
+		return done
+	}
+	ctx := c.Request().Context()
+	node, err := h.workflow.GetNode(ctx, nodeID)
+	if errors.Is(err, repo.ErrNotFound) || (node != nil && node.RequestID != id) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "node not found"})
+	}
+	if err != nil {
+		h.logger.Error("post node message: get node", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if !h.userCanActOnNode(ctx, req.OrgID, role, claims.UserID, node) {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the " + node.Department + " team or an executive can discuss this step"})
+	}
+
+	var body struct {
+		Body   string `json:"body"`
+		Intent string `json:"intent"` // question | request_changes
+	}
+	if err := c.Bind(&body); err != nil || strings.TrimSpace(body.Body) == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "message body is required"})
+	}
+	text := strings.TrimSpace(body.Body)
+
+	uid := claims.UserID
+	if err := h.messages.Create(ctx, repo.NodeMessage{
+		ID: "nmsg_" + randomHex(8), RequestID: id, NodeID: nodeID,
+		AuthorUserID: &uid, AuthorName: claims.Name, Role: "human", Body: text,
+	}); err != nil {
+		h.logger.Error("post node message: store human", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	mode := "answer"
+	if body.Intent == "request_changes" {
+		mode = "revise"
+	}
+	resp, cerr := h.agent.Converse(ctx, agentclient.ConverseRequest{
+		AgentType: node.AgentType,
+		Request: agentclient.IntakeRequestBody{
+			Title: req.Title, Description: req.Description, Priority: req.Priority, Details: req.Details,
+		},
+		Mode:     mode,
+		Feedback: text,
+		PriorDecision: map[string]any{
+			"summary": node.DecisionSummary, "outcome": node.DecisionOutcome, "status_text": node.StatusText,
+		},
+	})
+	if cerr != nil {
+		_ = h.messages.Create(ctx, repo.NodeMessage{
+			ID: "nmsg_" + randomHex(8), RequestID: id, NodeID: nodeID,
+			AuthorName: node.Department + " Agent", Role: "system",
+			Body: "The agent is offline right now, so it couldn't respond. Your note was saved.",
+		})
+		msgs, _ := h.messages.ListByNode(ctx, nodeID)
+		return c.JSON(http.StatusOK, map[string]any{"messages": msgs})
+	}
+
+	reply := resp.Reply
+	if reply == "" {
+		reply = "Noted."
+	}
+	if err := h.messages.Create(ctx, repo.NodeMessage{
+		ID: "nmsg_" + randomHex(8), RequestID: id, NodeID: nodeID,
+		AuthorName: node.Department + " Agent", Role: "agent", Body: reply,
+	}); err != nil {
+		h.logger.Error("post node message: store agent", slog.String("err", err.Error()))
+	}
+
+	// A change request revises the node's decision in place; it stays awaiting
+	// review for the verifier to approve the revised version.
+	if mode == "revise" && resp.Decision != nil {
+		h.applyRevisedDecision(ctx, id, node, resp.Decision, claims.Name)
+	}
+
+	msgs, _ := h.messages.ListByNode(ctx, nodeID)
+	return c.JSON(http.StatusOK, map[string]any{"messages": msgs})
+}
+
+// applyRevisedDecision persists an agent's revised decision on a node (summary,
+// outcome, flags, tasks, status), keeping it at awaiting_review.
+func (h *RequestsHandler) applyRevisedDecision(ctx context.Context, requestID string, node *repo.WorkflowNode, d *agentclient.Decision, verifier string) {
+	now := time.Now()
+	if d.Summary != "" {
+		_ = h.workflow.SetNodeDecisionSummary(ctx, node.ID, d.Summary)
+	}
+	outcome := d.Outcome
+	if outcome == "" {
+		outcome = "approve"
+	}
+	_ = h.workflow.UpdateNodeDecisionOutcome(ctx, node.ID, outcome)
+
+	tasks := make([]repo.AgentTask, 0, len(d.Tasks))
+	for i, t := range d.Tasks {
+		started, completed := now, now
+		tasks = append(tasks, repo.AgentTask{
+			ID: "at_" + randomHex(8), NodeID: node.ID, Title: t.Title, Status: "completed",
+			Ordinal: i, StartedAt: &started, CompletedAt: &completed,
+		})
+	}
+	_ = h.workflow.DeleteTasksByNode(ctx, node.ID)
+	_ = h.workflow.InsertTasks(ctx, tasks)
+
+	_ = h.workflow.DeleteFlagsByNode(ctx, node.ID)
+	flags := make([]repo.NodeFlag, 0, len(d.Flags))
+	for i, f := range d.Flags {
+		sev := f.Severity
+		if sev != "info" && sev != "warning" && sev != "critical" {
+			sev = "info"
+		}
+		flags = append(flags, repo.NodeFlag{
+			ID: "nf_" + randomHex(8), RequestID: requestID, NodeID: node.ID,
+			Severity: sev, Message: f.Message, Ordinal: i,
+		})
+	}
+	_ = h.workflow.InsertFlags(ctx, flags)
+
+	statusText := d.StatusText
+	if statusText == "" {
+		statusText = node.Name + " revised — awaiting verification."
+	}
+	_ = h.workflow.UpdateNodeStatus(ctx, node.ID, "awaiting_review", statusText, 90)
+	_ = h.audit.Append(ctx, repo.AuditEvent{
+		ID: "aev_" + randomHex(8), RequestID: requestID, NodeID: &node.ID,
+		Actor: node.Department, Action: "node.revised", Reason: "Revised after " + verifier + "'s feedback",
+	})
 }
 
 // ListRequestAudit handles GET /requests/:id/audit, returning all audit

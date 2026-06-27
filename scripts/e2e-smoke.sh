@@ -86,16 +86,23 @@ curl -fsS "$API/orgs/${org_id}/requests" -H "authorization: Bearer ${token}" \
   | jq -e --arg id "$req_id" '.requests | map(.id) | index($id) != null' >/dev/null \
   || fail "new request not found in list"
 
-# The intake planner runs on create (deterministic default plan when no LLM
-# key is set), so the request moves to in_progress and carries a department
-# workflow graph of ~10 stages with parallel review branches.
-say "request detail loads with the auto-planned workflow graph"
+# The intake planner runs on create (deterministic default plan when no LLM key
+# is set), so the request lands in 'draft' carrying a department workflow graph
+# of ~10 stages with parallel review branches. It does not run until launched.
+say "request detail loads in draft with the planned workflow graph"
 curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}" \
   | jq -e --arg id "$req_id" \
       '.request.id == $id and .request.priority == "high"
+       and .request.status == "draft"
        and (.nodes | length) >= 9 and (.edges | length) >= 9
        and ([.nodes[].key] | index("exec_approval")) != null' >/dev/null \
   || fail "request detail / workflow graph shape"
+
+# Launch the draft (no verifiers assigned, so every node runs automatically).
+say "launch the draft request"
+curl -fsS -X POST "$API/requests/${req_id}/launch" -H "authorization: Bearer ${token}" \
+  | jq -e '.request.status == "in_progress"' >/dev/null \
+  || fail "launch did not move the request to in_progress"
 
 # F4: start a background SSE listener BEFORE the engine runs so we capture
 # live events. We kill it after the request completes.
@@ -129,44 +136,12 @@ curl -fsS "$API/orgs/${org_id}/agents" -H "authorization: Bearer ${token}" \
   | jq -e '[.agents[] | select(.status == "busy" or .status == "blocked")] | length >= 1' >/dev/null \
   || fail "no agent reported busy/blocked live status during the run"
 
-# F3/F7: the orchestration engine runs the review stages through their
-# department agents (deterministic with no LLM key) and then parks the request
-# at the executive-approval gate instead of auto-completing.
-say "engine parks the request at the executive-approval gate"
+# F3/F7: with no verifiers assigned, the engine runs the review stages through
+# their department agents (deterministic with no LLM key), auto-advances the
+# executive sign-off gate, and drives the request to completion.
+say "engine auto-advances the gate and runs the request to completion"
 detail=""
-for _ in $(seq 1 60); do
-  detail=$(curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}")
-  status=$(echo "$detail" | jq -r '.request.status')
-  [ "$status" = "awaiting_approval" ] && break
-  [ "$status" = "completed" ] && fail "request auto-completed without the approval gate"
-  sleep 1
-done
-echo "$detail" | jq -e \
-  '.request.status == "awaiting_approval"
-   and ([.nodes[] | select(.key == "exec_approval") | .status] | first) == "in_progress"
-   and ([.nodes[] | select(.key == "report") | .status] | first) == "pending"' >/dev/null \
-  || fail "request did not park at the gate (exec_approval in_progress, report still pending)"
-
-# F7: the approve endpoint requires a written justification.
-say "approve without a justification is rejected"
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/requests/${req_id}/approve" \
-  -H "authorization: Bearer ${token}" -H 'content-type: application/json' \
-  -d '{"decision":"approve","justification":""}')
-[ "$code" = "400" ] || fail "approve without justification should be 400 (got $code)"
-
-# F7: an approver (the org creator is admin) approves with a justification,
-# which completes the gate and resumes execution to completion.
-say "approve the request resumes it to completion"
-curl -fsS -X POST "$API/requests/${req_id}/approve" \
-  -H "authorization: Bearer ${token}" -H 'content-type: application/json' \
-  -d '{"decision":"approve","justification":"Budget and risk are acceptable."}' \
-  | jq -e '.request.status == "in_progress" or .request.status == "completed"' >/dev/null \
-  || fail "approve did not return a resumed request"
-
-# F3: after approval the engine resumes and drives the request to completed.
-say "engine runs the request to completion"
-detail=""
-for _ in $(seq 1 60); do
+for _ in $(seq 1 90); do
   detail=$(curl -fsS "$API/requests/${req_id}" -H "authorization: Bearer ${token}")
   status=$(echo "$detail" | jq -r '.request.status')
   [ "$status" = "completed" ] && break
@@ -175,9 +150,8 @@ done
 echo "$detail" | jq -e \
   '.request.status == "completed" and .request.progress == 100
    and ([.nodes[] | select(.status != "completed")] | length) == 0
-   and ([.nodes[] | select(.status_text == "")] | length) == 0
-   and ([.nodes[] | select(.key == "exec_approval") | .status_text] | first) == "Approved by the executive."' >/dev/null \
-  || fail "request did not run to completion after approval"
+   and ([.nodes[] | select(.status_text == "")] | length) == 0' >/dev/null \
+  || fail "request did not run to completion"
 
 # Stop the SSE listener and check it received events.
 kill "$sse_pid" 2>/dev/null || true

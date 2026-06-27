@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from app.agents.department import run_department
+from app.agents.department import run_converse, run_department
 from app.agents.intake import run_intake
 from app.agents.models import Decision, Plan
 
@@ -18,6 +18,7 @@ class IntakeRequestBody(BaseModel):
     title: str
     description: str = ""
     priority: str = "medium"
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class IntakeRequest(BaseModel):
@@ -32,6 +33,21 @@ class RunRequest(BaseModel):
     org_context: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConverseRequest(BaseModel):
+    agent_type: str
+    request: IntakeRequestBody
+    mode: str = "answer"  # answer | revise
+    feedback: str = ""
+    prior_decision: dict[str, Any] = Field(default_factory=dict)
+    upstream_context: list[dict[str, Any]] = Field(default_factory=list)
+    org_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConverseResponse(BaseModel):
+    reply: str
+    decision: Decision | None = None
+
+
 @router.post("/intake")
 async def intake(body: IntakeRequest) -> Plan:
     """Plan a department workflow for a business request.
@@ -43,6 +59,7 @@ async def intake(body: IntakeRequest) -> Plan:
         title=body.request.title,
         description=body.request.description,
         priority=body.request.priority,
+        details=body.request.details,
         org_context=body.org_context,
     )
 
@@ -55,6 +72,26 @@ async def run(body: RunRequest) -> Decision:
         title=body.request.title,
         description=body.request.description,
         priority=body.request.priority,
+        details=body.request.details,
         upstream_context=body.upstream_context,
         org_context=body.org_context,
     )
+
+
+@router.post("/converse")
+async def converse(body: ConverseRequest) -> ConverseResponse:
+    """Continue the verifier↔agent conversation on a node: answer a question, or
+    revise the decision given feedback."""
+    reply, decision = await run_converse(
+        agent_type=body.agent_type,
+        title=body.request.title,
+        description=body.request.description,
+        priority=body.request.priority,
+        mode=body.mode,
+        feedback=body.feedback,
+        prior=body.prior_decision,
+        details=body.request.details,
+        upstream_context=body.upstream_context,
+        org_context=body.org_context,
+    )
+    return ConverseResponse(reply=reply, decision=decision)

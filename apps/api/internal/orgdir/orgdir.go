@@ -4,6 +4,8 @@
 // demo seed command, so the two can never drift.
 package orgdir
 
+import "github.com/ncs26-orchestration/solution/apps/api/internal/policyrules"
+
 // AgentSpec is one standard department agent. Department is the team name it
 // belongs to; it is used to resolve the agent's team_id at seed time.
 type AgentSpec struct {
@@ -14,10 +16,13 @@ type AgentSpec struct {
 }
 
 // PolicySpec is one starter department policy, keyed by department/team name.
+// Rules are typed, machine-checkable conditions evaluated against a request's
+// structured details to produce exact per-node checks.
 type PolicySpec struct {
 	Department string
 	Title      string
 	Body       string
+	Rules      []policyrules.Rule
 }
 
 // Agents is the standard roster: one agent per agent_type the pipeline runs.
@@ -32,11 +37,18 @@ var Agents = []AgentSpec{
 	{"Executive", "approval", "Executive Approver", "Strategic decision-making, cross-functional review, approval authority"},
 }
 
-// Policies is the starter policy set agents consult. One per department.
+// Policies is the starter policy set agents consult. One per department. Some
+// carry typed rules that are checked against a request's structured details.
 var Policies = []PolicySpec{
-	{"Finance", "Finance Policy", "All expenditures over $10k require executive approval. Budget allocations must align with quarterly planning. Vendor contracts must include payment terms and cancellation clauses."},
-	{"Legal", "Legal Policy", "All contracts must be reviewed for regulatory compliance. Non-disclosure agreements follow the standard template. Data privacy laws (GDPR, CCPA) apply to any cross-border data handling."},
-	{"IT", "IT Policy", "New systems must pass a security assessment. Software procurement follows the approved vendor list. Infrastructure changes require change management approval."},
-	{"HR", "HR Policy", "New headcount requires approved job descriptions and budget allocation. Onboarding includes equipment provisioning, system access, and compliance training."},
-	{"Operations", "Operations Policy", "Project timelines must account for dependencies and buffer time. Vendor onboarding follows the standard integration checklist."},
+	{"Finance", "Finance Policy", "Expenditures over $10k require executive approval. A single purchase order may not exceed $50k without CFO sign-off. Budget allocations must align with quarterly planning.", []policyrules.Rule{
+		{Label: "Within single-PO limit", Field: "total_cost", Op: "lte", Value: 50000, Severity: "warning", Message: "Total exceeds the $50k single-PO limit — CFO sign-off required."},
+	}},
+	{"Legal", "Legal Policy", "All contracts must be reviewed for regulatory compliance. Data privacy laws (GDPR, CCPA) apply to any cross-border data handling.", nil},
+	{"IT", "IT Policy", "New systems must pass a security assessment. Infrastructure changes require change management approval. Monthly infra cost over $3k needs review.", []policyrules.Rule{
+		{Label: "Infra cost within review threshold", Field: "est_cost", Op: "lte", Value: 3000, Severity: "warning", Message: "Estimated monthly cost exceeds $3k — needs infrastructure review."},
+	}},
+	{"HR", "HR Policy", "New headcount requires approved job descriptions and budget. A single request may not add more than 10 roles without VP approval.", []policyrules.Rule{
+		{Label: "Headcount within limit", Field: "headcount", Op: "lte", Value: 10, Severity: "warning", Message: "More than 10 roles in one request needs VP of People approval."},
+	}},
+	{"Operations", "Operations Policy", "Project timelines must account for dependencies and buffer time. Vendor onboarding follows the standard integration checklist.", nil},
 }

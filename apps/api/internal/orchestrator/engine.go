@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/policyrules"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
 )
 
@@ -72,8 +73,13 @@ type Store interface {
 	ListInProgressRequestIDs(ctx context.Context) ([]string, error)
 	UpdateNodeStatus(ctx context.Context, nodeID, status, statusText string, progressPercent int) error
 	UpdateNodeDecisionOutcome(ctx context.Context, nodeID, outcome string) error
+	SetNodeDecisionSummary(ctx context.Context, nodeID, summary string) error
 	ClearNodeTasks(ctx context.Context, nodeID string) error
 	InsertTasks(ctx context.Context, tasks []repo.AgentTask) error
+	ClearNodeFlags(ctx context.Context, nodeID string) error
+	InsertFlags(ctx context.Context, flags []repo.NodeFlag) error
+	ClearNodeChecks(ctx context.Context, nodeID string) error
+	InsertChecks(ctx context.Context, checks []repo.NodeCheck) error
 	UpdateRequestProgress(ctx context.Context, requestID, status string, progressPercent int) error
 	// F5: cross-department dependencies.
 	InsertDependency(ctx context.Context, dep repo.NodeDependency) error
@@ -86,6 +92,8 @@ type Store interface {
 	CreateDocument(ctx context.Context, d *repo.Document) error
 	// Policies an agent checks a request against (F10).
 	ListPoliciesByOrg(ctx context.Context, orgID string) ([]repo.DepartmentPolicy, error)
+	// Human-in-the-loop: how many verifiers are assigned to a node.
+	CountAssignmentsByNode(ctx context.Context, nodeID string) (int, error)
 }
 
 // Engine advances requests on background goroutines.
@@ -261,9 +269,10 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			return nil
 		}
 
-		// The executive-approval node is a human gate, not an agent step. Run
-		// every other eligible node first; if the gate is among them, park the
-		// request at awaiting_approval and stop. A human resumes it via Approve.
+		// The executive-approval node is a final sign-off stamp, not a blocking
+		// human step — the human-in-the-loop work happens at the department
+		// verifications. Run the other eligible nodes, then auto-advance the gate
+		// (recording the sign-off) so the flow proceeds to execution.
 		var gate *repo.WorkflowNode
 		for i := range eligible {
 			if eligible[i].AgentType == approvalAgentType {
@@ -290,29 +299,26 @@ func (e *Engine) run(ctx context.Context, requestID string) error {
 			}
 		}
 		if gate != nil {
-			return e.parkForApproval(ctx, requestID, *gate, completed*100/len(nodes))
+			const statusText = "Signed off — proceeding to execution."
+			if err := e.store.UpdateNodeStatus(ctx, gate.ID, "completed", statusText, 100); err != nil {
+				return fmt.Errorf("complete approval gate: %w", err)
+			}
+			if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+				ID: "aev_" + shortID(), RequestID: requestID, NodeID: &gate.ID,
+				Actor: "Executive", Action: "approval.auto",
+				Reason: "Auto sign-off — department verifications carry the human review.",
+			}); err != nil {
+				e.log.Warn("failed to audit approval.auto", slog.String("request_id", requestID), slog.String("err", err.Error()))
+			}
+			completed++
+			progress := completed * 100 / len(nodes)
+			if err := e.store.UpdateRequestProgress(ctx, requestID, "in_progress", progress); err != nil {
+				return fmt.Errorf("update request progress: %w", err)
+			}
+			e.publishNodeEvent(requestID, "completed", gate.ID, gate.Key, 100, statusText, time.Now())
+			e.publishRequestEvent(requestID, "in_progress", progress)
 		}
 	}
-}
-
-// parkForApproval marks the executive-approval gate in_progress and parks the
-// whole request at awaiting_approval, then returns so the worker goroutine
-// exits. A human resumes the request through Approve. Restart recovery only
-// re-launches in_progress requests, so a parked request correctly keeps waiting
-// across a restart instead of auto-advancing.
-func (e *Engine) parkForApproval(ctx context.Context, requestID string, gate repo.WorkflowNode, progress int) error {
-	const statusText = "Awaiting executive approval."
-	if err := e.store.UpdateNodeStatus(ctx, gate.ID, "in_progress", statusText, 50); err != nil {
-		return fmt.Errorf("mark approval in_progress: %w", err)
-	}
-	if err := e.store.UpdateRequestProgress(ctx, requestID, "awaiting_approval", progress); err != nil {
-		return fmt.Errorf("park for approval: %w", err)
-	}
-	e.publishNodeEvent(requestID, "in_progress", gate.ID, gate.Key, 50, statusText, time.Now())
-	e.publishRequestEvent(requestID, "awaiting_approval", progress)
-	e.log.Info("orchestrator: parked for executive approval",
-		slog.String("request_id", requestID), slog.String("node_id", gate.ID))
-	return nil
 }
 
 // Approve records a human decision on a request parked at the executive gate.
@@ -401,6 +407,73 @@ func (e *Engine) Approve(ctx context.Context, requestID string, decision Approva
 	}
 }
 
+// ErrNodeNotAwaitingReview means the node isn't paused for human verification.
+var ErrNodeNotAwaitingReview = errors.New("node is not awaiting review")
+
+// VerifyNode records a human's sign-off on a node parked at awaiting_review.
+// On approve it completes the node so the worker (relaunched by the caller via
+// Start) advances the branch; on reject it stops the request. RBAC is enforced
+// by the caller; verifierName is recorded in the audit trail.
+func (e *Engine) VerifyNode(ctx context.Context, requestID, nodeID string, decision ApprovalDecision, note, verifierName string) error {
+	nodes, err := e.store.ListNodesByRequest(ctx, requestID)
+	if err != nil {
+		return fmt.Errorf("list nodes: %w", err)
+	}
+	var node *repo.WorkflowNode
+	for i := range nodes {
+		if nodes[i].ID == nodeID {
+			n := nodes[i]
+			node = &n
+			break
+		}
+	}
+	if node == nil {
+		return repo.ErrNotFound
+	}
+	if node.Status != "awaiting_review" {
+		return ErrNodeNotAwaitingReview
+	}
+	req, err := e.store.GetRequest(ctx, requestID)
+	if err != nil {
+		return fmt.Errorf("get request: %w", err)
+	}
+
+	switch decision {
+	case ApprovalApprove:
+		statusText := node.Name + " verified by " + verifierName + "."
+		if err := e.store.UpdateNodeStatus(ctx, nodeID, "completed", statusText, 100); err != nil {
+			return fmt.Errorf("complete verified node: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID: "aev_" + shortID(), RequestID: requestID, NodeID: &nodeID,
+			Actor: verifierName, Action: "node.verified", Reason: note,
+		}); err != nil {
+			e.log.Warn("failed to audit node.verified", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+		}
+		e.publishNodeEvent(requestID, "completed", nodeID, node.Key, 100, statusText, time.Now())
+		return nil
+	case ApprovalReject:
+		statusText := node.Name + " sent back by " + verifierName + "."
+		if err := e.store.UpdateNodeStatus(ctx, nodeID, "completed", statusText, 100); err != nil {
+			return fmt.Errorf("close rejected node: %w", err)
+		}
+		if err := e.store.UpdateRequestProgress(ctx, requestID, "rejected", req.Progress); err != nil {
+			return fmt.Errorf("reject request: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID: "aev_" + shortID(), RequestID: requestID, NodeID: &nodeID,
+			Actor: verifierName, Action: "node.rejected", Reason: note,
+		}); err != nil {
+			e.log.Warn("failed to audit node.rejected", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+		}
+		e.publishNodeEvent(requestID, "completed", nodeID, node.Key, 100, statusText, time.Now())
+		e.publishRequestEvent(requestID, "rejected", req.Progress)
+		return nil
+	default:
+		return fmt.Errorf("invalid verify decision %q", decision)
+	}
+}
+
 // runNode marks a node in_progress, runs its agent (falling back to a
 // deterministic decision on error so it never stalls), persists the tasks, and
 // marks the node completed (or blocked if the agent declared a dependency, F5)
@@ -432,6 +505,7 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			Title:       req.Title,
 			Description: req.Description,
 			Priority:    req.Priority,
+			Details:     req.Details,
 		},
 		UpstreamContext: upstream,
 		OrgContext:      orgContextForNode(node, policiesByDept),
@@ -499,6 +573,12 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 			if err := e.store.UpdateNodeDecisionOutcome(ctx, node.ID, "block"); err != nil {
 				e.log.Warn("failed to record block outcome", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 			}
+			if decision.Summary != "" {
+				if err := e.store.SetNodeDecisionSummary(ctx, node.ID, decision.Summary); err != nil {
+					e.log.Warn("failed to record block summary", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+				}
+			}
+			e.persistFlags(ctx, req.ID, node.ID, decision.Flags)
 			return false, nil
 		}
 	}
@@ -533,11 +613,28 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		outcome = "approve"
 	}
 
-	// Record the agent's outcome on the node and surface any risk it raised as
-	// audit events so the decision is traceable and visible at the gate (F6).
+	// Evaluate the department's typed policy rules against the request's details
+	// (deterministic, no LLM) and persist the exact pass/warn/fail checks. A
+	// failed rule escalates the outcome so it surfaces even offline.
+	worst := e.persistChecks(ctx, req, node, policiesByDept[strings.ToLower(strings.TrimSpace(node.Department))])
+	if worst == "fail" && outcome == "approve" {
+		outcome = "flag"
+	} else if worst == "warn" && outcome == "approve" {
+		outcome = "approve_with_conditions"
+	}
+
+	// Record the agent's outcome, reasoning, and flags on the node so the UI can
+	// show why a department decided what it did, and surface the risks as audit
+	// events so the decision is traceable and visible at the gate (F6).
 	if err := e.store.UpdateNodeDecisionOutcome(ctx, node.ID, outcome); err != nil {
 		e.log.Warn("failed to record decision outcome", slog.String("node_id", node.ID), slog.String("err", err.Error()))
 	}
+	if decision.Summary != "" {
+		if err := e.store.SetNodeDecisionSummary(ctx, node.ID, decision.Summary); err != nil {
+			e.log.Warn("failed to record decision summary", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+		}
+	}
+	e.persistFlags(ctx, req.ID, node.ID, decision.Flags)
 	e.auditFlags(ctx, req.ID, node, decision.Flags)
 
 	// A compliance department (e.g. Legal) that rejects stops the request
@@ -566,6 +663,31 @@ func (e *Engine) runNode(ctx context.Context, req *repo.Request, node repo.Workf
 		e.log.Info("orchestrator: request rejected by agent",
 			slog.String("request_id", req.ID), slog.String("department", node.Department))
 		return false, errRequestRejected
+	}
+
+	// Human-in-the-loop: if a verifier is assigned to this node, pause for their
+	// sign-off instead of completing. The agent's decision is already persisted
+	// above; a human resumes the flow via VerifyNode. Nodes with no assignee
+	// auto-complete as before.
+	if assignees, aerr := e.store.CountAssignmentsByNode(ctx, node.ID); aerr != nil {
+		e.log.Warn("failed to count assignments", slog.String("node_id", node.ID), slog.String("err", aerr.Error()))
+	} else if assignees > 0 {
+		reviewText := node.Name + " complete — awaiting verification."
+		if err := e.store.UpdateNodeStatus(ctx, node.ID, "awaiting_review", reviewText, 90); err != nil {
+			return false, fmt.Errorf("mark awaiting_review: %w", err)
+		}
+		if err := e.store.AppendAuditEvent(ctx, repo.AuditEvent{
+			ID:        "aev_" + shortID(),
+			RequestID: req.ID,
+			NodeID:    &node.ID,
+			Actor:     node.Department,
+			Action:    "node.awaiting_review",
+			Reason:    reviewText,
+		}); err != nil {
+			e.log.Warn("failed to audit node.awaiting_review", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+		}
+		e.publishNodeEvent(req.ID, "awaiting_review", node.ID, node.Key, 90, reviewText, now)
+		return false, nil
 	}
 
 	if err := e.store.UpdateNodeStatus(ctx, node.ID, "completed", statusText, 100); err != nil {
@@ -675,6 +797,73 @@ func eligibleNodes(nodes []repo.WorkflowNode, edges []repo.WorkflowEdge, status 
 		}
 	}
 	return out
+}
+
+// persistFlags replaces a node's stored flags with the agent's latest set, so a
+// re-run is idempotent and the node detail panel can show them.
+// persistChecks evaluates the department's policy rules against the request's
+// details and replaces the node's stored checks. Returns the worst status seen
+// ("fail" > "warn" > "pass") so the caller can escalate the outcome.
+func (e *Engine) persistChecks(ctx context.Context, req *repo.Request, node repo.WorkflowNode, policies []repo.DepartmentPolicy) string {
+	var checks []policyrules.Check
+	for _, p := range policies {
+		if len(p.Rules) == 0 {
+			continue
+		}
+		checks = append(checks, policyrules.Evaluate(p.Title, p.Rules, req.Details)...)
+	}
+	if err := e.store.ClearNodeChecks(ctx, node.ID); err != nil {
+		e.log.Warn("failed to clear node checks", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+		return "pass"
+	}
+	if len(checks) == 0 {
+		return "pass"
+	}
+	worst := "pass"
+	rows := make([]repo.NodeCheck, 0, len(checks))
+	for i, c := range checks {
+		if c.Status == "fail" {
+			worst = "fail"
+		} else if c.Status == "warn" && worst != "fail" {
+			worst = "warn"
+		}
+		rows = append(rows, repo.NodeCheck{
+			ID: "nck_" + shortID(), RequestID: req.ID, NodeID: node.ID,
+			Label: c.Label, Status: c.Status, Detail: c.Detail, PolicyTitle: c.PolicyTitle, Ordinal: i,
+		})
+	}
+	if err := e.store.InsertChecks(ctx, rows); err != nil {
+		e.log.Warn("failed to insert node checks", slog.String("node_id", node.ID), slog.String("err", err.Error()))
+	}
+	return worst
+}
+
+func (e *Engine) persistFlags(ctx context.Context, requestID, nodeID string, flags []agentclient.Flag) {
+	if err := e.store.ClearNodeFlags(ctx, nodeID); err != nil {
+		e.log.Warn("failed to clear node flags", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+		return
+	}
+	if len(flags) == 0 {
+		return
+	}
+	rows := make([]repo.NodeFlag, 0, len(flags))
+	for i, f := range flags {
+		sev := f.Severity
+		if sev != "info" && sev != "warning" && sev != "critical" {
+			sev = "info"
+		}
+		rows = append(rows, repo.NodeFlag{
+			ID:        "nf_" + shortID(),
+			RequestID: requestID,
+			NodeID:    nodeID,
+			Severity:  sev,
+			Message:   f.Message,
+			Ordinal:   i,
+		})
+	}
+	if err := e.store.InsertFlags(ctx, rows); err != nil {
+		e.log.Warn("failed to insert node flags", slog.String("node_id", nodeID), slog.String("err", err.Error()))
+	}
 }
 
 // auditFlags writes a node.flagged audit event for each warning/critical flag an

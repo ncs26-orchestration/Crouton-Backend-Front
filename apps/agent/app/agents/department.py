@@ -338,11 +338,22 @@ def _policies_block(org_context: dict[str, Any] | None) -> str:
     return header + "\n".join(lines) + "\n\n"
 
 
+def _details_block(details: dict[str, Any] | None) -> str:
+    """Render the request's structured fields so an agent can cite real numbers."""
+    if not details:
+        return ""
+    lines = [f"  {k}: {v}" for k, v in details.items() if v not in (None, "")]
+    if not lines:
+        return ""
+    return "\n\nStructured details (use these exact facts):\n" + "\n".join(lines)
+
+
 async def run_department(
     agent_type: str,
     title: str,
     description: str,
     priority: str,
+    details: dict[str, Any] | None = None,
     upstream_context: list[dict[str, Any]] | None = None,
     org_context: dict[str, Any] | None = None,
 ) -> Decision:
@@ -367,7 +378,10 @@ async def run_department(
             policies=policies,
             upstream_guidance=upstream_guidance,
         )
-        user = f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
+        user = (
+            f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
+            + _details_block(details)
+        )
         if upstream_context:
             user += "\n\nUpstream department decisions so far:\n" + _summarize_upstream(
                 upstream_context
@@ -388,3 +402,101 @@ async def run_department(
             tasks=["Review the request", "Record the outcome"],
         )
     return playbook(title, upstream_context=upstream_context)
+
+
+_ANSWER_SYSTEM = """You are {role}
+
+A human verifier is reviewing your assessment of a request and asked a question.
+Answer it directly and concretely in 1-3 sentences, grounded in the request and
+your own prior assessment. Respond ONLY with JSON: {{"reply": "your answer"}}"""
+
+_REVISE_SYSTEM = """You are {role}
+
+A human verifier reviewed your assessment and asked you to change it. Reconsider
+and produce a REVISED decision that takes their feedback into account. Respond
+ONLY with a JSON object:
+{{
+  "reply": "1-2 sentences telling the verifier what you changed and why",
+  "summary": "your revised 1-2 sentence assessment",
+  "outcome": "approve | approve_with_conditions | flag | reject | block",
+  "flags": [{{"severity": "info|warning|critical", "message": "specific risk or note"}}],
+  "tasks": [{{"title": "concrete action you took", "status": "completed"}}],
+  "status_text": "one plain-language sentence for the UI",
+  "blocked_on": null
+}}
+{policies}Be specific (amounts, locations, systems, people). Output JSON only."""
+
+
+def _prior_block(prior: dict[str, Any] | None) -> str:
+    if not prior:
+        return ""
+    out = "\n\nYour prior assessment:\n"
+    out += f"  outcome: {prior.get('outcome', 'approve')}\n"
+    out += f"  summary: {prior.get('summary') or prior.get('status_text') or ''}\n"
+    return out
+
+
+async def run_converse(
+    agent_type: str,
+    title: str,
+    description: str,
+    priority: str,
+    mode: str,
+    feedback: str,
+    prior: dict[str, Any] | None = None,
+    details: dict[str, Any] | None = None,
+    upstream_context: list[dict[str, Any]] | None = None,
+    org_context: dict[str, Any] | None = None,
+) -> tuple[str, Decision | None]:
+    """Continue the verifier↔agent conversation on a node.
+
+    mode "answer": reply to a question; the decision is unchanged (returns None).
+    mode "revise": reconsider given the feedback and return a revised Decision.
+    Offline (no LLM) it acknowledges without changing the decision.
+    """
+    role = _ROLE_GUIDANCE.get(agent_type, f"the {agent_type} function.")
+    if not llm_available():
+        if mode == "revise":
+            return (
+                "I've noted your feedback. Connect the LLM to have me revise the assessment.",
+                None,
+            )
+        return ("Thanks — noted. My assessment stands for now.", None)
+
+    base = (
+        f"Request title: {title}\nDescription: {description}\nPriority: {priority}"
+        + _details_block(details)
+        + _prior_block(prior)
+        + f"\n\nVerifier said: {feedback}"
+    )
+    if mode == "revise":
+        system = _REVISE_SYSTEM.format(role=role, policies=_policies_block(org_context))
+        raw = await complete_json(system, base)
+        decision = _parse_decision(raw)
+        reply = "I've reconsidered."
+        try:
+            import json as _json
+
+            parsed = _json.loads(raw) if raw else {}
+            if isinstance(parsed, dict) and parsed.get("reply"):
+                reply = str(parsed["reply"])
+            elif decision is not None:
+                reply = "I've updated my assessment. " + decision.summary
+        except Exception:  # noqa: BLE001
+            if decision is not None:
+                reply = "I've updated my assessment. " + decision.summary
+        return (reply, decision)
+
+    # answer
+    system = _ANSWER_SYSTEM.format(role=role)
+    raw = await complete_json(system, base)
+    reply = "I don't have more to add right now."
+    try:
+        import json as _json
+
+        parsed = _json.loads(raw) if raw else {}
+        if isinstance(parsed, dict) and parsed.get("reply"):
+            reply = str(parsed["reply"])
+    except Exception:  # noqa: BLE001
+        pass
+    return (reply, None)

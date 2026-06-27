@@ -468,9 +468,11 @@ function StageRow({ stage }: { stage: ReportStage }) {
             </span>
           )}
         </div>
-        {stage.status_text && (
+        {stage.decision_summary ? (
+          <p className="text-xs text-[var(--color-fg)] leading-snug mt-0.5">{stage.decision_summary}</p>
+        ) : stage.status_text ? (
           <p className="text-xs text-[var(--color-fg-muted)] leading-snug mt-0.5">{stage.status_text}</p>
-        )}
+        ) : null}
         {stage.tasks.length > 0 && (
           <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
             {stage.tasks.map((t) => (

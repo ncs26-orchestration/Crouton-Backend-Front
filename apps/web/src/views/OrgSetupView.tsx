@@ -1,8 +1,9 @@
-import { useState, type FormEvent, useRef } from "react";
+import { useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Building2, Check, ChevronRight, Mail, Plus, Shield, Workflow, X, FileText, Trash2, Cpu } from "lucide-react";
+import { Building2, Check, ChevronRight, Mail, Plus, Shield, Workflow, X } from "lucide-react";
 import { api } from "../lib/api";
 import { BrandMark } from "../components/Brand";
+import { useAuth } from "../contexts/AuthContext";
 
 interface Props {
   onDone: (org: { id: string; name: string; slug: string; role: string }) => void;
@@ -41,12 +42,7 @@ const ROLES = [
   },
 ];
 
-const MACHINE_TYPES = [
-  "CNC Mill", "Press Line", "Laser Cutter", "Server Rack", "HVAC Unit",
-  "Assembly Line", "Robot Arm", "Pump System", "Conveyor Belt", "Other",
-] as const;
-
-const STEPS = ["Organization", "Your role", "Invite teammates", "Add machines"];
+const STEPS = ["Organization", "Your role", "Invite teammates"];
 
 // Slide animation — enter from right, exit to left
 const variants = {
@@ -56,6 +52,7 @@ const variants = {
 };
 
 export function OrgSetupView({ onDone }: Props) {
+  const { logout } = useAuth();
   const [step, setStep]       = useState(0);
   const [direction, setDir]   = useState(1); // 1 = forward, -1 = back
 
@@ -72,38 +69,6 @@ export function OrgSetupView({ onDone }: Props) {
   const [emailInput, setEmailInput] = useState("");
   const [invites,    setInvites]    = useState<string[]>([]);
   const [inviteRole, setInviteRole] = useState<"executor" | "employee">("executor");
-
-	// Step 3 fields — machines
-	type MachineInput = { name: string; machine_type: string; location: string; serial_number: string; file: File | null; fileName: string };
-	const [machines, setMachines] = useState<MachineInput[]>([]);
-	const [machineName, setMachineName] = useState("");
-	const [machineType, setMachineType] = useState<string>(MACHINE_TYPES[0]);
-	const [machineLocation, setMachineLocation] = useState("");
-	const [machineSerial, setMachineSerial] = useState("");
-	const [machineFile, setMachineFile] = useState<File | null>(null);
-	const [machineFileName, setMachineFileName] = useState("");
-	const fileInputRef = useRef<HTMLInputElement>(null);
-
-	function addMachine() {
-		if (!machineName.trim()) return;
-		setMachines([...machines, {
-			name: machineName.trim(),
-			machine_type: machineType,
-			location: machineLocation.trim(),
-			serial_number: machineSerial.trim(),
-			file: machineFile,
-			fileName: machineFileName,
-		}]);
-		setMachineName("");
-		setMachineLocation("");
-		setMachineSerial("");
-		setMachineFile(null);
-		setMachineFileName("");
-	}
-
-	function removeMachine(index: number) {
-		setMachines(machines.filter((_, i) => i !== index));
-	}
 
 	// Async state
 	const [loading, setLoading] = useState(false);
@@ -152,34 +117,14 @@ export function OrgSetupView({ onDone }: Props) {
 		go(2);
 	}
 
-	// Step 2 → 3 (machines)
-	function handleStep2(e: FormEvent) {
-		e.preventDefault();
-		go(3);
-	}
-
-	// Step 3 (final): create org, machines, upload docs
+	// Step 2 (final): create the org. Invites and machines are handled later from
+	// inside the app — setup just gets the workspace created.
 	async function handleFinish() {
 		setError(null);
 		setLoading(true);
 		try {
 			const result = await api.createOrg({ name: orgName.trim(), slug: slug.trim() });
-			const orgId = result.id;
-
-			// Create each machine and upload its document
-			for (const m of machines) {
-				const { machine } = await api.createMachine(orgId, {
-					name: m.name,
-					machine_type: m.machine_type,
-					location: m.location,
-					serial_number: m.serial_number,
-				});
-				if (m.file) {
-					await api.uploadMachineDocument(machine.id, m.file, "manual").catch(() => {});
-				}
-			}
-
-			onDone({ id: orgId, name: result.name, slug: result.slug, role: "admin" });
+			onDone({ id: result.id, name: result.name, slug: result.slug, role: "admin" });
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Something went wrong");
 		} finally {
@@ -189,7 +134,16 @@ export function OrgSetupView({ onDone }: Props) {
 
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-[var(--color-bg)]">
-      <div className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl flex flex-col overflow-hidden mx-4">
+      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl flex flex-col overflow-hidden mx-4">
+
+        {/* Sign out — an escape hatch if you're on the wrong account or session. */}
+        <button
+          type="button"
+          onClick={logout}
+          className="absolute top-3 right-4 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+        >
+          Sign out
+        </button>
 
         {/* ── Header ── */}
         <div className="flex flex-col items-center gap-2 px-4 md:px-8 pt-6 md:pt-8 pb-4">
@@ -407,7 +361,7 @@ export function OrgSetupView({ onDone }: Props) {
                 animate="center"
                 exit="exit"
                 transition={{ duration: 0.22, ease: "easeInOut" }}
-                onSubmit={handleStep2}
+                onSubmit={(e) => { e.preventDefault(); handleFinish(); }}
                 className="px-4 md:px-8 pb-8 flex flex-col gap-5"
               >
                 <p className="text-sm text-[var(--color-fg-muted)]">
@@ -498,128 +452,16 @@ export function OrgSetupView({ onDone }: Props) {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                    disabled={loading}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
                   >
-                    Continue <ChevronRight size={15} />
-                  </button>
-                </div>
-              </motion.form>
-            )}
-
-            {step === 3 && (
-              <motion.form
-                key="step3"
-                custom={direction}
-                variants={variants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.22, ease: "easeInOut" }}
-                onSubmit={(e) => { e.preventDefault(); handleFinish(); }}
-                className="px-4 md:px-8 pb-8 flex flex-col gap-4"
-              >
-                <p className="text-sm text-[var(--color-fg-muted)]">
-                  Add machines to your fleet. Upload a manual or spec sheet for AI-assisted diagnostics.
-                </p>
-
-                {/* Machine form */}
-                <div className="flex flex-col gap-2.5 p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]">
-                  <div className="flex gap-2.5">
-                    <div className="flex-1">
-                      <label className="text-[10px] font-medium text-[var(--color-fg-muted)] uppercase tracking-wide" htmlFor="mach-name">Name</label>
-                      <input id="mach-name" type="text" value={machineName} onChange={(e) => setMachineName(e.target.value)}
-                        placeholder="CNC Mill #4" className="w-full mt-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-[10px] font-medium text-[var(--color-fg-muted)] uppercase tracking-wide">Type</label>
-                      <select value={machineType} onChange={(e) => setMachineType(e.target.value)}
-                        className="w-full mt-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors">
-                        {MACHINE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="flex gap-2.5">
-                    <div className="flex-1">
-                      <label className="text-[10px] font-medium text-[var(--color-fg-muted)] uppercase tracking-wide" htmlFor="mach-loc">Location</label>
-                      <input id="mach-loc" type="text" value={machineLocation} onChange={(e) => setMachineLocation(e.target.value)}
-                        placeholder="Floor 2, Bay 4" className="w-full mt-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-[10px] font-medium text-[var(--color-fg-muted)] uppercase tracking-wide" htmlFor="mach-sn">Serial</label>
-                      <input id="mach-sn" type="text" value={machineSerial} onChange={(e) => setMachineSerial(e.target.value)}
-                        placeholder="SN-2407-112" className="w-full mt-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-[var(--color-fg)] placeholder-[var(--color-fg-muted)] outline-none focus:border-[var(--color-brand)] transition-colors" />
-                    </div>
-                  </div>
-                  {/* File upload */}
-                  <div>
-                    <label className="text-[10px] font-medium text-[var(--color-fg-muted)] uppercase tracking-wide">Manual (optional)</label>
-                    <div className="mt-1 flex gap-2">
-                      <button type="button" onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-fg-muted)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)] transition-colors">
-                        <FileText size={13} /> {machineFileName || "Upload PDF"}
-                      </button>
-                      <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md" className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) { setMachineFile(f); setMachineFileName(f.name); }
-                        }} />
-                      {machineFileName && (
-                        <button type="button" onClick={() => { setMachineFile(null); setMachineFileName(""); }}
-                          className="btn-sm text-[var(--color-fg-muted)] hover:text-red-500 transition-colors">
-                          <X size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <button type="button" onClick={addMachine} disabled={!machineName.trim()}
-                    className="flex items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent-bg)] px-3 py-1.5 text-xs font-medium text-[var(--color-brand)] hover:bg-[var(--color-brand)]/10 disabled:opacity-40 transition-colors">
-                    <Plus size={13} /> Add machine
-                  </button>
-                </div>
-
-                {/* Machine list */}
-                {machines.length > 0 && (
-                  <ul className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
-                    {machines.map((m, i) => (
-                      <li key={i} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
-                        <Cpu size={13} className="text-[var(--color-fg-muted)] shrink-0" />
-                        <span className="flex-1 text-xs text-[var(--color-fg)] truncate">{m.name}</span>
-                        <span className="text-[10px] text-[var(--color-fg-muted)]">{m.machine_type}</span>
-                        {m.fileName && <FileText size={11} className="text-[var(--color-fg-muted)]" />}
-                        <button type="button" onClick={() => removeMachine(i)}
-                          className="btn-sm text-[var(--color-fg-muted)] hover:text-red-500 transition-colors">
-                          <Trash2 size={12} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {error && (
-                  <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
-                    {error}
-                  </p>
-                )}
-
-                <div className="flex gap-3 mt-1">
-                  <button type="button" onClick={() => go(2)}
-                    className="flex-1 rounded-lg border border-[var(--color-border)] px-4 py-2.5 text-sm text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] transition-colors">
-                    Back
-                  </button>
-                  <button type="submit" disabled={loading}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity">
-                    {loading ? "Creating…" : machines.length > 0 ? `Finish (${machines.length} machine${machines.length > 1 ? 's' : ''})` : "Finish"}
+                    {loading ? "Creating…" : "Finish"}
                     {!loading && <Building2 size={14} />}
                   </button>
                 </div>
-
-                {machines.length === 0 && (
-                  <p className="text-center text-xs text-[var(--color-fg-faint)]">
-                    You can add machines from the Machines tab later.
-                  </p>
-                )}
               </motion.form>
             )}
+
           </AnimatePresence>
         </div>
       </div>

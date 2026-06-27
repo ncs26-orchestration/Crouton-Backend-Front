@@ -20,6 +20,7 @@ type WorkflowNode struct {
 	ProgressPercent int
 	StatusText      string
 	DecisionOutcome string
+	DecisionSummary string
 	StartedAt       *time.Time
 	CompletedAt     *time.Time
 	CreatedAt       time.Time
@@ -43,6 +44,31 @@ type AgentTask struct {
 	StartedAt   *time.Time
 	CompletedAt *time.Time
 	CreatedAt   time.Time
+}
+
+// NodeFlag is a risk or note an agent raised on a node (severity + message,
+// which may cite a policy).
+type NodeFlag struct {
+	ID        string
+	RequestID string
+	NodeID    string
+	Severity  string
+	Message   string
+	Ordinal   int
+	CreatedAt time.Time
+}
+
+// NodeCheck is the result of evaluating one policy rule against a request on a
+// node: pass | warn | fail, with the cited policy.
+type NodeCheck struct {
+	ID          string `json:"id"`
+	RequestID   string `json:"request_id"`
+	NodeID      string `json:"node_id"`
+	Label       string `json:"label"`
+	Status      string `json:"status"`
+	Detail      string `json:"detail"`
+	PolicyTitle string `json:"policy_title"`
+	Ordinal     int    `json:"ordinal"`
 }
 
 type WorkflowRepo struct {
@@ -111,7 +137,7 @@ func (r *WorkflowRepo) InsertEdges(ctx context.Context, edges []WorkflowEdge) er
 func (r *WorkflowRepo) ListNodesByRequest(ctx context.Context, requestID string) ([]WorkflowNode, error) {
 	rows, err := r.pg.Query(ctx, `
 		SELECT id, request_id, key, name, agent_type, department, status, description,
-		       progress_percent, status_text, decision_outcome, started_at, completed_at, created_at
+		       progress_percent, status_text, decision_outcome, decision_summary, started_at, completed_at, created_at
 		FROM workflow_nodes WHERE request_id = $1
 		ORDER BY created_at ASC
 	`, requestID)
@@ -124,7 +150,7 @@ func (r *WorkflowRepo) ListNodesByRequest(ctx context.Context, requestID string)
 	for rows.Next() {
 		var n WorkflowNode
 		if err := rows.Scan(&n.ID, &n.RequestID, &n.Key, &n.Name, &n.AgentType, &n.Department,
-			&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText, &n.DecisionOutcome,
+			&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText, &n.DecisionOutcome, &n.DecisionSummary,
 			&n.StartedAt, &n.CompletedAt, &n.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -157,12 +183,12 @@ func (r *WorkflowRepo) ListEdgesByRequest(ctx context.Context, requestID string)
 func (r *WorkflowRepo) GetNode(ctx context.Context, nodeID string) (*WorkflowNode, error) {
 	row := r.pg.QueryRow(ctx, `
 		SELECT id, request_id, key, name, agent_type, department, status, description,
-		       progress_percent, status_text, decision_outcome, started_at, completed_at, created_at
+		       progress_percent, status_text, decision_outcome, decision_summary, started_at, completed_at, created_at
 		FROM workflow_nodes WHERE id = $1
 	`, nodeID)
 	var n WorkflowNode
 	if err := row.Scan(&n.ID, &n.RequestID, &n.Key, &n.Name, &n.AgentType, &n.Department,
-		&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText, &n.DecisionOutcome,
+		&n.Status, &n.Description, &n.ProgressPercent, &n.StatusText, &n.DecisionOutcome, &n.DecisionSummary,
 		&n.StartedAt, &n.CompletedAt, &n.CreatedAt); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
@@ -207,6 +233,116 @@ func (r *WorkflowRepo) UpdateNodeDecisionOutcome(ctx context.Context, nodeID, ou
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SetNodeDecisionSummary stores the agent's full reasoning for a node.
+func (r *WorkflowRepo) SetNodeDecisionSummary(ctx context.Context, nodeID, summary string) error {
+	tag, err := r.pg.Exec(ctx, `UPDATE workflow_nodes SET decision_summary = $2 WHERE id = $1`, nodeID, summary)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteFlagsByNode clears a node's flags so a re-run is idempotent.
+func (r *WorkflowRepo) DeleteFlagsByNode(ctx context.Context, nodeID string) error {
+	_, err := r.pg.Exec(ctx, `DELETE FROM node_flags WHERE node_id = $1`, nodeID)
+	return err
+}
+
+// InsertFlags writes a node's flags in one batch.
+func (r *WorkflowRepo) InsertFlags(ctx context.Context, flags []NodeFlag) error {
+	if len(flags) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, f := range flags {
+		batch.Queue(`
+			INSERT INTO node_flags (id, request_id, node_id, severity, message, ordinal)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, f.ID, f.RequestID, f.NodeID, f.Severity, f.Message, f.Ordinal)
+	}
+	br := r.pg.SendBatch(ctx, batch)
+	defer func() { _ = br.Close() }()
+	for range flags {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeleteChecksByNode clears a node's checks so a re-run is idempotent.
+func (r *WorkflowRepo) DeleteChecksByNode(ctx context.Context, nodeID string) error {
+	_, err := r.pg.Exec(ctx, `DELETE FROM node_checks WHERE node_id = $1`, nodeID)
+	return err
+}
+
+// InsertChecks writes a node's policy checks in one batch.
+func (r *WorkflowRepo) InsertChecks(ctx context.Context, checks []NodeCheck) error {
+	if len(checks) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, c := range checks {
+		batch.Queue(`
+			INSERT INTO node_checks (id, request_id, node_id, label, status, detail, policy_title, ordinal)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, c.ID, c.RequestID, c.NodeID, c.Label, c.Status, c.Detail, c.PolicyTitle, c.Ordinal)
+	}
+	br := r.pg.SendBatch(ctx, batch)
+	defer func() { _ = br.Close() }()
+	for range checks {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ListChecksByNode returns a node's policy checks in display order.
+func (r *WorkflowRepo) ListChecksByNode(ctx context.Context, nodeID string) ([]NodeCheck, error) {
+	rows, err := r.pg.Query(ctx, `
+		SELECT id, request_id, node_id, label, status, detail, policy_title, ordinal
+		FROM node_checks WHERE node_id = $1 ORDER BY ordinal ASC, created_at ASC
+	`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]NodeCheck, 0)
+	for rows.Next() {
+		var c NodeCheck
+		if err := rows.Scan(&c.ID, &c.RequestID, &c.NodeID, &c.Label, &c.Status, &c.Detail, &c.PolicyTitle, &c.Ordinal); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// ListFlagsByNode returns a node's flags in display order.
+func (r *WorkflowRepo) ListFlagsByNode(ctx context.Context, nodeID string) ([]NodeFlag, error) {
+	rows, err := r.pg.Query(ctx, `
+		SELECT id, request_id, node_id, severity, message, ordinal, created_at
+		FROM node_flags WHERE node_id = $1 ORDER BY ordinal ASC, created_at ASC
+	`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]NodeFlag, 0)
+	for rows.Next() {
+		var f NodeFlag
+		if err := rows.Scan(&f.ID, &f.RequestID, &f.NodeID, &f.Severity, &f.Message, &f.Ordinal, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
 }
 
 // InsertTasks writes a node's agent tasks in one batch.

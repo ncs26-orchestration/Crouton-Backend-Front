@@ -18,7 +18,11 @@ import type {
 	Incident,
 	IncidentMessage,
 	Machine,
+	NodeAssignment,
+	NodeMessage,
+	NodeVerification,
 	OrgRequest,
+	PolicyRule,
 	Project,
 	NodeDetailResponse,
 	RequestGraph,
@@ -52,6 +56,14 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(`non-JSON response (${res.status}): ${text.slice(0, 200)}`);
   }
   if (!res.ok) {
+    // A 401 on an authenticated call means the token is no longer valid (expired,
+    // or its user no longer exists after a DB reset). Clear it and bounce to a
+    // clean login rather than dead-ending on a cryptic error. Auth endpoints are
+    // excluded so a failed login/register still shows its own message.
+    if (res.status === 401 && !url.includes("/auth/") && authStore.get()) {
+      authStore.clear();
+      if (typeof window !== "undefined") window.location.reload();
+    }
     const obj = parsed as { error?: string; details?: string };
     if (obj.error && obj.details) {
       throw new Error(`${obj.error}: ${obj.details}`);
@@ -523,9 +535,20 @@ export const api = {
   listRequests: (orgId: string): Promise<{ requests: OrgRequest[] }> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`),
 
+  // Nodes awaiting the caller's verification (assigned, in their department, or
+  // all for an admin). Powers the "Waiting on you" queue in My Work.
+  listMyVerifications: (orgId: string): Promise<{ verifications: NodeVerification[] }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/my-verifications`),
+
   createRequest: (
     orgId: string,
-    payload: { title: string; description?: string; priority: RequestPriority },
+    payload: {
+      title: string;
+      description?: string;
+      priority: RequestPriority;
+      category?: string;
+      details?: Record<string, string | number>;
+    },
   ): Promise<{ request: OrgRequest }> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`, {
       method: "POST",
@@ -552,6 +575,51 @@ export const api = {
 			body: JSON.stringify(payload),
 		}),
 
+	// --- Human-in-the-loop: assign verifiers, launch a draft, verify a node ---
+
+	assignNode: (
+		requestId: string,
+		payload: { node_id: string; user_id: number },
+	): Promise<{ assignments: NodeAssignment[] }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/assignments`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
+
+	unassignNode: (requestId: string, assignmentId: string): Promise<{ assignments: NodeAssignment[] }> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/assignments/${encodeURIComponent(assignmentId)}`,
+			{ method: "DELETE" },
+		),
+
+	launchRequest: (requestId: string): Promise<{ request: OrgRequest }> =>
+		fetchJSON(`/api/requests/${encodeURIComponent(requestId)}/launch`, { method: "POST" }),
+
+	verifyNode: (
+		requestId: string,
+		nodeId: string,
+		payload: { decision: ApprovalDecision; note?: string },
+	): Promise<{ status: string }> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}/verify`,
+			{ method: "POST", body: JSON.stringify(payload) },
+		),
+
+	listNodeMessages: (requestId: string, nodeId: string): Promise<{ messages: NodeMessage[] }> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}/messages`,
+		),
+
+	postNodeMessage: (
+		requestId: string,
+		nodeId: string,
+		payload: { body: string; intent: "question" | "request_changes" },
+	): Promise<{ messages: NodeMessage[] }> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}/messages`,
+			{ method: "POST", body: JSON.stringify(payload) },
+		),
+
 	// --- Audit trail (F6) ---
 
 	listRequestAudit: (requestId: string): Promise<{ events: AuditEvent[] }> =>
@@ -572,6 +640,30 @@ export const api = {
 
 	listPolicies: (orgId: string): Promise<{ policies: DepartmentPolicy[] }> =>
 		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies`),
+
+	createPolicy: (
+		orgId: string,
+		payload: { team_id: string; title: string; body: string; rules: PolicyRule[] },
+	): Promise<{ status: string }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
+
+	updatePolicy: (
+		orgId: string,
+		policyId: string,
+		payload: { title: string; body: string; rules: PolicyRule[] },
+	): Promise<{ status: string }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies/${encodeURIComponent(policyId)}`, {
+			method: "PATCH",
+			body: JSON.stringify(payload),
+		}),
+
+	deletePolicy: (orgId: string, policyId: string): Promise<{ status: string }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies/${encodeURIComponent(policyId)}`, {
+			method: "DELETE",
+		}),
 
 	// --- Machines (M-F1) ---
 

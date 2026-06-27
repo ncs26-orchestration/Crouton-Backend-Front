@@ -19,6 +19,8 @@ export function statusBadgeClass(status: RequestStatus): string {
       return "bg-[var(--color-success)]/12 text-[var(--color-success)]";
     case "rejected":
       return "bg-[var(--color-danger)]/12 text-[var(--color-danger)]";
+    case "draft":
+      return "bg-[var(--color-warning)]/15 text-[var(--color-warning-fg)]";
     default:
       return "bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]";
   }
@@ -63,6 +65,8 @@ export function nodeStatusColorClass(status: NodeStatus): string {
       return "bg-[var(--color-success)]";
     case "in_progress":
       return "bg-[var(--color-brand)]";
+    case "awaiting_review":
+      return "bg-[var(--color-warning)]";
     case "blocked":
       return "bg-[var(--color-danger)]";
     default:
@@ -78,6 +82,8 @@ export function nodeStatusToken(status: NodeStatus): string {
       return "var(--color-success)";
     case "in_progress":
       return "var(--color-brand)";
+    case "awaiting_review":
+      return "var(--color-warning)";
     case "blocked":
       return "var(--color-danger)";
     default:
@@ -141,6 +147,30 @@ export function decisionOutcomeLabel(outcome: DecisionOutcome): string {
       return "Blocked";
     default:
       return "Pending";
+  }
+}
+
+// Dot color for a flag severity.
+export function flagSeverityDot(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "bg-[var(--color-danger)]";
+    case "warning":
+      return "bg-[var(--color-warning)]";
+    default:
+      return "bg-[var(--color-fg-subtle)]";
+  }
+}
+
+// Text color for a flag severity label.
+export function flagSeverityText(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "text-[var(--color-danger)]";
+    case "warning":
+      return "text-[var(--color-warning-fg)]";
+    default:
+      return "text-[var(--color-fg-subtle)]";
   }
 }
 
