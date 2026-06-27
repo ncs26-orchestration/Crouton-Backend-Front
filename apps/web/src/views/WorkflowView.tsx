@@ -456,10 +456,14 @@ function NodeDetail({
 	const dept = node.department.toLowerCase();
 	const inDept = (m: { team_roles?: { team: string }[] }) =>
 		(m.team_roles ?? []).some((tr) => tr.team.toLowerCase() === dept);
-	const deptMembers = members.filter(inDept);
 	const me = members.find((m) => m.id === user?.id);
+	// Only an admin (the executive) overrides department boundaries. Verifying a
+	// node otherwise requires being in that node's department or assigned to it,
+	// so a Finance person can't sign off a Legal node. Assigning verifiers and
+	// launching is a workflow-management action, open to admin/executor/requester.
+	const isAdmin = me?.role === "admin";
 	const isExec = me?.role === "admin" || me?.role === "executor";
-	const canVerify = isExec || (me ? inDept(me) : false) || assignments.some((a) => a.user_id === user?.id);
+	const canVerify = isAdmin || (me ? inDept(me) : false) || assignments.some((a) => a.user_id === user?.id);
 	const canAssign = isExec || request.requester_user_id === user?.id;
 
 	const refresh = () => {
@@ -589,13 +593,15 @@ function NodeDetail({
                 className="flex-1 min-w-0 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
               >
                 <option value="">
-                  {deptMembers.length === 0 ? `No ${node.department} members` : "Assign a verifier…"}
+                  {members.length === 0 ? "No org members yet" : "Assign a verifier…"}
                 </option>
-                {deptMembers
+                {[...members]
                   .filter((m) => !assignments.some((a) => a.user_id === m.id))
+                  .sort((a, b) => Number(inDept(b)) - Number(inDept(a)))
                   .map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name || m.email}
+                      {inDept(m) ? "" : ` · ${(m.team_roles ?? [])[0]?.team ?? "no team"}`}
                     </option>
                   ))}
               </select>

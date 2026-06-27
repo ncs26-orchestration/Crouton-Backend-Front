@@ -185,8 +185,8 @@ function Shell() {
     setLocation((prev) => ({ ...prev, section }));
   };
 
-  const navigateToWorkflow = (requestId: string) => {
-    setLocation({ section: "workflows", requestId, nodeId: null });
+  const navigateToWorkflow = (requestId: string, nodeId: string | null = null) => {
+    setLocation({ section: "workflows", requestId, nodeId });
   };
 
   const selectNode = (nodeId: string | null) => {

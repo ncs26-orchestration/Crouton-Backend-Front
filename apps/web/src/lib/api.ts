@@ -20,6 +20,7 @@ import type {
 	Machine,
 	NodeAssignment,
 	NodeMessage,
+	NodeVerification,
 	OrgRequest,
 	PolicyRule,
 	Project,
@@ -533,6 +534,11 @@ export const api = {
 
   listRequests: (orgId: string): Promise<{ requests: OrgRequest[] }> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/requests`),
+
+  // Nodes awaiting the caller's verification (assigned, in their department, or
+  // all for an admin). Powers the "Waiting on you" queue in My Work.
+  listMyVerifications: (orgId: string): Promise<{ verifications: NodeVerification[] }> =>
+    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/my-verifications`),
 
   createRequest: (
     orgId: string,
