@@ -65,7 +65,7 @@ export function AgentsView({ orgId }: { orgId: string }) {
         </p>
       </div>
 
-      <div className="px-4 md:px-8 py-4 md:py-6 w-full max-w-[1100px]">
+      <div className="px-4 md:px-8 py-4 md:py-6 w-full">
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (

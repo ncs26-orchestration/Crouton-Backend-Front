@@ -29,7 +29,7 @@ export function PoliciesView({ orgId }: { orgId: string }) {
         </p>
       </div>
 
-      <div className="px-4 md:px-8 py-4 md:py-6 w-full max-w-[820px]">
+      <div className="px-4 md:px-8 py-4 md:py-6 w-full">
         {isLoading ? (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
