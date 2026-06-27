@@ -10,11 +10,12 @@ from app.agents.department import _parse_decision
 from app.agents.intake import _additional_catalog, _parse_plan
 
 
-def test_llm_unavailable_without_keys(monkeypatch) -> None:
+def test_llm_available_via_ollama_fallback(monkeypatch) -> None:
     monkeypatch.setattr(llm.settings, "deepseek_api_key", None)
     monkeypatch.setattr(llm.settings, "groq_api_key", None)
     monkeypatch.setattr(llm.settings, "openai_api_key", None)
-    assert llm.llm_available() is False
+    # Ollama is always available as a local fallback provider.
+    assert llm.llm_available() is True
 
 
 def test_llm_available_with_deepseek_key(monkeypatch) -> None:
