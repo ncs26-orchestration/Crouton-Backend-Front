@@ -135,6 +135,13 @@ body,
   height: 100%;
 }
 
+/* Root size for the whole UI. Tailwind's rem-based type and spacing scale off
+   this, so nudging it up zooms the interface in uniformly without touching
+   individual classes. The canvas is px/transform-based and unaffected. */
+html {
+  font-size: 17px;
+}
+
 * {
   /* ss01 globally — the Stripe/sohne-var signature. Inter supports it. */
   font-feature-settings: "ss01";
