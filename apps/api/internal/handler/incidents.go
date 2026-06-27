@@ -158,6 +158,20 @@ func (h *IncidentsHandler) CreateIncident(c echo.Context) error {
 		h.logger.Error("create incident: update machine status", slog.String("err", err.Error()))
 	}
 
+	// Create an agent_task so the incident appears in the technician's
+	// inbox (GET /me/work). The "enpanne:machine:" prefix signals to the
+	// mobile client that this task routes to the incident-detail screen
+	// with AI diagnosis support.
+	taskID := "enpanne:machine:" + incidentID
+	if _, err := h.db.Exec(ctx,
+		`INSERT INTO agent_tasks (id, title, status, incident_id)
+		 VALUES ($1, $2, 'pending', $3)
+		 ON CONFLICT (id) DO NOTHING`,
+		taskID, body.Title, incidentID,
+	); err != nil {
+		h.logger.Error("create incident: insert agent_task", slog.String("err", err.Error()))
+	}
+
 	return c.JSON(http.StatusCreated, map[string]any{
 		"incident": toIncidentResponse(*inc),
 	})

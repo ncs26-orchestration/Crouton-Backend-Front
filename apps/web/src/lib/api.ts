@@ -563,4 +563,36 @@ export const api = {
 
 	listPolicies: (orgId: string): Promise<{ policies: DepartmentPolicy[] }> =>
 		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/policies`),
+
+	// --- Machines (M-F1) ---
+
+	createMachine: (orgId: string, data: {
+		name: string;
+		machine_type: string;
+		location: string;
+		serial_number: string;
+	}): Promise<{ machine: { id: string; name: string; machine_type: string; location: string; serial_number: string; status: string } }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/machines`, {
+			method: "POST",
+			body: JSON.stringify(data),
+		}),
+
+	listMachines: (orgId: string): Promise<{ machines: Array<{ id: string; name: string; machine_type: string; location: string; status: string; serial_number: string }> }> =>
+		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/machines`),
+
+	uploadMachineDocument: (machineId: string, file: File, docType: string): Promise<{ document: { id: string; filename: string; doc_type: string } }> => {
+		const form = new FormData();
+		form.append("file", file);
+		form.append("doc_type", docType);
+		const token = authStore.get();
+		return fetch(`/api/machines/${encodeURIComponent(machineId)}/documents`, {
+			method: "POST",
+			headers: token ? { Authorization: `Bearer ${token}` } : {},
+			body: form,
+		}).then(async (res) => {
+			const text = await res.text();
+			if (!res.ok) throw new Error(JSON.parse(text).error ?? "upload failed");
+			return JSON.parse(text);
+		});
+	},
 };
