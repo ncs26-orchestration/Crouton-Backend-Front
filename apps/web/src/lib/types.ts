@@ -283,6 +283,7 @@ export interface OrgRequest {
   requester_name: string;
   requester_role?: string;
   request_type?: string;
+  details?: Record<string, string | number>;
   priority: RequestPriority;
   status: RequestStatus;
   progress: number;

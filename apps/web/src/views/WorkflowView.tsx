@@ -42,6 +42,7 @@ import {
   prettyLabel,
   requestStatusTextClass,
 } from "../lib/request-format";
+import { detailLabel } from "../lib/request-templates";
 import { useRequestStream } from "../lib/sse";
 import { DepartmentNode } from "../components/DepartmentNode";
 import type { AuditEvent, WorkflowNodeData } from "../lib/types";
@@ -224,6 +225,10 @@ function WorkflowCanvas({
           {req.request_type && req.request_type !== "general" && (
             <InfoRow label="Type" value={prettyLabel(req.request_type)} />
           )}
+          {req.details &&
+            Object.entries(req.details).map(([k, v]) => (
+              <InfoRow key={k} label={detailLabel(k)} value={String(v)} />
+            ))}
           <InfoRow label="Priority" value={prettyLabel(req.priority)} />
           <InfoRow label="Status">
             <span className={`font-medium ${requestStatusTextClass(req.status)}`}>

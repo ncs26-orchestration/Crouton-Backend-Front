@@ -11,6 +11,7 @@ import {
   priorityTextClass,
   statusBadgeClass,
 } from "../lib/request-format";
+import { REQUEST_TEMPLATES, collectDetails } from "../lib/request-templates";
 import type { OrgRequest, RequestPriority, RequestStatus } from "../lib/types";
 
 const PRIORITIES: RequestPriority[] = ["low", "medium", "high", "urgent"];
@@ -239,10 +240,20 @@ function NewRequestModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<RequestPriority>("medium");
+  const [categoryId, setCategoryId] = useState("general");
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+
+  const template = REQUEST_TEMPLATES.find((t) => t.id === categoryId) ?? REQUEST_TEMPLATES[0]!;
 
   const mutation = useMutation({
     mutationFn: () =>
-      api.createRequest(orgId, { title: title.trim(), description: description.trim(), priority }),
+      api.createRequest(orgId, {
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        category: categoryId,
+        details: collectDetails(template, fieldValues),
+      }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["requests", orgId] });
       onCreated(data.request.id);
@@ -288,7 +299,7 @@ function NewRequestModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-request-title"
-        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-md p-6 border border-[var(--color-border)]"
+        className="relative bg-[var(--color-surface)] rounded-lg shadow-stripe-elevated w-full max-w-lg p-6 border border-[var(--color-border)] max-h-[88vh] overflow-y-auto nice-scroll"
       >
         <div className="flex items-start justify-between mb-4">
           <h2
@@ -322,6 +333,25 @@ function NewRequestModal({
           </div>
 
           <div>
+            <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Category</label>
+            <select
+              value={categoryId}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setFieldValues({});
+              }}
+              className="w-full px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-transparent"
+            >
+              {REQUEST_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-[var(--color-fg-subtle)] mt-1">{template.hint}</p>
+          </div>
+
+          <div>
             <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Description</label>
             <textarea
               value={description}
@@ -332,6 +362,38 @@ function NewRequestModal({
               className="w-full px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-transparent resize-none"
             />
           </div>
+
+          {template.fields.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+              {template.fields.map((f) => (
+                <div key={f.key} className={f.type === "select" || f.key === "coverage" ? "col-span-2" : ""}>
+                  <label className="block text-[11px] font-medium text-[var(--color-fg-label)] mb-1">{f.label}</label>
+                  {f.type === "select" ? (
+                    <select
+                      value={fieldValues[f.key] ?? ""}
+                      onChange={(e) => setFieldValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                    >
+                      <option value="">—</option>
+                      {f.options?.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                      value={fieldValues[f.key] ?? ""}
+                      onChange={(e) => setFieldValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                      placeholder={f.placeholder}
+                      className="w-full px-2.5 py-1.5 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-[var(--color-fg-label)] mb-1">Priority</label>
