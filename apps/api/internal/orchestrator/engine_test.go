@@ -108,6 +108,17 @@ func (s *fakeStore) SetNodeDecisionSummary(_ context.Context, nodeID, summary st
 	return repo.ErrNotFound
 }
 
+func (s *fakeStore) SetNodeDecisionDetail(_ context.Context, nodeID, reasoning string, keyFactors []string) error {
+	for _, n := range s.nodes {
+		if n.ID == nodeID {
+			n.DecisionReasoning = reasoning
+			n.DecisionKeyFactors = keyFactors
+			return nil
+		}
+	}
+	return repo.ErrNotFound
+}
+
 func (s *fakeStore) ClearNodeFlags(_ context.Context, nodeID string) error {
 	kept := s.flags[:0]
 	for _, f := range s.flags {

@@ -344,6 +344,9 @@ export interface WorkflowNodeData {
   status_text: string;
   decision_outcome?: DecisionOutcome;
   decision_summary?: string;
+  // How the agent reached its outcome, and the concrete facts that drove it.
+  decision_reasoning?: string;
+  decision_key_factors?: string[];
   flags?: NodeFlag[];
   checks?: NodeCheck[];
   started_at: string | null;
@@ -403,8 +406,26 @@ export interface AuditEvent {
 
 // Node detail payload from GET /requests/:id/nodes/:nodeId. activity is
 // the node-scoped audit trail.
+// An upstream department's decision, shown so an approver sees what the agent
+// built on.
+export interface UpstreamDecision {
+  node_id: string;
+  name: string;
+  department: string;
+  status: string;
+  decision_outcome: DecisionOutcome | "";
+  decision_summary: string;
+}
+
+// What the agent reviewed: the request's structured details and the upstream
+// decisions feeding this node.
+export interface NodeContext {
+  details?: Record<string, unknown> | null;
+  upstream?: UpstreamDecision[] | null;
+}
+
 export interface NodeDetailResponse {
-	node: WorkflowNodeData;
+	node: WorkflowNodeData & { context?: NodeContext };
 	tasks: NodeTask[];
 	activity: AuditEvent[];
 }

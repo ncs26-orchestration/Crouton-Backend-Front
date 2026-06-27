@@ -70,6 +70,17 @@ class Decision(BaseModel):
     """A department agent's output for one workflow node."""
 
     summary: str = Field(description="Short summary of the department's assessment")
+    reasoning: str = Field(
+        default="",
+        description=(
+            "How the department reached this outcome: a short narrative weighing the "
+            "request details, policies, and upstream decisions. Shown to the human approver."
+        ),
+    )
+    key_factors: list[str] = Field(
+        default_factory=list,
+        description="The concrete facts that drove the outcome (amounts, policies, dates, risks)",
+    )
     outcome: str = Field(
         default="approve",
         description="One of: approve, approve_with_conditions, flag, reject, block",

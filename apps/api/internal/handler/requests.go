@@ -550,24 +550,39 @@ func (h *RequestsHandler) GetNode(c echo.Context) error {
 	}
 
 	nodeResp := map[string]any{
-		"id":               node.ID,
-		"key":              node.Key,
-		"name":             node.Name,
-		"agent_type":       node.AgentType,
-		"department":       node.Department,
-		"status":           node.Status,
-		"description":      node.Description,
-		"progress_percent": node.ProgressPercent,
-		"status_text":      node.StatusText,
-		"decision_outcome": node.DecisionOutcome,
-		"decision_summary": node.DecisionSummary,
-		"flags":            flagList,
-		"checks":           checks,
-		"started_at":       node.StartedAt,
-		"completed_at":     node.CompletedAt,
+		"id":                   node.ID,
+		"key":                  node.Key,
+		"name":                 node.Name,
+		"agent_type":           node.AgentType,
+		"department":           node.Department,
+		"status":               node.Status,
+		"description":          node.Description,
+		"progress_percent":     node.ProgressPercent,
+		"status_text":          node.StatusText,
+		"decision_outcome":     node.DecisionOutcome,
+		"decision_summary":     node.DecisionSummary,
+		"decision_reasoning":   node.DecisionReasoning,
+		"decision_key_factors": node.DecisionKeyFactors,
+		"flags":                flagList,
+		"checks":               checks,
+		"started_at":           node.StartedAt,
+		"completed_at":         node.CompletedAt,
 	}
 	if blockedBy != nil {
 		nodeResp["blocked_by"] = blockedBy
+	}
+
+	// "What it reviewed": the request's structured details and the upstream
+	// departments' decisions the agent built on, so the approver has the full
+	// brief. Best effort — a query error here just omits the upstream list.
+	upstream, err := h.workflow.ListPredecessorSummaries(ctx, nodeID)
+	if err != nil {
+		h.logger.Warn("get node: predecessors", slog.String("err", err.Error()))
+		upstream = nil
+	}
+	nodeResp["context"] = map[string]any{
+		"details":  req.Details,
+		"upstream": upstream,
 	}
 
 	// F6: node-scoped audit activity.
@@ -1054,6 +1069,9 @@ func (h *RequestsHandler) applyRevisedDecision(ctx context.Context, requestID st
 	now := time.Now()
 	if d.Summary != "" {
 		_ = h.workflow.SetNodeDecisionSummary(ctx, node.ID, d.Summary)
+	}
+	if d.Reasoning != "" || len(d.KeyFactors) > 0 {
+		_ = h.workflow.SetNodeDecisionDetail(ctx, node.ID, d.Reasoning, d.KeyFactors)
 	}
 	outcome := d.Outcome
 	if outcome == "" {
