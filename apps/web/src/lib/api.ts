@@ -427,7 +427,8 @@ export const api = {
   // --- Teams ---
 
   listTeams: (orgId: string): Promise<{ teams: Array<{ id: string; name: string; description: string; created_at: string; member_count?: number }> }> =>
-    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/teams`),
+    fetchJSON<Array<{ id: string; name: string; description: string; created_at: string; member_count?: number }>>(`/api/orgs/${encodeURIComponent(orgId)}/teams`)
+      .then((arr) => ({ teams: Array.isArray(arr) ? arr : [] })),
 
   getTeam: (orgId: string, teamId: string): Promise<{
     id: string; name: string; description: string; created_at: string;
@@ -459,8 +460,9 @@ export const api = {
 
   // --- Org members ---
 
-  listOrgMembers: (orgId: string): Promise<{ members: Array<{ user_id: number; name: string; email: string; role: string; joined_at: string }> }> =>
-    fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members`),
+  listOrgMembers: (orgId: string): Promise<{ members: Array<{ id: number; name: string; email: string; role: string; joined_at: string }> }> =>
+    fetchJSON<Array<{ id: number; name: string; email: string; role: string; joined_at: string }>>(`/api/orgs/${encodeURIComponent(orgId)}/members`)
+      .then((arr) => ({ members: Array.isArray(arr) ? arr : [] })),
 
   addOrgMember: (orgId: string, payload: { user_id: number; role: string }): Promise<void> =>
     fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/members`, {

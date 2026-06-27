@@ -47,12 +47,12 @@ type userSpec struct {
 var users = []userSpec{
 	{"founder@acme.test", "Dana Founder", "admin"},
 	{"coo@acme.test", "Omar Operations", "executor"},
-	{"finance.lead@acme.test", "Farah Finance", "employee"},
-	{"legal.lead@acme.test", "Leo Legal", "employee"},
-	{"it.lead@acme.test", "Ivy IT", "employee"},
-	{"hr.lead@acme.test", "Hana HR", "employee"},
-	{"ops.lead@acme.test", "Otto Ops", "employee"},
-	{"tech.lead@acme.test", "Tara Technician", "employee"},
+	{"finance.lead@acme.test", "Farah Finance", "executor"},
+	{"legal.lead@acme.test", "Leo Legal", "executor"},
+	{"it.lead@acme.test", "Ivy IT", "executor"},
+	{"hr.lead@acme.test", "Hana HR", "executor"},
+	{"ops.lead@acme.test", "Otto Ops", "executor"},
+	{"tech.lead@acme.test", "Tara Technician", "executor"},
 }
 
 // teamSpec is a department team plus the lead's email.

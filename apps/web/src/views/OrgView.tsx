@@ -16,7 +16,7 @@ import { useToasts } from "../components/Toasts";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type Team = { id: string; name: string; description: string; created_at: string };
-type OrgMember = { user_id: number; name: string; email: string; role: string; joined_at: string };
+type OrgMember = { id: number; name: string; email: string; role: string; joined_at: string };
 
 // ── OrgView ────────────────────────────────────────────────────────────────
 
@@ -215,7 +215,7 @@ function TeamCard({ team, orgId, orgMembers, expanded, onToggle, onDelete, delet
   const qc = useQueryClient();
   const toasts = useToasts();
   const [selectedUserId, setSelectedUserId] = useState<number | "">("");
-  const [memberRole, setMemberRole] = useState<"lead" | "member">("member");
+  const [memberRole, setMemberRole] = useState<"lead" | "member" | "technician">("member");
   const [addError, setAddError] = useState<string | null>(null);
 
   type TeamMember = { id: number; name: string; email: string; role: string };
@@ -247,7 +247,7 @@ function TeamCard({ team, orgId, orgMembers, expanded, onToggle, onDelete, delet
 
   // Org members not yet in this team
   const available = orgMembers.filter(
-    (m) => !teamMembers.some((tm) => tm.id === m.user_id),
+    (m) => !teamMembers.some((tm) => tm.id === m.id),
   );
 
   return (
@@ -321,18 +321,19 @@ function TeamCard({ team, orgId, orgMembers, expanded, onToggle, onDelete, delet
               >
                 <option value="">Select member…</option>
                 {available.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>
+                  <option key={m.id} value={m.id}>
                     {m.name} ({m.email})
                   </option>
                 ))}
               </select>
               <select
                 value={memberRole}
-                onChange={(e) => setMemberRole(e.target.value as "lead" | "member")}
+                onChange={(e) => setMemberRole(e.target.value as "lead" | "member" | "technician")}
                 className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors"
               >
                 <option value="member">Member</option>
                 <option value="lead">Lead</option>
+                <option value="technician">Technician</option>
               </select>
               <button
                 disabled={selectedUserId === "" || addMut.isPending}
@@ -402,7 +403,7 @@ function MembersTab({ orgId }: { orgId: string }) {
 
       {members.map((m) => (
         <div
-          key={m.user_id}
+          key={m.id}
           className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]"
         >
           <div className="size-8 rounded-full bg-[var(--color-accent-bg)] flex items-center justify-center text-xs font-bold text-[var(--color-brand)] shrink-0">
@@ -414,7 +415,7 @@ function MembersTab({ orgId }: { orgId: string }) {
           </div>
           <select
             value={m.role}
-            onChange={(e) => roleMut.mutate({ userId: m.user_id, role: e.target.value })}
+            onChange={(e) => roleMut.mutate({ userId: m.id, role: e.target.value })}
             className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors"
           >
             <option value="admin">Admin</option>
@@ -422,7 +423,7 @@ function MembersTab({ orgId }: { orgId: string }) {
             <option value="employee">Employee</option>
           </select>
           <button
-            onClick={() => removeMut.mutate(m.user_id)}
+            onClick={() => removeMut.mutate(m.id)}
             className="shrink-0 text-[var(--color-fg-muted)] hover:text-red-500 transition-colors"
           >
             <X size={14} />
