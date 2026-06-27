@@ -68,6 +68,41 @@ func New(baseURL string) *Client {
 	}
 }
 
+// doWithRetry sends the request, retrying transport errors (e.g. connection
+// refused while the agent container restarts during a deploy) a few times with
+// a short backoff. Non-2xx responses are NOT retried — those are real answers
+// from the agent and the caller maps them to ErrAgentUnavailable. This keeps a
+// brief agent blip from immediately flagging a request and dropping to the
+// deterministic fallback. The body is replayable because the requests are built
+// from a *bytes.Reader, so net/http populates req.GetBody for us.
+func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
+	const maxAttempts = 4
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			req.Body = body
+		}
+		resp, err := c.httpClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if attempt == maxAttempts || req.Context().Err() != nil {
+			break
+		}
+		select {
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
+		}
+	}
+	return nil, lastErr
+}
+
 // Intake calls POST /agents/intake and returns the planned workflow graph.
 func (c *Client) Intake(ctx context.Context, ir IntakeRequest) (*Plan, error) {
 	body, err := json.Marshal(ir)
@@ -81,7 +116,7 @@ func (c *Client) Intake(ctx context.Context, ir IntakeRequest) (*Plan, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAgentUnavailable, err)
 	}
@@ -163,7 +198,7 @@ func (c *Client) Run(ctx context.Context, rr RunRequest) (*Decision, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAgentUnavailable, err)
 	}
@@ -222,7 +257,7 @@ func (c *Client) Diagnose(ctx context.Context, dr DiagnoseRequest) (*DiagnosisRe
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAgentUnavailable, err)
 	}
@@ -328,7 +363,7 @@ func (c *Client) Converse(ctx context.Context, cr ConverseRequest) (*ConverseRes
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAgentUnavailable, err)
 	}
