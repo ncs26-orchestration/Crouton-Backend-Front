@@ -174,7 +174,10 @@ function PolicyEditor({
   const qc = useQueryClient();
   const toasts = useToasts();
   const isNew = policy === null;
-  const teamsQuery = useQuery({ queryKey: ["teams", orgId], queryFn: () => api.listTeams(orgId), enabled: isNew });
+  // Same key/shape as OrgView's teams query: return the array, not the wrapper.
+  // Two queries sharing ["teams", orgId] must cache the same shape, or whichever
+  // populates the cache first poisons the other until a hard refresh.
+  const teamsQuery = useQuery({ queryKey: ["teams", orgId], queryFn: () => api.listTeams(orgId).then((r) => r.teams), enabled: isNew });
 
   const [teamId, setTeamId] = useState(policy?.team_id ?? "");
   const [title, setTitle] = useState(policy?.title ?? "");
@@ -219,7 +222,7 @@ function PolicyEditor({
                 className="w-full px-3 py-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
               >
                 <option value="">Select a department…</option>
-                {(teamsQuery.data?.teams ?? []).map((t) => (
+                {(teamsQuery.data ?? []).map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>

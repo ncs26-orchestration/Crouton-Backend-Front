@@ -448,11 +448,14 @@ function NodeDetail({
 
 	// Members power the assignment picker (people in this node's department) and
 	// the RBAC gate (whether the current user may verify this node).
+	// Shares the ["org-members", orgId] cache with OrgView, so it must store the
+	// same shape (the array, not the {members} wrapper) or one view poisons the
+	// other's cache until a hard refresh.
 	const membersQuery = useQuery({
 		queryKey: ["org-members", request.org_id],
-		queryFn: () => api.listOrgMembers(request.org_id),
+		queryFn: () => api.listOrgMembers(request.org_id).then((r) => r.members),
 	});
-	const members = membersQuery.data?.members ?? [];
+	const members = membersQuery.data ?? [];
 	const dept = node.department.toLowerCase();
 	const inDept = (m: { team_roles?: { team: string }[] }) =>
 		(m.team_roles ?? []).some((tr) => tr.team.toLowerCase() === dept);
