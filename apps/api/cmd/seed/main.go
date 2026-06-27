@@ -341,7 +341,7 @@ func seedTeams(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]int64
 		// they can see assigned machines.
 		if t.name == "Maintenance" {
 			if _, err := pool.Exec(ctx,
-				`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'technician')`,
+				`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'technician') ON CONFLICT (team_id, user_id) DO UPDATE SET role = 'technician'`,
 				t.id, userIDs[t.leadEmail],
 			); err != nil {
 				return fmt.Errorf("insert technician %s: %w", t.leadEmail, err)
