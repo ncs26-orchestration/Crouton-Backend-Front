@@ -154,6 +154,7 @@ func (h *MachinesHandler) CreateMachine(c echo.Context) error {
 		Location:       body.Location,
 		SerialNumber:   body.SerialNumber,
 		Status:         body.Status,
+		Metadata:       []byte("{}"),
 		LastServiceAt:  body.LastServiceAt,
 		NextServiceDue: body.NextServiceDue,
 	})

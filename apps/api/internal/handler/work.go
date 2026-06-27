@@ -96,7 +96,7 @@ func (h *WorkHandler) ListMyWork(c echo.Context) error {
 		       'machine_incident' AS asset_type,
 		       mi.id AS asset_id
 		FROM agent_tasks at
-		JOIN machine_incidents mi ON mi.id = at.incident_id
+		JOIN incidents mi ON mi.id = at.incident_id
 		JOIN machines m ON m.id = mi.machine_id
 		JOIN org_members om ON om.org_id = mi.org_id AND om.user_id = $1
 		JOIN users mu ON mu.id = mi.reported_by

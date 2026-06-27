@@ -503,3 +503,23 @@ export interface WorkflowDiff {
   removed: string[];
   changed: string[];
 }
+
+// --- Machines (M-F1) ---
+
+export type MachineStatus = "operational" | "degraded" | "down" | "maintenance";
+
+export interface Machine {
+  id: string;
+  org_id: string;
+  assigned_user_id: number | null;
+  name: string;
+  machine_type: string;
+  location: string;
+  serial_number: string;
+  status: MachineStatus;
+  metadata: Record<string, unknown>;
+  last_service_at: string | null;
+  next_service_due: string | null;
+  created_at: string;
+  updated_at: string;
+}

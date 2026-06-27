@@ -4,7 +4,7 @@
 -- node_id is now nullable: null means this is an incident task.
 -- incident_id links to the machine incident when applicable.
 ALTER TABLE agent_tasks ALTER COLUMN node_id DROP NOT NULL;
-ALTER TABLE agent_tasks ADD COLUMN incident_id TEXT REFERENCES machine_incidents(id) ON DELETE CASCADE;
+ALTER TABLE agent_tasks ADD COLUMN incident_id TEXT REFERENCES incidents(id) ON DELETE CASCADE;
 
 CREATE INDEX IF NOT EXISTS idx_agent_tasks_incident ON agent_tasks(incident_id);
 

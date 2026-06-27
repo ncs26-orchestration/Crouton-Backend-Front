@@ -17,6 +17,7 @@ import { MyWorkView } from "./views/MyWorkView";
 import { RequestsView } from "./views/RequestsView";
 import { WorkflowView } from "./views/WorkflowView";
 import { AgentsView } from "./views/AgentsView";
+import { MachinesView } from "./views/MachinesView";
 import { ReportsView } from "./views/ReportsView";
 import { PoliciesView } from "./views/PoliciesView";
 import { IntegrationsView } from "./views/IntegrationsView";
@@ -32,7 +33,7 @@ interface Location {
 }
 
 const VALID_SECTIONS: ShellSection[] = [
-  "home", "my-work", "requests", "workflows", "agents",
+  "home", "my-work", "requests", "workflows", "machines", "agents",
   "reports", "policies", "integrations", "teams", "settings", "help",
 ];
 
@@ -219,6 +220,7 @@ function Shell() {
         />
       )}
 
+      {section === "machines" && activeOrg && <MachinesView orgId={activeOrg.id} />}
       {section === "agents" && activeOrg && <AgentsView orgId={activeOrg.id} />}
       {section === "reports" && <ReportsView />}
       {section === "policies" && activeOrg && <PoliciesView orgId={activeOrg.id} />}

@@ -571,13 +571,13 @@ export const api = {
 		machine_type: string;
 		location: string;
 		serial_number: string;
-	}): Promise<{ machine: { id: string; name: string; machine_type: string; location: string; serial_number: string; status: string } }> =>
+	}): Promise<{ machine: Machine }> =>
 		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/machines`, {
 			method: "POST",
 			body: JSON.stringify(data),
 		}),
 
-	listMachines: (orgId: string): Promise<{ machines: Array<{ id: string; name: string; machine_type: string; location: string; status: string; serial_number: string }> }> =>
+	listMachines: (orgId: string): Promise<{ machines: Machine[] }> =>
 		fetchJSON(`/api/orgs/${encodeURIComponent(orgId)}/machines`),
 
 	uploadMachineDocument: (machineId: string, file: File, docType: string): Promise<{ document: { id: string; filename: string; doc_type: string } }> => {
