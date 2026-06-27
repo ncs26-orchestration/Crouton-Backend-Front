@@ -36,7 +36,7 @@ def _decision(
     # version from what they do pass so the approver's "how it decided" brief is
     # never empty on the deterministic path.
     if reasoning is None:
-        reasoning = f"{summary} Reached '{outcome.replace('_', ' ')}' after the department's standard checks."
+        reasoning = f"{summary} Reached '{outcome.replace('_', ' ')}' after standard checks."
     if key_factors is None:
         key_factors = [f.message for f in flags] or [summary]
     return Decision(
@@ -248,8 +248,8 @@ _DEPT_SYSTEM = """You are {role}
 Review THIS specific request and decide. Respond ONLY with a JSON object:
 {{
   "summary": "1-2 sentence assessment grounded in the actual request",
-  "reasoning": "2-4 sentences explaining step by step HOW you reached the outcome: weigh the request details, your policies, and the upstream decisions. This is shown to the human approver.",
-  "key_factors": ["the concrete facts that drove the decision: amounts, policy names, dates, risks"],
+  "reasoning": "2-4 sentences on HOW you reached the outcome from details, policies, upstream",
+  "key_factors": ["concrete facts that drove it: amounts, policy names, dates, risks"],
   "outcome": "approve | approve_with_conditions | flag | reject | block",
   "flags": [{{"severity": "info|warning|critical", "message": "specific risk or note"}}],
   "tasks": [{{"title": "concrete action you took", "status": "completed"}}],
