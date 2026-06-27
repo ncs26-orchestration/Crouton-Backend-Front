@@ -133,6 +133,9 @@ func NewServer(d Deps) *echo.Echo {
 	e.DELETE("/requests/:id/assignments/:assignmentId", reqh.UnassignNode, authMiddleware)
 	e.POST("/requests/:id/launch", reqh.LaunchRequest, authMiddleware)
 	e.POST("/requests/:id/nodes/:nodeId/verify", reqh.VerifyNode, authMiddleware)
+	// Per-node verifier↔agent conversation (ask questions / request changes).
+	e.GET("/requests/:id/nodes/:nodeId/messages", reqh.ListNodeMessages, authMiddleware)
+	e.POST("/requests/:id/nodes/:nodeId/messages", reqh.PostNodeMessage, authMiddleware)
 	// Audit reads (F6).
 	e.GET("/requests/:id/audit", reqh.ListRequestAudit, authMiddleware)
 	orgGroup.GET("/:orgId/audit", reqh.ListOrgAudit)
