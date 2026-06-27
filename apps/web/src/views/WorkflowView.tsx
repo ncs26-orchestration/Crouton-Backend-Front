@@ -52,6 +52,7 @@ import { useRequestStream } from "../lib/sse";
 import { useAuth } from "../contexts/AuthContext";
 import { useToasts } from "../components/Toasts";
 import { Avatar } from "../components/Avatar";
+import { NodeChat } from "../components/NodeChat";
 import { DepartmentNode } from "../components/DepartmentNode";
 import type { AuditEvent, NodeAssignment, OrgRequest, WorkflowNodeData } from "../lib/types";
 
@@ -653,6 +654,10 @@ function NodeDetail({
             ))}
           </ul>
         </div>
+      )}
+
+      {(node.status === "awaiting_review" || node.status === "completed") && (
+        <NodeChat requestId={requestId} nodeId={node.id} canPost={canVerify} />
       )}
 
       {tasks.length > 0 && (

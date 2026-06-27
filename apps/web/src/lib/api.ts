@@ -19,6 +19,7 @@ import type {
 	IncidentMessage,
 	Machine,
 	NodeAssignment,
+	NodeMessage,
 	OrgRequest,
 	Project,
 	NodeDetailResponse,
@@ -594,6 +595,21 @@ export const api = {
 	): Promise<{ status: string }> =>
 		fetchJSON(
 			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}/verify`,
+			{ method: "POST", body: JSON.stringify(payload) },
+		),
+
+	listNodeMessages: (requestId: string, nodeId: string): Promise<{ messages: NodeMessage[] }> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}/messages`,
+		),
+
+	postNodeMessage: (
+		requestId: string,
+		nodeId: string,
+		payload: { body: string; intent: "question" | "request_changes" },
+	): Promise<{ messages: NodeMessage[] }> =>
+		fetchJSON(
+			`/api/requests/${encodeURIComponent(requestId)}/nodes/${encodeURIComponent(nodeId)}/messages`,
 			{ method: "POST", body: JSON.stringify(payload) },
 		),
 
