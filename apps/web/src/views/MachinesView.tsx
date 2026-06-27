@@ -60,7 +60,7 @@ export function MachinesView({ orgId }: Props) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="shrink-0 px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+      <div className="shrink-0 px-4 md:px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between gap-3">
         <div>
           <h1
             className="text-lg font-medium text-[var(--color-fg)]"
@@ -82,7 +82,7 @@ export function MachinesView({ orgId }: Props) {
         </button>
       </div>
 
-      <div className="shrink-0 px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3">
+      <div className="shrink-0 px-4 md:px-6 py-2.5 border-b border-[var(--color-border)] flex items-center gap-3 flex-wrap">
         <label className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
           Status
           <select
@@ -138,28 +138,70 @@ export function MachinesView({ orgId }: Props) {
         )}
 
         {filtered.length > 0 && (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-[var(--color-fg-muted)] border-b border-[var(--color-border)]">
-                <th className="px-6 py-2.5 font-medium w-8" />
-                <th className="px-4 py-2.5 font-medium">Name</th>
-                <th className="px-4 py-2.5 font-medium">Type</th>
-                <th className="px-4 py-2.5 font-medium">Location</th>
-                <th className="px-4 py-2.5 font-medium">Serial</th>
-                <th className="px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5 font-medium text-right">Docs</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop table */}
+            <table className="w-full text-sm hidden md:table">
+              <thead>
+                <tr className="text-left text-xs text-[var(--color-fg-muted)] border-b border-[var(--color-border)]">
+                  <th className="px-6 py-2.5 font-medium w-8" />
+                  <th className="px-4 py-2.5 font-medium">Name</th>
+                  <th className="px-4 py-2.5 font-medium">Type</th>
+                  <th className="px-4 py-2.5 font-medium">Location</th>
+                  <th className="px-4 py-2.5 font-medium">Serial</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Docs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((m) => (
+                  <MachineRow
+                    key={m.id}
+                    machine={m}
+                    onUpload={() => setUploadTarget(m)}
+                  />
+                ))}
+              </tbody>
+            </table>
+
+            {/* Mobile cards */}
+            <div className="md:hidden flex flex-col gap-2 p-4">
               {filtered.map((m) => (
-                <MachineRow
+                <div
                   key={m.id}
-                  machine={m}
-                  onUpload={() => setUploadTarget(m)}
-                />
+                  className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-stripe-ambient"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className={`size-2 rounded-full shrink-0 ${STATUS_COLORS[m.status] ?? "bg-gray-400"}`} />
+                        <span className="text-sm font-medium text-[var(--color-fg)] truncate" style={{ fontFeatureSettings: '"ss01"' }}>
+                          {m.name}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--color-fg-muted)] mt-1">
+                        {m.machine_type || "\u2014"} · {m.location || "\u2014"}
+                      </p>
+                      {m.serial_number && (
+                        <p className="text-xs font-mono text-[var(--color-fg-subtle)] mt-0.5">{m.serial_number}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[m.status] ?? ""}`}>
+                        {STATUS_LABELS[m.status] ?? m.status}
+                      </span>
+                      <button
+                        onClick={() => setUploadTarget(m)}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-brand)] hover:bg-[var(--color-accent-bg)] transition-colors"
+                      >
+                        <Upload size={13} strokeWidth={1.75} />
+                        Upload
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </div>
 
