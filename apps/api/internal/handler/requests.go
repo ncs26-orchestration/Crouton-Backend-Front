@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/ncs26-orchestration/solution/apps/api/internal/agentclient"
+	"github.com/ncs26-orchestration/solution/apps/api/internal/graphspec"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/middleware"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/orchestrator"
 	"github.com/ncs26-orchestration/solution/apps/api/internal/repo"
@@ -888,6 +889,70 @@ func (h *RequestsHandler) LaunchRequest(c echo.Context) error {
 	}
 	names := h.requesterNames(ctx, []int64{updated.RequesterUserID})
 	return c.JSON(http.StatusOK, map[string]any{"request": toRequestResponse(*updated, names[updated.RequesterUserID])})
+}
+
+// UpdateRequestGraph handles PUT /requests/:id/graph — replace a draft's nodes
+// and edges (the "edit the plan" path). Only the requester or an admin/executor,
+// and only while the request is a draft (before any node has run).
+func (h *RequestsHandler) UpdateRequestGraph(c echo.Context) error {
+	claims := middleware.UserFromCtx(c)
+	id := c.Param("id")
+	req, role, done := h.loadRequestForMember(c, id)
+	if done != nil {
+		return done
+	}
+	if role != "admin" && role != "executor" && req.RequesterUserID != claims.UserID {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the requester or an admin/executor can edit the steps"})
+	}
+	if req.Status != "draft" {
+		return c.JSON(http.StatusConflict, map[string]string{"error": "steps can only be edited while the request is a draft"})
+	}
+
+	var body struct {
+		Nodes []graphspec.Node `json:"nodes"`
+		Edges []graphspec.Edge `json:"edges"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+	if err := graphspec.Validate(body.Nodes, body.Edges); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	planNodes := make([]agentclient.PlanNode, len(body.Nodes))
+	for i, n := range body.Nodes {
+		planNodes[i] = agentclient.PlanNode{Key: n.Key, Name: n.Name, AgentType: n.AgentType, Department: n.Department}
+	}
+	planEdges := make([]agentclient.PlanEdge, len(body.Edges))
+	for i, e := range body.Edges {
+		et := e.Type
+		if et == "" {
+			et = "sequence"
+		}
+		planEdges[i] = agentclient.PlanEdge{From: e.From, To: e.To, EdgeType: et}
+	}
+	nodes, edges := buildGraph(h.logger, id, planNodes, planEdges)
+
+	ctx := c.Request().Context()
+	tx, err := h.pg.Begin(ctx)
+	if err != nil {
+		h.logger.Error("update graph: begin tx", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := h.workflow.DeleteGraphByRequest(ctx, tx, id); err != nil {
+		h.logger.Error("update graph: delete old", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if err := h.workflow.InsertGraphTx(ctx, tx, nodes, edges); err != nil {
+		h.logger.Error("update graph: insert new", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		h.logger.Error("update graph: commit", slog.String("err", err.Error()))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // VerifyNode handles POST /requests/:id/nodes/:nodeId/verify — a human signs off
