@@ -84,7 +84,7 @@ func (h *DiagnosisHandler) UploadMachineDocument(c echo.Context) error {
 		h.logger.Error("upload doc: open file", slog.String("err", err.Error()))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	content, err := io.ReadAll(io.LimitReader(src, maxSize))
 	if err != nil {

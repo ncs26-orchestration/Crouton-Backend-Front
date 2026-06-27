@@ -77,7 +77,7 @@ export function OrgSetupView({ onDone }: Props) {
 	type MachineInput = { name: string; machine_type: string; location: string; serial_number: string; file: File | null; fileName: string };
 	const [machines, setMachines] = useState<MachineInput[]>([]);
 	const [machineName, setMachineName] = useState("");
-	const [machineType, setMachineType] = useState(MACHINE_TYPES[0]);
+	const [machineType, setMachineType] = useState<string>(MACHINE_TYPES[0]);
 	const [machineLocation, setMachineLocation] = useState("");
 	const [machineSerial, setMachineSerial] = useState("");
 	const [machineFile, setMachineFile] = useState<File | null>(null);

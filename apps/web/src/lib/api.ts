@@ -17,6 +17,7 @@ import type {
 	ISRegistry,
 	Incident,
 	IncidentMessage,
+	Machine,
 	OrgRequest,
 	Project,
 	NodeDetailResponse,

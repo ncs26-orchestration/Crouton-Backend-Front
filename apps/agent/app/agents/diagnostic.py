@@ -8,7 +8,6 @@ steps so the whole flow runs offline.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
@@ -22,6 +21,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Output models
 # ---------------------------------------------------------------------------
+
 
 class DiagnosticStep(BaseModel):
     """A single step in a machine diagnostic procedure."""
@@ -43,9 +43,7 @@ class Diagnosis(BaseModel):
     """The diagnostic agent's output: a structured repair plan."""
 
     summary: str = Field(description="One-sentence summary of the diagnosis")
-    root_cause: str | None = Field(
-        default=None, description="Probable root cause, if identifiable"
-    )
+    root_cause: str | None = Field(default=None, description="Probable root cause, if identifiable")
     steps: list[DiagnosticStep] = Field(
         default_factory=list, description="Ordered diagnostic/repair steps"
     )
@@ -92,7 +90,14 @@ Rules:
 
 
 _ALLOWED_ACTION_TYPES = {
-    "check", "measure", "replace", "restart", "calibrate", "inspect", "clean", "test",
+    "check",
+    "measure",
+    "replace",
+    "restart",
+    "calibrate",
+    "inspect",
+    "clean",
+    "test",
 }
 
 
@@ -122,6 +127,7 @@ def _format_telemetry(telemetry: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Deterministic fallback — realistic, severity-based procedures
 # ---------------------------------------------------------------------------
+
 
 def _fallback_critical(machine_name: str, machine_type: str) -> Diagnosis:
     return Diagnosis(
@@ -324,6 +330,7 @@ _SEVERITY_FALLBACK = {
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
 
 async def run_diagnostic(
     incident_title: str,
