@@ -65,8 +65,8 @@ export function ProjectsHomeView({ onOpenChat, onOpenProject }: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto nice-scroll bg-[var(--color-bg)]">
-      <div className="max-w-5xl mx-auto px-8 py-10">
-        <header className="flex items-end justify-between gap-6 mb-8">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
+        <header className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-6 md:mb-8">
           <div>
             <div
               className="text-[11px] uppercase tracking-[0.16em] text-[var(--color-fg-muted)]"
@@ -97,7 +97,7 @@ export function ProjectsHomeView({ onOpenChat, onOpenProject }: Props) {
 
         {!projectsQuery.isLoading && projects.length > 0 && (
           <>
-            <section className="mb-6 grid grid-cols-3 gap-3">
+            <section className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <StatCard
                 label="Projects"
                 value={projects.length}
