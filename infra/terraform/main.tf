@@ -16,6 +16,7 @@ resource "google_compute_firewall" "aios_inbound" {
     protocol = "tcp"
     ports = [
       "80",   # web (nginx) — also covered by allow-http, kept for clarity
+      "443",  # HTTPS (Caddy reverse proxy, Let's Encrypt)
       "8080", # api (Go)
       "8000", # agent (Python)
       "8180", # camunda7 cockpit (demo)
