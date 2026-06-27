@@ -31,10 +31,12 @@ type PlanEdge struct {
 	EdgeType string `json:"type"`
 }
 
-// Plan is the intake agent's output: a workflow graph for a request.
+// Plan is the intake agent's output: a workflow graph for a request, plus the
+// agent's classification of the request type.
 type Plan struct {
-	Nodes []PlanNode `json:"nodes"`
-	Edges []PlanEdge `json:"edges"`
+	RequestType string     `json:"request_type"`
+	Nodes       []PlanNode `json:"nodes"`
+	Edges       []PlanEdge `json:"edges"`
 }
 
 // IntakeRequest is sent to POST /agents/intake.
@@ -222,6 +224,7 @@ func DefaultDecision(agentType string) *Decision {
 // is unavailable. This ensures a request always gets a workflow graph.
 func DefaultPlan() *Plan {
 	return &Plan{
+		RequestType: "general",
 		Nodes: []PlanNode{
 			{Key: "intake", Name: "Intake & Classification", AgentType: "intake", Department: "Planning"},
 			{Key: "planning", Name: "Strategic Planning", AgentType: "planning", Department: "Planning"},

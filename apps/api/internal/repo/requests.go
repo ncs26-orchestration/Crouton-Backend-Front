@@ -19,6 +19,8 @@ type Request struct {
 	Title               string
 	Description         string
 	RequesterUserID     int64
+	RequesterRole       string
+	RequestType         string
 	Priority            string
 	Status              string
 	Progress            int
@@ -40,31 +42,37 @@ func NewRequestRepo(pg *pgxpool.Pool) *RequestRepo {
 // generate a friendly prefixed id.
 func (r *RequestRepo) Create(ctx context.Context, req Request) (*Request, error) {
 	row := r.pg.QueryRow(ctx, `
-		INSERT INTO requests (id, org_id, title, description, requester_user_id, priority, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at
-	`, req.ID, req.OrgID, req.Title, req.Description, req.RequesterUserID, req.Priority, req.Status)
+		INSERT INTO requests (id, org_id, title, description, requester_user_id, requester_role, priority, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at
+	`, req.ID, req.OrgID, req.Title, req.Description, req.RequesterUserID, req.RequesterRole, req.Priority, req.Status)
 	var out Request
 	if err := row.Scan(
-		&out.ID, &out.OrgID, &out.Title, &out.Description, &out.RequesterUserID,
-		&out.Priority, &out.Status, &out.Progress, &out.EstimatedCompletion, &out.CreatedAt,
+		&out.ID, &out.OrgID, &out.Title, &out.Description, &out.RequesterUserID, &out.RequesterRole,
+		&out.RequestType, &out.Priority, &out.Status, &out.Progress, &out.EstimatedCompletion, &out.CreatedAt,
 	); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
+// SetRequestType records the intake agent's classification of a request.
+func (r *RequestRepo) SetRequestType(ctx context.Context, id, requestType string) error {
+	_, err := r.pg.Exec(ctx, `UPDATE requests SET request_type = $2 WHERE id = $1`, id, requestType)
+	return err
+}
+
 // GetByID returns a single request or ErrNotFound.
 func (r *RequestRepo) GetByID(ctx context.Context, id string) (*Request, error) {
 	row := r.pg.QueryRow(ctx, `
-		SELECT id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at
+		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at
 		FROM requests
 		WHERE id = $1
 	`, id)
 	var req Request
 	if err := row.Scan(
-		&req.ID, &req.OrgID, &req.Title, &req.Description, &req.RequesterUserID,
-		&req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt,
+		&req.ID, &req.OrgID, &req.Title, &req.Description, &req.RequesterUserID, &req.RequesterRole,
+		&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt,
 	); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
@@ -79,7 +87,7 @@ func (r *RequestRepo) GetByID(ctx context.Context, id string) (*Request, error) 
 // requests pile up; cursor pagination can layer on later.
 func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([]Request, error) {
 	rows, err := r.pg.Query(ctx, `
-		SELECT id, org_id, title, description, requester_user_id, priority, status, progress, estimated_completion, created_at
+		SELECT id, org_id, title, description, requester_user_id, requester_role, request_type, priority, status, progress, estimated_completion, created_at
 		FROM requests
 		WHERE org_id = $1
 		ORDER BY created_at DESC
@@ -94,8 +102,8 @@ func (r *RequestRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([
 	for rows.Next() {
 		var req Request
 		if err := rows.Scan(
-			&req.ID, &req.OrgID, &req.Title, &req.Description, &req.RequesterUserID,
-			&req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt,
+			&req.ID, &req.OrgID, &req.Title, &req.Description, &req.RequesterUserID, &req.RequesterRole,
+			&req.RequestType, &req.Priority, &req.Status, &req.Progress, &req.EstimatedCompletion, &req.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
