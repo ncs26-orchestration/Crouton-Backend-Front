@@ -28,11 +28,23 @@ def _decision(
     flags: list[Flag] | None = None,
     blocked_on: DependencyDecl | None = None,
     outcome: str = "approve",
+    reasoning: str | None = None,
+    key_factors: list[str] | None = None,
 ) -> Decision:
+    flags = flags or []
+    # Offline playbooks rarely pass reasoning/key_factors; synthesize a believable
+    # version from what they do pass so the approver's "how it decided" brief is
+    # never empty on the deterministic path.
+    if reasoning is None:
+        reasoning = f"{summary} Reached '{outcome.replace('_', ' ')}' after the department's standard checks."
+    if key_factors is None:
+        key_factors = [f.message for f in flags] or [summary]
     return Decision(
         summary=summary,
+        reasoning=reasoning,
+        key_factors=key_factors,
         outcome=outcome,
-        flags=flags or [],
+        flags=flags,
         tasks=[TaskItem(title=t, status="completed") for t in tasks],
         status_text=status_text,
         blocked_on=blocked_on,
@@ -236,6 +248,8 @@ _DEPT_SYSTEM = """You are {role}
 Review THIS specific request and decide. Respond ONLY with a JSON object:
 {{
   "summary": "1-2 sentence assessment grounded in the actual request",
+  "reasoning": "2-4 sentences explaining step by step HOW you reached the outcome: weigh the request details, your policies, and the upstream decisions. This is shown to the human approver.",
+  "key_factors": ["the concrete facts that drove the decision: amounts, policy names, dates, risks"],
   "outcome": "approve | approve_with_conditions | flag | reject | block",
   "flags": [{{"severity": "info|warning|critical", "message": "specific risk or note"}}],
   "tasks": [{{"title": "concrete action you took", "status": "completed"}}],
@@ -418,6 +432,8 @@ ONLY with a JSON object:
 {{
   "reply": "1-2 sentences telling the verifier what you changed and why",
   "summary": "your revised 1-2 sentence assessment",
+  "reasoning": "2-4 sentences on how you reached the revised outcome given the feedback",
+  "key_factors": ["the concrete facts that drove the revised decision"],
   "outcome": "approve | approve_with_conditions | flag | reject | block",
   "flags": [{{"severity": "info|warning|critical", "message": "specific risk or note"}}],
   "tasks": [{{"title": "concrete action you took", "status": "completed"}}],
