@@ -56,15 +56,17 @@ export function PeopleView({ orgId, role }: { orgId: string; role: string }) {
         }
       />
 
-      <div className="flex-1 overflow-auto px-8 py-6">
+      <div className="flex-1 overflow-auto px-4 md:px-8 py-4 md:py-6">
         {membersQ.isLoading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 size={20} className="animate-spin text-[var(--color-fg-muted)]" />
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-36 rounded-xl bg-[var(--color-surface-2)] animate-pulse" />
+            ))}
           </div>
         ) : members.length === 0 ? (
           <EmptyState icon={ShieldCheck} title="No people yet" hint="Invite members from the Teams page." />
         ) : (
-          <div className="flex flex-col gap-3 w-full max-w-4xl">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-4">
             {members.map((m) => (
               <PersonRow key={m.id} orgId={orgId} member={m} teams={teams} isAdmin={isAdmin} />
             ))}
@@ -129,7 +131,7 @@ function PersonRow({
   const roleHint = ORG_ROLES.find((r) => r.value === member.role)?.hint;
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 overflow-hidden">
       <div className="flex items-start gap-3">
         <Avatar name={member.name || member.email} size={36} />
         <div className="min-w-0 flex-1">
@@ -138,7 +140,7 @@ function PersonRow({
         </div>
 
         {/* Org role */}
-        <div className="shrink-0 text-right">
+        <div className="shrink-0">
           {isAdmin ? (
             <select
               value={member.role}
@@ -158,7 +160,7 @@ function PersonRow({
             </span>
           )}
           {isAdmin && roleHint && (
-            <p className="text-[10px] text-[var(--color-fg-subtle)] mt-1 max-w-[16rem] text-right leading-snug">
+            <p className="text-[10px] text-[var(--color-fg-subtle)] mt-1 leading-snug">
               {roleHint}
             </p>
           )}
@@ -177,15 +179,15 @@ function PersonRow({
               return (
                 <span
                   key={i}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] pl-1.5 pr-1 py-0.5 text-[11px] text-[var(--color-fg-label)]"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] pl-1.5 pr-1 py-0.5 text-[11px] text-[var(--color-fg-label)] min-w-0"
                 >
-                  <span className="size-1.5 rounded-full" style={{ background: departmentColor(tr.team) }} />
-                  {tr.team}
-                  <span className="text-[var(--color-fg-subtle)]">· {tr.role}</span>
+                  <span className="size-1.5 rounded-full shrink-0" style={{ background: departmentColor(tr.team) }} />
+                  <span className="truncate">{tr.team}</span>
+                  <span className="text-[var(--color-fg-subtle)] shrink-0">· {tr.role}</span>
                   {isAdmin && teamId && (
                     <button
                       onClick={() => removeMut.mutate(teamId)}
-                      className="ml-0.5 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
+                      className="ml-0.5 shrink-0 text-[var(--color-fg-subtle)] hover:text-[var(--color-danger)]"
                       title={`Remove from ${tr.team}`}
                     >
                       <X size={11} />
@@ -198,34 +200,36 @@ function PersonRow({
         )}
 
         {isAdmin && availableTeams.length > 0 && (
-          <div className="flex gap-1.5 mt-2.5 flex-wrap">
-            <select
-              value={addTeamId}
-              onChange={(e) => setAddTeamId(e.target.value)}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors"
-            >
-              <option value="">Add to department…</option>
-              {availableTeams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={addRole}
-              onChange={(e) => setAddRole(e.target.value as (typeof TEAM_ROLES)[number])}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors capitalize"
-            >
-              {TEAM_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-col sm:flex-row gap-1.5 mt-2.5">
+            <div className="flex gap-1.5 flex-1 min-w-0">
+              <select
+                value={addTeamId}
+                onChange={(e) => setAddTeamId(e.target.value)}
+                className="flex-1 min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors"
+              >
+                <option value="">Add to department…</option>
+                {availableTeams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={addRole}
+                onChange={(e) => setAddRole(e.target.value as (typeof TEAM_ROLES)[number])}
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs text-[var(--color-fg)] outline-none focus:border-[var(--color-brand)] transition-colors capitalize"
+              >
+                {TEAM_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               disabled={!addTeamId || addMut.isPending}
               onClick={() => addTeamId && addMut.mutate({ teamId: addTeamId, role: addRole })}
-              className="flex items-center gap-1 rounded-lg bg-[var(--color-brand)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-40 transition-colors"
+              className="flex items-center justify-center gap-1 rounded-lg bg-[var(--color-brand)] px-2.5 py-1 text-xs font-medium text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-40 transition-colors"
             >
               {addMut.isPending ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
               Add
