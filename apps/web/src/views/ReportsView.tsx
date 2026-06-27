@@ -488,6 +488,8 @@ const auditActionColor: Record<string, string> = {
   "agent.fallback": "text-yellow-600 bg-yellow-50",
   "node.blocked": "text-red-600 bg-red-50",
   "node.unblocked": "text-teal-600 bg-teal-50",
+  "node.flagged": "text-yellow-600 bg-yellow-50",
+  "agent.rejected": "text-red-600 bg-red-50",
   "approval.granted": "text-purple-600 bg-purple-50",
   "approval.rejected": "text-red-600 bg-red-50",
   "request.created": "text-blue-600 bg-blue-50",

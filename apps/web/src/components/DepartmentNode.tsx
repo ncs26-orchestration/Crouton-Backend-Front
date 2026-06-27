@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Bot, CheckCircle2, Clock, Loader2, ShieldAlert } from "lucide-react";
 
 import type { NodeStatus, WorkflowNodeData } from "../lib/types";
+import { decisionOutcomeBadgeClass, decisionOutcomeLabel, isNotableOutcome } from "../lib/request-format";
 
 const STATUS_CONFIG: Record<NodeStatus, { bg: string; border: string; icon: typeof Clock; label: string }> = {
   pending: {
@@ -76,6 +77,14 @@ function DepartmentNodeInner({ data, selected }: NodeProps) {
           }`}
         />
       </div>
+
+      {isNotableOutcome(d.decision_outcome) && d.decision_outcome && (
+        <span
+          className={`mt-0.5 self-start rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide ${decisionOutcomeBadgeClass(d.decision_outcome)}`}
+        >
+          {decisionOutcomeLabel(d.decision_outcome)}
+        </span>
+      )}
 
       {d.status === "blocked" ? (
         <div className="flex items-center gap-1 mt-0.5">

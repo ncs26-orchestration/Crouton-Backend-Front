@@ -32,7 +32,14 @@ import {
   saveNodePositions,
   clearNodePositions,
 } from "../lib/workflow-layout";
-import { nodeStatusColorClass, prettyLabel, requestStatusTextClass } from "../lib/request-format";
+import {
+  decisionOutcomeBadgeClass,
+  decisionOutcomeLabel,
+  isNotableOutcome,
+  nodeStatusColorClass,
+  prettyLabel,
+  requestStatusTextClass,
+} from "../lib/request-format";
 import { useRequestStream } from "../lib/sse";
 import { DepartmentNode } from "../components/DepartmentNode";
 import type { AuditEvent, WorkflowNodeData } from "../lib/types";
@@ -208,7 +215,13 @@ function WorkflowCanvas({
         </div>
 
         <div className="px-4 py-3 flex flex-col gap-2.5 text-xs">
-          <InfoRow label="Requester" value={req.requester_name} />
+          <InfoRow
+            label="Requester"
+            value={req.requester_role ? `${req.requester_name} (${prettyLabel(req.requester_role)})` : req.requester_name}
+          />
+          {req.request_type && req.request_type !== "general" && (
+            <InfoRow label="Type" value={prettyLabel(req.request_type)} />
+          )}
           <InfoRow label="Priority" value={prettyLabel(req.priority)} />
           <InfoRow label="Status">
             <span className={`font-medium ${requestStatusTextClass(req.status)}`}>
@@ -372,6 +385,15 @@ function NodeDetail({ requestId, node }: { requestId: string; node: WorkflowNode
             {prettyLabel(node.status)}
           </span>
         </InfoRow>
+        {isNotableOutcome(node.decision_outcome) && node.decision_outcome && (
+          <InfoRow label="Decision">
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${decisionOutcomeBadgeClass(node.decision_outcome)}`}
+            >
+              {decisionOutcomeLabel(node.decision_outcome)}
+            </span>
+          </InfoRow>
+        )}
         <InfoRow label="Agent Type" value={node.agent_type} />
         <InfoRow label="Progress" value={`${node.progress_percent}%`} />
         {node.started_at && <InfoRow label="Started" value={new Date(node.started_at).toLocaleString()} />}
