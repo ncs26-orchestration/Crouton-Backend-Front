@@ -23,6 +23,7 @@ import {
   Maximize2,
   RotateCcw,
   ShieldAlert,
+  X,
 } from "lucide-react";
 
 import { api } from "../lib/api";
@@ -195,8 +196,21 @@ function WorkflowCanvas({
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Left panel — Request Overview */}
-      <div className="w-64 shrink-0 border-r border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
+      {/* Mobile floating header */}
+      <div className="md:hidden absolute top-0 left-0 right-0 z-10 flex items-center gap-2 px-3 py-2 bg-[var(--color-surface)]/90 backdrop-blur-sm border-b border-[var(--color-border)]">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] transition-colors"
+        >
+          <ArrowLeft size={14} />
+        </button>
+        <h2 className="text-sm font-medium text-[var(--color-fg)] truncate flex-1" style={{ fontFeatureSettings: '"ss01"' }}>
+          {req.title}
+        </h2>
+      </div>
+
+      {/* Left panel — Request Overview (hidden on mobile) */}
+      <div className="hidden md:flex w-64 shrink-0 border-r border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
         <div className="px-4 py-3 border-b border-[var(--color-border)]">
           <button
             onClick={onBack}
@@ -309,8 +323,8 @@ function WorkflowCanvas({
           </Panel>
         </ReactFlow>
 
-        {/* Legend */}
-        <div className="absolute bottom-4 left-4 flex items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-1.5 text-[10px] text-[var(--color-fg-muted)]"
+        {/* Legend (hidden on mobile) */}
+        <div className="hidden md:flex absolute bottom-4 left-4 items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-1.5 text-[10px] text-[var(--color-fg-muted)]"
           style={{ boxShadow: "0 2px 5px rgba(50,50,93,0.1), 0 1px 2px rgba(0,0,0,0.08)" }}
         >
           <LegendItem color="var(--color-fg-subtle)" label="Pending" />
@@ -320,8 +334,20 @@ function WorkflowCanvas({
         </div>
       </div>
 
-      {/* Right panel — Node Detail */}
-      <div className="w-72 shrink-0 border-l border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)]">
+      {/* Right panel — Node Detail (hidden on mobile, shown as overlay when selected) */}
+      {selectedNode && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/30" onClick={() => onSelectNode(null)} />
+      )}
+      <div className={`${selectedNode ? "fixed inset-x-0 bottom-0 z-50 md:relative md:inset-auto md:bottom-auto" : "hidden md:flex"} md:w-72 md:shrink-0 border-l border-[var(--color-border)] flex flex-col overflow-auto bg-[var(--color-surface)] max-h-[80vh] md:max-h-none rounded-t-xl md:rounded-none`}>
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
+          <span className="text-xs font-medium text-[var(--color-fg-muted)]">Node Details</span>
+          <button
+            onClick={() => onSelectNode(null)}
+            className="size-7 flex items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg)] transition-colors"
+          >
+            <X size={15} />
+          </button>
+        </div>
         {selectedNode ? (
           <NodeDetail requestId={requestId} node={selectedNode} />
         ) : (
