@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, FileText, ArrowRight } from "lucide-react";
+import { Plus, FileText, ArrowRight, HelpCircle } from "lucide-react";
 
 import { api } from "../lib/api";
 import { statusBadgeClass, prettyLabel, priorityTextClass, relativeTime } from "../lib/request-format";
@@ -12,6 +12,7 @@ interface Props {
   orgId: string;
   onOpenWorkflow: (requestId: string) => void;
   onNavigate: (section: ShellSection) => void;
+  onShowHowItWorks: () => void;
 }
 
 // The pipeline a request flows through, in order, for the funnel.
@@ -22,7 +23,7 @@ const PIPELINE: { key: RequestStatus[]; label: string; tone: string }[] = [
   { key: ["approved", "completed"], label: "Completed", tone: "var(--color-success)" },
 ];
 
-export function HomeView({ orgId, onOpenWorkflow, onNavigate }: Props) {
+export function HomeView({ orgId, onOpenWorkflow, onNavigate, onShowHowItWorks }: Props) {
   const requestsQuery = useQuery({ queryKey: ["requests", orgId], queryFn: () => api.listRequests(orgId) });
   const auditQuery = useQuery({ queryKey: ["org-audit", orgId], queryFn: () => api.listOrgAudit(orgId) });
 
@@ -61,12 +62,20 @@ export function HomeView({ orgId, onOpenWorkflow, onNavigate }: Props) {
         title="Home"
         subtitle="What's moving through the organization right now"
         actions={
-          <button
-            onClick={() => onNavigate("requests")}
-            className="flex items-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)]"
-          >
-            <Plus size={15} /> New request
-          </button>
+          <>
+            <button
+              onClick={onShowHowItWorks}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-medium text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] hover:border-[var(--color-border-strong)]"
+            >
+              <HelpCircle size={15} /> How it works
+            </button>
+            <button
+              onClick={() => onNavigate("requests")}
+              className="flex items-center gap-1.5 rounded-md bg-[var(--color-brand)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)]"
+            >
+              <Plus size={15} /> New request
+            </button>
+          </>
         }
       />
 
